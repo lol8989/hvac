@@ -1,13 +1,24 @@
-import { useState } from 'react'
-import { ROOMS, INITIAL_GROUPS, INITIAL_POOL, MODELS } from './data.js'
+import { useState, useRef, useMemo } from 'react'
+import { ROOMS, MODELS } from './data.js'
 import ReportStrip from './components/ReportStrip.jsx'
 import Viewer from './components/Viewer.jsx'
 import ModelPanel from './components/ModelPanel.jsx'
 import MappingModal from './components/MappingModal.jsx'
+import { InMemoryPlanRepository } from './infrastructure/generation/InMemoryPlanRepository.js'
+import { makeReassignIndoorUnit } from './application/generation/ReassignIndoorUnit.js'
+import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoorModel.js'
+import { makeAddGroup, makeRemoveGroup, makeSplitGroup } from './application/generation/GroupCommands.js'
+import { bootstrapPlan, toViewModel, outdoorUnitFromCatalog, nextGroupMeta } from './presentation/generation/planAdapter.js'
+import { NotFoundError } from './domain/generation/errors.js'
 
 export default function App() {
-  const [groups, setGroups] = useState(INITIAL_GROUPS)
-  const [pool, setPool] = useState(INITIAL_POOL)
+  // 배정 상태는 도메인 AssignmentPlan이 소유하고, 인메모리 리포지토리 포트를 통해
+  // 유즈케이스가 로드/저장한다. 리포지토리는 세션 동안 1개(useRef)로 고정한다.
+  const repoRef = useRef(null)
+  if (!repoRef.current) repoRef.current = new InMemoryPlanRepository(bootstrapPlan())
+  const repo = repoRef.current
+
+  const [plan, setPlan] = useState(() => repo.load())
   const [selRoom, setSelRoom] = useState('AC_001')
   const [tab, setTab] = useState('in')
   const [mapOpen, setMapOpen] = useState(false)
@@ -19,49 +30,42 @@ export default function App() {
     setTimeout(() => setToast(''), 2600)
   }
 
-  // 다음 실외기 그룹 key/label 생성
-  const nextGroupMeta = () => {
-    const nums = groups.map((g) => parseInt(g.key.replace('ODU', ''), 10) || 0)
-    const n = (nums.length ? Math.max(...nums) : 0) + 1
-    return { key: 'ODU' + n, label: '실외기-' + n }
-  }
+  // 유즈케이스(포트 DI). 리포지토리가 고정이라 1회 생성.
+  const uc = useMemo(
+    () => ({
+      reassign: makeReassignIndoorUnit({ planRepository: repo }),
+      replace: makeReplaceOutdoorModel({ planRepository: repo }),
+      add: makeAddGroup({ planRepository: repo }),
+      remove: makeRemoveGroup({ planRepository: repo }),
+      split: makeSplitGroup({ planRepository: repo }),
+    }),
+    [repo],
+  )
+  const sync = () => setPlan(repo.load())
+
+  // 컴포넌트가 소비하는 레거시 뷰 형태로 변환(동작 보존).
+  const { groups, pool } = toViewModel(plan)
 
   // 실내기(id)를 대상(to = 그룹 key 또는 'pool')으로 이동. 호환 불가 시 false.
   const moveRoom = (id, to) => {
-    if (to !== 'pool') {
-      const g = groups.find((x) => x.key === to)
-      if (g && ROOMS[id].sys !== g.sys) return false
+    try {
+      const res = uc.reassign({ indoorId: id, to })
+      if (res.ok) sync()
+      return res.ok
+    } catch (e) {
+      if (e instanceof NotFoundError) return false
+      throw e
     }
-    setGroups((prev) =>
-      prev.map((g) => {
-        let items = g.items.filter((x) => x !== id)
-        if (g.key === to && !items.includes(id)) items = [...items, id]
-        return { ...g, items }
-      }),
-    )
-    setPool((prev) => {
-      let p = prev.filter((x) => x !== id)
-      if (to === 'pool' && !p.includes(id)) p = [...p, id]
-      return p
-    })
-    return true
   }
 
   // 실외기 모델 교체. 계열이 바뀌어 호환 안 되는 실내기는 미배정 풀로 반환.
   const replaceModel = (key, cat) => {
-    const g = groups.find((x) => x.key === key)
+    const g = plan.groupByKey(key)
     if (!g || !cat) return
-    const incompatible = cat.sys !== g.sys ? g.items.filter((id) => ROOMS[id].sys !== cat.sys) : []
-    setGroups((prev) =>
-      prev.map((x) =>
-        x.key === key
-          ? { ...x, model: cat.model, cat: cat.cat, sys: cat.sys, cool: cat.cool, items: x.items.filter((id) => !incompatible.includes(id)) }
-          : x,
-      ),
-    )
-    if (incompatible.length) {
-      setPool((prev) => [...prev, ...incompatible.filter((id) => !prev.includes(id))])
-      flash(`실외기 교체: 계열이 달라 실내기 ${incompatible.length}개를 미배정으로 옮겼습니다`)
+    const res = uc.replace({ key, outdoorUnit: outdoorUnitFromCatalog(cat) })
+    sync()
+    if (res.ejected.length) {
+      flash(`실외기 교체: 계열이 달라 실내기 ${res.ejected.length}개를 미배정으로 옮겼습니다`)
     } else {
       flash(`실외기 ${g.label} 모델을 ${cat.model}(으)로 교체했습니다`)
     }
@@ -69,32 +73,28 @@ export default function App() {
 
   // 그룹 분할: 실내기 절반을 같은 실외기 모델의 새 그룹으로 이동.
   const splitGroup = (key) => {
-    const g = groups.find((x) => x.key === key)
-    if (!g || g.items.length < 2) return
-    const half = Math.ceil(g.items.length / 2)
-    const keep = g.items.slice(0, half)
-    const moved = g.items.slice(half)
-    const meta = nextGroupMeta()
-    setGroups((prev) => [
-      ...prev.map((x) => (x.key === key ? { ...x, items: keep } : x)),
-      { ...meta, model: g.model, cat: g.cat, sys: g.sys, cool: g.cool, items: moved },
-    ])
+    const g = plan.groupByKey(key)
+    if (!g || g.indoorUnits.length < 2) return
+    const meta = nextGroupMeta(plan)
+    uc.split({ key, meta })
+    sync()
     flash(`${g.label}을(를) 분할해 ${meta.label}을(를) 추가했습니다`)
   }
 
   // 실외기 그룹 추가 (빈 그룹).
   const addGroup = (cat) => {
-    const meta = nextGroupMeta()
-    setGroups((prev) => [...prev, { ...meta, model: cat.model, cat: cat.cat, sys: cat.sys, cool: cat.cool, items: [] }])
+    const meta = nextGroupMeta(plan)
+    uc.add({ meta, outdoorUnit: outdoorUnitFromCatalog(cat) })
+    sync()
     flash(`${meta.label} (${cat.model})을(를) 추가했습니다`)
   }
 
   // 실외기 그룹 삭제: 연결된 실내기는 미배정 풀로 반환.
   const removeGroup = (key) => {
-    const g = groups.find((x) => x.key === key)
+    const g = plan.groupByKey(key)
     if (!g) return
-    if (g.items.length) setPool((prev) => [...prev, ...g.items.filter((id) => !prev.includes(id))])
-    setGroups((prev) => prev.filter((x) => x.key !== key))
+    uc.remove({ key })
+    sync()
     flash(`${g.label}을(를) 삭제했습니다`)
   }
 

@@ -10,7 +10,8 @@
       "Bash(git remote *)",
       "Bash(git push *)",
       "Bash(npx vitest *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(npx vite *)"
     ]
   }
 }
