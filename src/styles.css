@@ -114,7 +114,7 @@ button{font-family:inherit;cursor:pointer;}
 .ofoot .field{flex:1;min-width:130px;padding:5px 8px;font-size:11px;}
 .ofoot .btn{padding:5px 9px;}
 .ofoot .btn:disabled{opacity:.45;cursor:not-allowed;}
-.plansvg{position:absolute;inset:0;width:100%;height:100%;display:block;background:#F7F7F8;cursor:grab;}
+.plansvg{position:absolute;inset:0;width:100%;height:100%;display:block;background:#F7F7F8;cursor:grab;touch-action:none;overscroll-behavior:contain;}
 .plansvg:active{cursor:grabbing;}
 .room-layer text{user-select:none;pointer-events:none;}
 

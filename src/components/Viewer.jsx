@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 
 // SVG 좌표계 기준 도면 크기(목업). 실제 도면 연동 시 도면 bounds로 대체.
 const PLAN_W = 720
@@ -14,6 +14,7 @@ const FIT = { x: -40, y: -30, w: PLAN_W + 80, h: PLAN_H + 60 }
 export default function Viewer({ rooms, selRoom, placed, onPick, drawingSrc }) {
   const [view, setView] = useState(FIT)
   const drag = useRef(null)
+  const svgRef = useRef(null)
 
   const zoomAt = (factor) =>
     setView((v) => {
@@ -22,10 +23,19 @@ export default function Viewer({ rooms, selRoom, placed, onPick, drawingSrc }) {
       return { x: v.x + (v.w - nw) / 2, y: v.y + (v.h - nh) / 2, w: nw, h: nh }
     })
 
-  const onWheel = (e) => {
-    e.preventDefault()
-    zoomAt(e.deltaY > 0 ? 1.1 : 0.9)
-  }
+  // 휠 확대/축소: React의 onWheel은 passive 리스너라 preventDefault가 무시된다.
+  // → 네이티브 wheel 리스너를 { passive: false }로 직접 등록해 브라우저 스크롤을 막는다.
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const handler = (e) => {
+      e.preventDefault()
+      zoomAt(e.deltaY > 0 ? 1.1 : 0.9)
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [])
+
   const onDown = (e) => {
     drag.current = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y }
   }
@@ -46,9 +56,9 @@ export default function Viewer({ rooms, selRoom, placed, onPick, drawingSrc }) {
     <div className="viewer">
       <div className="vhint">[도면 뷰어 — SVG · 휠: 확대/축소 · 드래그: 이동]</div>
       <svg
+        ref={svgRef}
         className="plansvg"
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
-        onWheel={onWheel}
         onMouseDown={onDown}
         onMouseMove={onMove}
         onMouseUp={onUp}
