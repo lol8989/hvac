@@ -21,7 +21,10 @@
       "Bash(npx eslint *)",
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(s\\);for\\(const f of r\\){if\\(!f.messages.length\\)continue;const p=f.filePath.split\\(/[\\\\\\\\/]/\\).slice\\(-2\\).join\\('/'\\);for\\(const m of f.messages\\)console.log\\(p+':'+m.line+'  '+m.ruleId+'  '+m.message.slice\\(0,70\\)\\)}}\\)\")",
       "Bash(echo \"---exit $?---\")",
-      "Bash(echo \"exit $?\")"
+      "Bash(echo \"exit $?\")",
+      "Bash(npm audit *)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(s\\);for\\(const [k,v] of Object.entries\\(r.vulnerabilities||{}\\)\\){console.log\\(v.severity.toUpperCase\\(\\).padEnd\\(9\\), k, '| via:', \\(v.via||[]\\).map\\(x=>typeof x==='string'?x:x.title?.slice\\(0,50\\)\\).join\\(', '\\)\\);}console.log\\('---meta---', JSON.stringify\\(r.metadata?.vulnerabilities\\)\\);}\\)\")",
+      "Bash(npm view *)"
     ]
   }
 }
