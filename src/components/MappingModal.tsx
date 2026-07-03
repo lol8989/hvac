@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { ratioOf, ROOMS, ODU_CATALOG } from '../data'
-import type { OduCatalogEntry } from '../data'
+import { ratioOf, ROOMS } from '../data'
 import type { GroupView } from '../presentation/generation/planAdapter'
+import type { OutdoorModelSpec } from '../application/generation/ports'
 
 interface ChipProps {
   id: string
@@ -26,12 +26,13 @@ function Chip({ id, from, onUnassign }: ChipProps) {
 }
 
 interface MappingModalProps {
+  catalog: OutdoorModelSpec[]
   groups: GroupView[]
   pool: string[]
   onMove: (id: string, to: string) => boolean
-  onReplace: (key: string, cat: OduCatalogEntry | undefined) => void
+  onReplace: (key: string, spec: OutdoorModelSpec | undefined) => void
   onSplit: (key: string) => void
-  onAddGroup: (cat: OduCatalogEntry) => void
+  onAddGroup: (spec: OutdoorModelSpec) => void
   onRemove: (key: string) => void
   onClose: () => void
   onApply: () => void
@@ -41,10 +42,10 @@ interface MappingModalProps {
 // - 드래그: 실내기 ↔ 실외기 배정/해제
 // - 실외기 교체(카탈로그), 그룹 분할/삭제, 실외기 추가
 // - 조합비 실시간 계산, 호환 불가(GHP↔EHP) 경고/차단
-export default function MappingModal({ groups, pool, onMove, onReplace, onSplit, onAddGroup, onRemove, onClose, onApply }: MappingModalProps) {
+export default function MappingModal({ catalog, groups, pool, onMove, onReplace, onSplit, onAddGroup, onRemove, onClose, onApply }: MappingModalProps) {
   const [warnKey, setWarnKey] = useState<string | null>(null)
   const [overKey, setOverKey] = useState<string | null>(null)
-  const [addModel, setAddModel] = useState(ODU_CATALOG[0].model)
+  const [addModel, setAddModel] = useState(catalog[0].model)
   const roomTotal = Object.keys(ROOMS).length
   const assigned = groups.reduce((a, g) => a + g.items.length, 0)
 
@@ -67,7 +68,7 @@ export default function MappingModal({ groups, pool, onMove, onReplace, onSplit,
     e.preventDefault()
     setOverKey(key)
   }
-  const catOf = (model: string): OduCatalogEntry | undefined => ODU_CATALOG.find((c) => c.model === model)
+  const catOf = (model: string): OutdoorModelSpec | undefined => catalog.find((c) => c.model === model)
 
   return (
     <div
@@ -89,8 +90,8 @@ export default function MappingModal({ groups, pool, onMove, onReplace, onSplit,
         <div className="m-toolbar">
           <span>실외기 추가:</span>
           <select className="field" value={addModel} onChange={(e) => setAddModel(e.target.value)}>
-            {ODU_CATALOG.map((c) => (
-              <option key={c.model} value={c.model}>{c.model} · {c.cool}kW · {c.sys}</option>
+            {catalog.map((c) => (
+              <option key={c.model} value={c.model}>{c.model} · {c.capacityKw}kW · {c.energySource}</option>
             ))}
           </select>
           <button className="btn sm" onClick={() => { const c = catOf(addModel); if (c) onAddGroup(c) }}>+ 추가</button>
@@ -137,8 +138,8 @@ export default function MappingModal({ groups, pool, onMove, onReplace, onSplit,
                       title="실외기 교체"
                       onChange={(e) => onReplace(g.key, catOf(e.target.value))}
                     >
-                      {ODU_CATALOG.map((c) => (
-                        <option key={c.model} value={c.model}>{c.model} · {c.cool}kW · {c.sys}</option>
+                      {catalog.map((c) => (
+                        <option key={c.model} value={c.model}>{c.model} · {c.capacityKw}kW · {c.energySource}</option>
                       ))}
                     </select>
                     <button className="btn sm" onClick={() => onSplit(g.key)} disabled={g.items.length < 2}>분할</button>

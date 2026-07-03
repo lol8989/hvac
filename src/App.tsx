@@ -1,21 +1,23 @@
 import { useState, useMemo } from 'react'
 import { ROOMS, MODELS } from './data'
-import type { OduCatalogEntry } from './data'
 import ReportStrip from './components/ReportStrip'
 import Viewer from './components/Viewer'
 import ModelPanel from './components/ModelPanel'
 import MappingModal from './components/MappingModal'
 import { InMemoryPlanRepository } from './infrastructure/generation/InMemoryPlanRepository'
+import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemoryOutdoorModelCatalog'
+import type { OutdoorModelSpec } from './application/generation/ports'
 import { makeReassignIndoorUnit } from './application/generation/ReassignIndoorUnit'
 import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoorModel'
 import { makeAddGroup, makeRemoveGroup, makeSplitGroup } from './application/generation/GroupCommands'
-import { bootstrapPlan, toViewModel, outdoorUnitFromCatalog, nextGroupMeta } from './presentation/generation/planAdapter'
+import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta } from './presentation/generation/planAdapter'
 import { NotFoundError } from './domain/generation/errors'
 
 export default function App() {
-  // 배정 상태는 도메인 AssignmentPlan이 소유하고, 인메모리 리포지토리 포트를 통해
-  // 유즈케이스가 로드/저장한다. 리포지토리는 세션 동안 1개로 고정(useState lazy 초기화).
-  const [repo] = useState(() => new InMemoryPlanRepository(bootstrapPlan()))
+  // 장비마스터 실외기 스펙 카탈로그(읽기 포트). 배정 상태는 도메인 AssignmentPlan이 소유하고,
+  // 인메모리 리포지토리 포트를 통해 유즈케이스가 로드/저장한다. 모두 세션 1개로 고정(useState lazy).
+  const [catalog] = useState(() => new InMemoryOutdoorModelCatalog())
+  const [repo] = useState(() => new InMemoryPlanRepository(bootstrapPlan(catalog)))
 
   const [plan, setPlan] = useState(() => repo.load())
   const [selRoom, setSelRoom] = useState('AC_001')
@@ -58,15 +60,15 @@ export default function App() {
   }
 
   // 실외기 모델 교체. 계열이 바뀌어 호환 안 되는 실내기는 미배정 풀로 반환.
-  const replaceModel = (key: string, cat: OduCatalogEntry | undefined) => {
+  const replaceModel = (key: string, spec: OutdoorModelSpec | undefined) => {
     const g = plan.groupByKey(key)
-    if (!g || !cat) return
-    const res = uc.replace({ key, outdoorUnit: outdoorUnitFromCatalog(cat) })
+    if (!g || !spec) return
+    const res = uc.replace({ key, outdoorUnit: outdoorUnitFromSpec(spec) })
     sync()
     if (res.ejected.length) {
       flash(`실외기 교체: 계열이 달라 실내기 ${res.ejected.length}개를 미배정으로 옮겼습니다`)
     } else {
-      flash(`실외기 ${g.label} 모델을 ${cat.model}(으)로 교체했습니다`)
+      flash(`실외기 ${g.label} 모델을 ${spec.model}(으)로 교체했습니다`)
     }
   }
 
@@ -81,11 +83,11 @@ export default function App() {
   }
 
   // 실외기 그룹 추가 (빈 그룹).
-  const addGroup = (cat: OduCatalogEntry) => {
+  const addGroup = (spec: OutdoorModelSpec) => {
     const meta = nextGroupMeta(plan)
-    uc.add({ meta, outdoorUnit: outdoorUnitFromCatalog(cat) })
+    uc.add({ meta, outdoorUnit: outdoorUnitFromSpec(spec) })
     sync()
-    flash(`${meta.label} (${cat.model})을(를) 추가했습니다`)
+    flash(`${meta.label} (${spec.model})을(를) 추가했습니다`)
   }
 
   // 실외기 그룹 삭제: 연결된 실내기는 미배정 풀로 반환.
@@ -158,6 +160,7 @@ export default function App() {
 
       {mapOpen && (
         <MappingModal
+          catalog={catalog.list()}
           groups={groups}
           pool={pool}
           onMove={moveRoom}

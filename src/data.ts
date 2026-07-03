@@ -23,37 +23,43 @@ export const ROOMS: Record<string, Room> = {
   AC_006: { name: '탕비실', area: 12.0, type: '1WAY', cool: 4.5, sys: 'EHP', x: 490, y: 196, w: 206, h: 150 },
 }
 
-// 실외기 카탈로그 항목(교체/추가용). 실제로는 장비마스터 PUBLISHED 실외기 목록.
+// 실외기 스펙 카탈로그 항목. 장비마스터(Equipment Master)가 게시(PUBLISHED)하는
+// 실외기 모델 스펙의 단일 진실 공급원(SSOT) 목업.
+//   maxConn = 최대 연결 실내기 수 (모델 스펙). 조합 시 OutdoorGroup의 불변식에 주입된다.
 export interface OduCatalogEntry {
   model: string
   cat: string
   sys: EnergySourceCode
   cool: number
+  maxConn: number
 }
 
-// 실외기 조합 그룹 (마스터 등록 모델 참조) + 미배정 풀
-export interface InitialGroup extends OduCatalogEntry {
+// 실외기 배치 레이아웃 (어떤 모델을 어느 실외기 위치에 두고 어떤 실내기를 연결하는가).
+// 스펙(계열·용량·최대연결수)은 카탈로그(ODU_CATALOG)를 모델로 조회한다 — 중복 금지.
+export interface InitialGroup {
   key: string
   label: string
+  model: string
   items: string[]
 }
 
 export const INITIAL_GROUPS: InitialGroup[] = [
-  { key: 'ODU1', label: '실외기-1', model: 'RPUW12BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, items: ['AC_001', 'AC_003', 'AC_006'] },
-  { key: 'ODU2', label: '실외기-2', model: 'RPUW20BX9P', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0, items: ['AC_004', 'AC_005'] },
-  { key: 'ODU3', label: '실외기-3', model: 'GPUW280C2S', cat: 'GHP', sys: 'GHP', cool: 28.0, items: [] },
+  { key: 'ODU1', label: '실외기-1', model: 'RPUW12BX9M', items: ['AC_001', 'AC_003', 'AC_006'] },
+  { key: 'ODU2', label: '실외기-2', model: 'RPUW20BX9P', items: ['AC_004', 'AC_005'] },
+  { key: 'ODU3', label: '실외기-3', model: 'GPUW280C2S', items: [] },
 ]
 
 export const INITIAL_POOL: string[] = ['AC_002']
 
+// 장비마스터 PUBLISHED 실외기 스펙 (SSOT). maxConn은 모델별 최대 연결 실내기 수.
 export const ODU_CATALOG: OduCatalogEntry[] = [
-  { model: 'RPUW08BX9E', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4 },
-  { model: 'RPUW12BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8 },
-  { model: 'RPUW16BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 45.0 },
-  { model: 'RPUW20BX9P', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0 },
-  { model: 'RPUQ141X9S', cat: '냉방전용', sys: 'EHP', cool: 39.2 },
-  { model: 'GPUW280C2S', cat: 'GHP', sys: 'GHP', cool: 28.0 },
-  { model: 'GPUW450C2S', cat: 'GHP', sys: 'GHP', cool: 45.0 },
+  { model: 'RPUW08BX9E', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, maxConn: 13 },
+  { model: 'RPUW12BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, maxConn: 20 },
+  { model: 'RPUW16BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 45.0, maxConn: 26 },
+  { model: 'RPUW20BX9P', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0, maxConn: 33 },
+  { model: 'RPUQ141X9S', cat: '냉방전용', sys: 'EHP', cool: 39.2, maxConn: 23 },
+  { model: 'GPUW280C2S', cat: 'GHP', sys: 'GHP', cool: 28.0, maxConn: 16 },
+  { model: 'GPUW450C2S', cat: 'GHP', sys: 'GHP', cool: 45.0, maxConn: 26 },
 ]
 
 export interface ModelCard {
