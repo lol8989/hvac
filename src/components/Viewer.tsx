@@ -1,29 +1,25 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import type { Room } from '../data'
+import ACUnit from './viewer/ACUnit'
+import ZoneRect from './viewer/ZoneRect'
+import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectsIntersect } from './viewer/geometry'
+import type { UnitSym, ZoneBox, Corner } from './viewer/geometry'
 
-// SVG 좌표계 기준 도면 크기(목업). 실제 도면 연동 시 도면 bounds로 대체.
 const PLAN_W = 720
 const PLAN_H = 470
 const FIT = { x: -40, y: -30, w: PLAN_W + 80, h: PLAN_H + 60 }
-const BASE_W = FIT.w // 줌 100% 기준 폭
-const MIN_W = BASE_W / 8 // 최대 확대
-const MAX_W = BASE_W * 3 // 최대 축소
+const BASE_W = FIT.w
+const MIN_W = BASE_W / 8
+const MAX_W = BASE_W * 3
 
-type Mode = 'select' | 'pan'
-
-interface ViewBox {
-  x: number
-  y: number
-  w: number
-  h: number
-}
+type Mode = 'cassette' | 'zone' | 'pan' // 에어컨(실내기) / 존(실) / 손
+interface ViewBox { x: number; y: number; w: number; h: number }
 
 interface ViewerProps {
   rooms: Record<string, Room>
-  selectedIds: string[]
-  placed: boolean
+  selectedIds: string[] // 선택된 실(존) id — ModelPanel 연동
   onSelectionChange: (ids: string[]) => void
-  onEscape?: () => void // Esc: 팝업 닫기 등
+  onEscape?: () => void
   drawingSrc?: string
 }
 
@@ -34,34 +30,45 @@ const clampW = (nw: number, nh: number): [number, number] => {
 }
 
 /**
- * SVG 도면 뷰어.
- * - 휠: 커서 아래 지점 고정 확대/축소 (getScreenCTM 기반)
- * - 선택 모드: 실 클릭 선택(Shift 토글) · 빈 곳 드래그로 영역 다중선택(마퀴)
- * - 손 모드 / Space+드래그: 화면 이동(팬)
- * - 단축키: V(선택) · H·Space(손) · 0(맞춤) · Esc(선택 해제/팝업)
- * - 하단 중앙 Figma식 도구바 + 우상단 플로팅 힌트 위젯
+ * SVG 도면 뷰어(편집). 모드: 에어컨(C)=실내기 이동/회전/삭제, 존(Z)=실 선택/모서리 리사이즈, 손(H)=팬.
+ * 휠=커서 기준 줌, Space/손=팬, 드래그=영역 다중선택(마퀴). 뷰어 로컬 상태(POC).
  */
-export default function Viewer({ rooms, selectedIds, placed, onSelectionChange, onEscape, drawingSrc }: ViewerProps) {
+export default function Viewer({ rooms, selectedIds, onSelectionChange, onEscape, drawingSrc }: ViewerProps) {
   const [view, setView] = useState<ViewBox>(FIT)
-  const [mode, setMode] = useState<Mode>('select')
+  const [mode, setMode] = useState<Mode>('cassette')
+  const [symbols, setSymbols] = useState<UnitSym[]>(() =>
+    Object.values(rooms).map((r, i) => ({ id: 'IDU' + (i + 1), x: snap(r.x + r.w / 2), y: snap(r.y + r.h / 2), rot: 0 })),
+  )
+  const [zones, setZones] = useState<ZoneBox[]>(() =>
+    Object.entries(rooms).map(([id, r]) => ({ id, name: r.name, x: r.x, y: r.y, w: r.w, h: r.h })),
+  )
+  const [selUnits, setSelUnits] = useState<Set<string>>(() => new Set())
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [rotatingId, setRotatingId] = useState<string | null>(null)
   const [spaceDown, setSpaceDown] = useState(false)
   const [panning, setPanning] = useState(false)
   const [marquee, setMarquee] = useState<ViewBox | null>(null)
+  const [snapOn, setSnapOn] = useState(true)
   const [hintOpen, setHintOpen] = useState(true)
   const [toolMenuOpen, setToolMenuOpen] = useState(false)
 
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const idRef = useRef(Object.keys(rooms).length)
   const panRef = useRef<{ sx: number; sy: number; vx: number; vy: number; a: number; d: number } | null>(null)
+  const dragRef = useRef<{ startX: number; startY: number; orig: Record<string, { x: number; y: number }>; moved: boolean } | null>(null)
+  const rotRef = useRef<{ startX: number; orig: Record<string, number> } | null>(null)
+  const cornerRef = useRef<{ id: string; corner: Corner; ax: number; ay: number } | null>(null)
   const marqRef = useRef<{ sx: number; sy: number; additive: boolean } | null>(null)
   const spaceRef = useRef(false)
-  const selRef = useRef(selectedIds)
-  useEffect(() => { selRef.current = selectedIds }, [selectedIds])
+
+  // window 리스너(1회 등록)에서 읽는 최신 상태 스냅샷. 렌더 중이 아닌 effect에서 갱신(refs 규칙 준수).
+  const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn })
+  useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn } })
 
   const zoomPct = Math.round((BASE_W / view.w) * 100)
   const panActive = mode === 'pan' || spaceDown
 
-  // 클라이언트 좌표 → 도면 좌표(라이브 CTM 기준)
-  const toSvg = (cx: number, cy: number) => {
+  const toSvg = useCallback((cx: number, cy: number) => {
     const svg = svgRef.current
     const ctm = svg?.getScreenCTM()
     if (!svg || !ctm) return null
@@ -69,17 +76,9 @@ export default function Viewer({ rooms, selectedIds, placed, onSelectionChange, 
     pt.x = cx
     pt.y = cy
     return pt.matrixTransform(ctm.inverse())
-  }
+  }, [])
 
-  const selectRoom = (id: string, additive: boolean) => {
-    if (additive) {
-      onSelectionChange(selRef.current.includes(id) ? selRef.current.filter((x) => x !== id) : [...selRef.current, id])
-    } else {
-      onSelectionChange([id])
-    }
-  }
-
-  // 휠 확대/축소: 커서 아래 지점 고정. React onWheel은 passive라 네이티브로 등록.
+  // 휠 확대/축소: 커서 아래 지점 고정.
   useEffect(() => {
     const svg = svgRef.current
     if (!svg) return
@@ -88,73 +87,96 @@ export default function Viewer({ rooms, selectedIds, placed, onSelectionChange, 
       const ctm = svg.getScreenCTM()
       if (!ctm) return
       const pt = svg.createSVGPoint()
-      pt.x = e.clientX
-      pt.y = e.clientY
+      pt.x = e.clientX; pt.y = e.clientY
       const p = pt.matrixTransform(ctm.inverse())
       const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1
       setView((v) => {
         const [nw, nh] = clampW(v.w * factor, v.h * factor)
-        const fracX = (p.x - v.x) / v.w
-        const fracY = (p.y - v.y) / v.h
-        return { x: p.x - fracX * nw, y: p.y - fracY * nh, w: nw, h: nh }
+        return { x: p.x - ((p.x - v.x) / v.w) * nw, y: p.y - ((p.y - v.y) / v.h) * nh, w: nw, h: nh }
       })
     }
     svg.addEventListener('wheel', onWheel, { passive: false })
     return () => svg.removeEventListener('wheel', onWheel)
   }, [])
 
-  // 팬/마퀴: 드래그가 화면 밖으로 나가도 이어지도록 window 리스너로 처리.
+  // 통합 드래그 처리(팬/리사이즈/회전/이동/마퀴) — window 리스너로 화면 밖 지속.
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const pn = panRef.current
       if (pn) {
-        const dx = (e.clientX - pn.sx) / pn.a
-        const dy = (e.clientY - pn.sy) / pn.d
-        setView((v) => ({ ...v, x: pn.vx - dx, y: pn.vy - dy }))
+        setView((v) => ({ ...v, x: pn.vx - (e.clientX - pn.sx) / pn.a, y: pn.vy - (e.clientY - pn.sy) / pn.d }))
+        return
+      }
+      const c = cornerRef.current
+      if (c) {
+        const p = toSvg(e.clientX, e.clientY); if (!p) return
+        let px = st.current.snapOn ? snap(p.x) : p.x
+        let py = st.current.snapOn ? snap(p.y) : p.y
+        let nx: number, ny: number, nw: number, nh: number
+        if (c.corner === 'br') { px = Math.max(px, c.ax + GRID); py = Math.max(py, c.ay + GRID); nx = c.ax; ny = c.ay; nw = px - c.ax; nh = py - c.ay }
+        else if (c.corner === 'tl') { px = Math.min(px, c.ax - GRID); py = Math.min(py, c.ay - GRID); nx = px; ny = py; nw = c.ax - px; nh = c.ay - py }
+        else if (c.corner === 'tr') { px = Math.max(px, c.ax + GRID); py = Math.min(py, c.ay - GRID); nx = c.ax; ny = py; nw = px - c.ax; nh = c.ay - py }
+        else { px = Math.min(px, c.ax - GRID); py = Math.max(py, c.ay + GRID); nx = px; ny = c.ay; nw = c.ax - px; nh = py - c.ay }
+        setZones((prev) => prev.map((z) => (z.id === c.id ? { ...z, x: nx, y: ny, w: nw, h: nh } : z)))
+        return
+      }
+      const r = rotRef.current
+      if (r) {
+        const delta = (e.clientX - r.startX) * ROT_SENS
+        setSymbols((prev) => prev.map((s) => (r.orig[s.id] !== undefined ? { ...s, rot: norm(Math.round((r.orig[s.id] + delta) / ROT_STEP) * ROT_STEP) } : s)))
+        return
+      }
+      const d = dragRef.current
+      if (d) {
+        const p = toSvg(e.clientX, e.clientY); if (!p) return
+        let dx = p.x - d.startX, dy = p.y - d.startY
+        if (st.current.snapOn) { dx = snap(dx); dy = snap(dy) }
+        if (Math.abs(p.x - d.startX) > 3 || Math.abs(p.y - d.startY) > 3) d.moved = true
+        setSymbols((prev) => prev.map((s) => { const o = d.orig[s.id]; return o ? { ...s, x: o.x + dx, y: o.y + dy } : s }))
         return
       }
       const mq = marqRef.current
       if (mq) {
-        const p = toSvg(e.clientX, e.clientY)
-        if (!p) return
+        const p = toSvg(e.clientX, e.clientY); if (!p) return
         setMarquee({ x: Math.min(mq.sx, p.x), y: Math.min(mq.sy, p.y), w: Math.abs(p.x - mq.sx), h: Math.abs(p.y - mq.sy) })
       }
     }
     const onUp = () => {
-      if (panRef.current) {
-        panRef.current = null
-        setPanning(false)
-        return
-      }
-      const mq = marqRef.current
-      if (mq) {
+      if (panRef.current) { panRef.current = null; setPanning(false); return }
+      if (cornerRef.current) { cornerRef.current = null; return }
+      if (rotRef.current) { rotRef.current = null; setRotatingId(null); return }
+      if (marqRef.current) {
+        const m = marqRef.current
         setMarquee((rect) => {
           if (rect) {
             const big = rect.w > 3 || rect.h > 3
-            if (big) {
-              const hits = Object.entries(rooms)
-                .filter(([, r]) => !(r.x > rect.x + rect.w || r.x + r.w < rect.x || r.y > rect.y + rect.h || r.y + r.h < rect.y))
-                .map(([id]) => id)
-              const base = mq.additive ? selRef.current : []
-              onSelectionChange(Array.from(new Set([...base, ...hits])))
-            } else if (!mq.additive) {
-              onSelectionChange([]) // 빈 곳 클릭 → 선택 해제
+            const s = st.current
+            if (s.mode === 'zone') {
+              if (big) {
+                const hits = s.zones.filter((z) => rectsIntersect(rect, z)).map((z) => z.id)
+                onSelectionChange(Array.from(new Set([...(m.additive ? s.selectedIds : []), ...hits])))
+              } else if (!m.additive) onSelectionChange([])
+            } else if (s.mode === 'cassette') {
+              if (big) {
+                const hits = s.symbols.filter((u) => u.x >= rect.x && u.x <= rect.x + rect.w && u.y >= rect.y && u.y <= rect.y + rect.h).map((u) => u.id)
+                const base = m.additive ? new Set(s.selUnits) : new Set<string>()
+                hits.forEach((id) => base.add(id))
+                setSelUnits(base)
+              } else if (!m.additive) setSelUnits(new Set())
             }
           }
           return null
         })
         marqRef.current = null
       }
+      dragRef.current = null
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [rooms, onSelectionChange])
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+  }, [toSvg, onSelectionChange])
 
-  // 단축키: V(선택) · H/Space(손) · 0(맞춤) · Esc(해제/팝업). 입력 중에는 무시.
+  // 단축키.
   useEffect(() => {
     const typing = (t: EventTarget | null) => {
       const el = t as HTMLElement | null
@@ -162,60 +184,117 @@ export default function Viewer({ rooms, selectedIds, placed, onSelectionChange, 
     }
     const onKey = (e: KeyboardEvent) => {
       if (typing(e.target)) return
-      if (e.code === 'Space') {
-        e.preventDefault()
-        if (!spaceRef.current) { spaceRef.current = true; setSpaceDown(true) }
-        return
-      }
+      if (e.code === 'Space') { e.preventDefault(); if (!spaceRef.current) { spaceRef.current = true; setSpaceDown(true) } return }
       const k = e.key.toLowerCase()
-      if (k === 'v') setMode('select')
+      if (k === 'c') setMode('cassette')
+      else if (k === 'z') setMode('zone')
       else if (k === 'h') setMode('pan')
       else if (k === '0') setView(FIT)
-      else if (k === 'escape') { onSelectionChange([]); setToolMenuOpen(false); onEscape?.() }
+      else if (k === 'r') {
+        if (st.current.mode === 'cassette') {
+          e.preventDefault()
+          const sel = st.current.selUnits
+          if (sel.size) setSymbols((prev) => prev.map((s) => (sel.has(s.id) ? { ...s, rot: norm((Math.floor(s.rot / 90) + 1) * 90) } : s)))
+        }
+      } else if (k === 'delete' || k === 'backspace') {
+        if (st.current.mode === 'cassette') {
+          e.preventDefault()
+          const sel = st.current.selUnits
+          if (sel.size) { setSymbols((prev) => prev.filter((s) => !sel.has(s.id))); setSelUnits(new Set()) }
+        }
+      } else if (k === 'escape') {
+        setSelUnits(new Set()); onSelectionChange([]); setToolMenuOpen(false); onEscape?.()
+      }
     }
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') { spaceRef.current = false; setSpaceDown(false) }
-    }
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') { spaceRef.current = false; setSpaceDown(false) } }
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', onKeyUp)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      window.removeEventListener('keyup', onKeyUp)
-    }
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp) }
   }, [onEscape, onSelectionChange])
 
   const startPan = (cx: number, cy: number) => {
-    const ctm = svgRef.current?.getScreenCTM()
-    if (!ctm) return
+    const ctm = svgRef.current?.getScreenCTM(); if (!ctm) return
     panRef.current = { sx: cx, sy: cy, vx: view.x, vy: view.y, a: ctm.a, d: ctm.d }
     setPanning(true)
   }
 
-  // 배경(빈 곳) 마우스다운: 손 모드/Space면 팬, 아니면 마퀴 시작.
   const onBgDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (panActive) { startPan(e.clientX, e.clientY); return }
-    const p = toSvg(e.clientX, e.clientY)
-    if (!p) return
+    const p = toSvg(e.clientX, e.clientY); if (!p) return
     marqRef.current = { sx: p.x, sy: p.y, additive: e.shiftKey }
     setMarquee({ x: p.x, y: p.y, w: 0, h: 0 })
   }
 
-  // 실 마우스다운: 손 모드/Space면 팬, 아니면 선택(Shift 토글).
-  const onRoomDown = (e: React.MouseEvent, id: string) => {
+  // 실내기 심볼: 선택 + 이동 시작.
+  const onUnitDown = (e: React.MouseEvent, id: string) => {
     if (panActive) { startPan(e.clientX, e.clientY); return }
     e.stopPropagation()
-    selectRoom(id, e.shiftKey)
+    let next: Set<string>
+    if (e.shiftKey) {
+      next = new Set(selUnits)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+    } else {
+      next = selUnits.has(id) ? selUnits : new Set([id])
+    }
+    setSelUnits(next)
+    const p = toSvg(e.clientX, e.clientY); if (!p) return
+    const orig: Record<string, { x: number; y: number }> = {}
+    symbols.forEach((s) => { if (next.has(s.id)) orig[s.id] = { x: s.x, y: s.y } })
+    dragRef.current = { startX: p.x, startY: p.y, orig, moved: false }
+  }
+
+  const onRotateDown = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    const ids = selUnits.has(id) && selUnits.size > 1 ? Array.from(selUnits) : [id]
+    const orig: Record<string, number> = {}
+    symbols.forEach((s) => { if (ids.includes(s.id)) orig[s.id] = s.rot })
+    rotRef.current = { startX: e.clientX, orig }
+    setRotatingId(id)
+  }
+
+  const onZoneDown = (e: React.MouseEvent, id: string) => {
+    if (panActive) { startPan(e.clientX, e.clientY); return }
+    e.stopPropagation()
+    if (e.shiftKey) onSelectionChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id])
+    else onSelectionChange([id])
+  }
+
+  const onCornerDown = (e: React.MouseEvent, id: string, corner: Corner) => {
+    e.stopPropagation()
+    const z = zones.find((zz) => zz.id === id); if (!z) return
+    let ax: number, ay: number // 반대편(고정) 모서리
+    if (corner === 'tl') { ax = z.x + z.w; ay = z.y + z.h }
+    else if (corner === 'tr') { ax = z.x; ay = z.y + z.h }
+    else if (corner === 'bl') { ax = z.x + z.w; ay = z.y }
+    else { ax = z.x; ay = z.y }
+    cornerRef.current = { id, corner, ax, ay }
+    onSelectionChange([id])
+  }
+
+  const addUnit = () => {
+    const id = 'IDU' + ++idRef.current
+    setSymbols((prev) => [...prev, { id, x: snap(view.x + view.w / 2), y: snap(view.y + view.h / 2), rot: 0 }])
+    setSelUnits(new Set([id]))
+    setMode('cassette')
   }
 
   const zoomButton = (factor: number) =>
-    setView((v) => {
-      const [nw, nh] = clampW(v.w * factor, v.h * factor)
-      return { x: v.x + (v.w - nw) / 2, y: v.y + (v.h - nh) / 2, w: nw, h: nh }
-    })
+    setView((v) => { const [nw, nh] = clampW(v.w * factor, v.h * factor); return { x: v.x + (v.w - nw) / 2, y: v.y + (v.h - nh) / 2, w: nw, h: nh } })
+
+  const isCassette = mode === 'cassette'
+  const isZone = mode === 'zone'
+  const modeLabel = mode === 'cassette' ? '에어컨' : mode === 'zone' ? '존(실)' : '손 (이동)'
 
   return (
     <div className="viewer">
-      <div className="vhint">[도면 뷰어 — 휠: 확대/축소 · 드래그: 영역선택 · Space/손: 이동 · 0: 맞춤]</div>
+      <div className="vhint">[휠: 확대/축소 · 드래그: 영역선택 · Space/손: 이동 · C·Z·H: 모드 · R: 90° · Del: 삭제]</div>
+
+      <div className="vtools">
+        <button className="btn sm" onClick={addUnit}>＋ 실내기</button>
+        <label className="vtoggle"><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> 스냅</label>
+      </div>
+
       <svg
         ref={svgRef}
         className={`plansvg${panActive ? ' panmode' : ''}${panning ? ' panning' : ''}`}
@@ -228,78 +307,67 @@ export default function Viewer({ rooms, selectedIds, placed, onSelectionChange, 
           {drawingSrc ? (
             <image href={drawingSrc} x="0" y="0" width={PLAN_W} height={PLAN_H} />
           ) : (
-            <text x={PLAN_W / 2} y={PLAN_H - 14} fontSize="10" textAnchor="middle" fill="#c8c8c8">
-              도면 레이어 (DXF/SVG/이미지 마운트 지점)
-            </text>
+            <text x={PLAN_W / 2} y={PLAN_H - 14} fontSize="10" textAnchor="middle" fill="#c8c8c8">도면 레이어 (DXF/SVG/이미지 마운트 지점)</text>
           )}
         </g>
 
-        {/* === 실 검출 오버레이 레이어 === */}
-        <g className="room-layer">
-          {Object.entries(rooms).map(([id, r]) => {
-            const on = selectedIds.includes(id)
-            return (
-              <g key={id} onMouseDown={(e) => onRoomDown(e, id)} style={{ cursor: panActive ? 'grab' : 'pointer' }}>
-                <rect
-                  x={r.x} y={r.y} width={r.w} height={r.h}
-                  fill={on ? '#EDEDED' : placed ? '#F1F1F1' : '#FCFCFC'}
-                  fillOpacity="0.85"
-                  stroke={on ? '#222222' : placed ? '#333333' : '#C9C9C9'}
-                  strokeWidth={on ? 2 : 1}
-                />
-                <text x={r.x + 8} y={r.y + 15} fontSize="10" fill="#999">{r.name}</text>
-                <text x={r.x + r.w - 8} y={r.y + 15} fontSize="9" fill="#aaa" textAnchor="end">{id}</text>
-                <text x={r.x + r.w / 2} y={r.y + r.h / 2 + 4} fontSize="11" textAnchor="middle" fill="#222">
-                  실내기 {r.type}
-                </text>
-              </g>
-            )
-          })}
+        {/* 실(존) 레이어 */}
+        <g style={{ pointerEvents: isZone ? 'auto' : 'none', opacity: isZone ? 1 : 0.85 }}>
+          {zones.map((z) => (
+            <ZoneRect key={z.id} z={z} editing={isZone && selectedIds.includes(z.id)} selected={selectedIds.includes(z.id)} onDown={onZoneDown} onCornerDown={onCornerDown} />
+          ))}
+        </g>
+
+        {/* 실내기(에어컨) 레이어 */}
+        <g style={{ pointerEvents: isCassette ? 'auto' : 'none', opacity: isCassette ? 1 : 0.5 }}>
+          {symbols.map((s) => (
+            <ACUnit
+              key={s.id} sym={s} selected={selUnits.has(s.id)} hovered={hoveredId === s.id} rotating={rotatingId === s.id}
+              onBodyDown={onUnitDown} onRotateDown={onRotateDown}
+              onEnter={setHoveredId} onLeave={(id) => setHoveredId((h) => (h === id ? null : h))}
+            />
+          ))}
         </g>
 
         {marquee && (marquee.w > 0 || marquee.h > 0) && (
-          <rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h}
-                fill="rgba(34,34,34,0.06)" stroke="#333333" strokeWidth={1} strokeDasharray="4 3" />
+          <rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} fill="rgba(34,34,34,0.06)" stroke="#333333" strokeWidth={1} strokeDasharray="4 3" />
         )}
       </svg>
 
       {/* 하단 중앙 Figma식 도구바 */}
       <div className="figbar">
         <button className="figtool" onClick={() => setToolMenuOpen((o) => !o)} title="도구 선택">
-          <span className="figtool-name">{mode === 'select' ? '선택' : '손 (이동)'}</span>
+          <span className="figtool-name">{modeLabel}</span>
           <span className="figtool-chev">▾</span>
         </button>
         {toolMenuOpen && (
           <div className="figmenu">
-            <button className={`figitem${mode === 'select' ? ' active' : ''}`} onClick={() => { setMode('select'); setToolMenuOpen(false) }}>
-              <span className="tt"><b>선택</b><span>실 클릭 · 영역 다중선택</span></span>
-              <span className="kk">V</span>
+            <button className={`figitem${isCassette ? ' active' : ''}`} onClick={() => { setMode('cassette'); setToolMenuOpen(false) }}>
+              <span className="tt"><b>에어컨 (실내기)</b><span>선택 · 이동 · 회전 · 삭제</span></span><span className="kk">C</span>
+            </button>
+            <button className={`figitem${isZone ? ' active' : ''}`} onClick={() => { setMode('zone'); setToolMenuOpen(false) }}>
+              <span className="tt"><b>존 (실)</b><span>선택 · 모서리 리사이즈</span></span><span className="kk">Z</span>
             </button>
             <button className={`figitem${mode === 'pan' ? ' active' : ''}`} onClick={() => { setMode('pan'); setToolMenuOpen(false) }}>
-              <span className="tt"><b>손 (이동)</b><span>드래그로 화면 이동</span></span>
-              <span className="kk">H</span>
+              <span className="tt"><b>손 (이동)</b><span>드래그로 화면 이동</span></span><span className="kk">H</span>
             </button>
           </div>
         )}
       </div>
       {toolMenuOpen && <div className="figmenu-overlay" onClick={() => setToolMenuOpen(false)} />}
 
-      {/* 우상단 플로팅 위젯 — 단축키 힌트(접기/펼치기) */}
+      {/* 우상단 플로팅 힌트 위젯 */}
       <div className={`vwidget${hintOpen ? '' : ' collapsed'}`}>
         <div className="vw-head">
           <span>단축키 / 조작</span>
-          <button className="vw-btn" onClick={() => setHintOpen((o) => !o)} title={hintOpen ? '접기' : '펼치기'}>
-            {hintOpen ? '−' : '+'}
-          </button>
+          <button className="vw-btn" onClick={() => setHintOpen((o) => !o)} title={hintOpen ? '접기' : '펼치기'}>{hintOpen ? '−' : '+'}</button>
         </div>
         <div className="vw-body">
-          <div className="vw-row"><kbd>휠</kbd> 확대/축소 (커서 기준)</div>
-          <div className="vw-row"><kbd>드래그</kbd> 영역 다중선택</div>
-          <div className="vw-row"><kbd>Shift</kbd>+클릭 선택 추가/해제</div>
-          <div className="vw-row"><kbd>Space</kbd>·<kbd>H</kbd> 화면 이동(손)</div>
-          <div className="vw-row"><kbd>V</kbd> 선택 도구</div>
-          <div className="vw-row"><kbd>0</kbd> 맞춤(100%) 리셋</div>
-          <div className="vw-row"><kbd>Esc</kbd> 선택 해제 / 팝업</div>
+          <div className="vw-row"><kbd>C</kbd> 에어컨 · <kbd>Z</kbd> 존(실) · <kbd>H</kbd> 손</div>
+          <div className="vw-row"><kbd>휠</kbd> 확대/축소 · <kbd>0</kbd> 맞춤</div>
+          <div className="vw-row"><kbd>드래그</kbd> 이동/영역선택 · <kbd>Shift</kbd> 추가</div>
+          <div className="vw-row"><kbd>R</kbd> 90° 회전 · <kbd>⟳</kbd> 핸들 15°</div>
+          <div className="vw-row"><kbd>Del</kbd> 실내기 삭제 · <kbd>Esc</kbd> 해제</div>
         </div>
       </div>
 

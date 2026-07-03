@@ -23,7 +23,6 @@ export default function App() {
   const [selRooms, setSelRooms] = useState<string[]>(['AC_001'])
   const [tab, setTab] = useState<'in' | 'out'>('in')
   const [mapOpen, setMapOpen] = useState(false)
-  const [placed, setPlaced] = useState(false)
   const [toast, setToast] = useState('')
 
   const flash = (msg: string) => {
@@ -100,9 +99,7 @@ export default function App() {
   }
 
   const aiPlace = () => {
-    setPlaced(true)
     flash('✦ AI가 실 ' + Object.keys(ROOMS).length + '곳에 실내기를 자동 배치했습니다 (권장 모델 적용)')
-    setTimeout(() => setPlaced(false), 1300)
   }
 
   return (
@@ -152,7 +149,7 @@ export default function App() {
       </div>
 
       <div className="stage">
-        <Viewer rooms={ROOMS} selectedIds={selRooms} placed={placed} onSelectionChange={setSelRooms} onEscape={() => setMapOpen(false)} />
+        <Viewer rooms={ROOMS} selectedIds={selRooms} onSelectionChange={setSelRooms} onEscape={() => setMapOpen(false)} />
         <ModelPanel rooms={ROOMS} groups={groups} selRooms={selRooms} tab={tab} setTab={setTab} models={MODELS} />
       </div>
       <div className="bottom">▲ 장비 리스트</div>
