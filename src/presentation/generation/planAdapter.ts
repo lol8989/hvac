@@ -28,17 +28,9 @@ export interface GroupView {
   effText?: string // 계열별 효율 지표: EHP 'EERa 4.99' / GHP 'COPc 1.55'. 없으면 undefined
 }
 
-// 조합 리포트 집계(도메인 집계를 표시 문자열/수치로 변환)
-export interface ReportView {
-  totalOutdoorPriceText: string // 활성 실외기 단가 합(VAT 별도)
-  unpricedCount: number // 단가 미상 실외기 대수
-  highEfficiencyCount: number // 고효율(1~2등급) 실외기 대수
-}
-
 export interface ViewModel {
   groups: GroupView[]
   pool: string[]
-  report: ReportView
 }
 
 // roomId → IndoorUnit (ROOMS 목업에서 도메인 엔티티 생성)
@@ -90,9 +82,9 @@ export const bootstrapPlan = (catalog: OutdoorModelCatalog = new InMemoryOutdoor
   return new AssignmentPlan({ groups, pool })
 }
 
-// AssignmentPlan → 컴포넌트가 소비하는 레거시 뷰 형태(+ 리포트 집계)
-export const toViewModel = (plan: AssignmentPlan): ViewModel => {
-  const groups: GroupView[] = plan.groups.map((g) => {
+// AssignmentPlan → 컴포넌트가 소비하는 레거시 뷰 형태
+export const toViewModel = (plan: AssignmentPlan): ViewModel => ({
+  groups: plan.groups.map((g) => {
     const odu = g.outdoorUnit
     return {
       key: g.key,
@@ -106,22 +98,9 @@ export const toViewModel = (plan: AssignmentPlan): ViewModel => {
       gradeText: odu.grade?.label(),
       effText: efficiencyText(odu.energySource.code, odu.grade),
     }
-  })
-
-  const total = plan.totalOutdoorPrice({ activeOnly: true })
-  const dist = plan.gradeDistribution({ activeOnly: true })
-  const highEfficiencyCount = (dist.byGrade.get(1) ?? 0) + (dist.byGrade.get(2) ?? 0)
-
-  return {
-    groups,
-    pool: plan.pool.map((i) => i.id),
-    report: {
-      totalOutdoorPriceText: total.sum.format(),
-      unpricedCount: total.unknownCount,
-      highEfficiencyCount,
-    },
-  }
-}
+  }),
+  pool: plan.pool.map((i) => i.id),
+})
 
 // 기존 키(ODU_n) 다음 번호의 새 그룹 메타
 export const nextGroupMeta = (plan: AssignmentPlan): GroupMeta => {

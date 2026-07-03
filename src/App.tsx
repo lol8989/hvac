@@ -43,8 +43,8 @@ export default function App() {
   )
   const sync = () => setPlan(repo.load())
 
-  // 컴포넌트가 소비하는 레거시 뷰 형태로 변환(동작 보존). report=단가·등급 집계.
-  const { groups, pool, report } = toViewModel(plan)
+  // 컴포넌트가 소비하는 레거시 뷰 형태로 변환(동작 보존).
+  const { groups, pool } = toViewModel(plan)
 
   // 실내기(id)를 대상(to = 그룹 key 또는 'pool')으로 이동. 호환 불가 시 false.
   const moveRoom = (id: string, to: string): boolean => {
@@ -131,7 +131,6 @@ export default function App() {
         rooms={ROOMS}
         groups={groups}
         pool={pool}
-        report={report}
         onAiPlace={aiPlace}
         onOpenMap={() => setMapOpen(true)}
       />

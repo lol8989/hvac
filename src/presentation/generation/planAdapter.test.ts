@@ -52,15 +52,12 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
     expect(odu.maxConnections).toBe(spec.maxConnections)
   })
 
-  it('toViewModel은 단가/등급 표시 문자열과 리포트 집계를 채운다', () => {
+  it('toViewModel은 그룹별 단가/등급 표시 문자열을 채운다(모달 카드용)', () => {
     const vm = toViewModel(bootstrapPlan())
     const g1 = vm.groups.find((g) => g.key === 'ODU1')!
     expect(g1.priceText).toBe('4,120,000원')
     expect(g1.gradeText).toBe('3등급')
     expect(g1.effText).toBe('EERa 4.99') // EHP는 전기식 EER
-    // 활성 실외기 ODU1(4.12M)+ODU2(6.35M) 합, ODU3(빈 그룹) 제외
-    expect(vm.report.totalOutdoorPriceText).toBe('10,470,000원')
-    expect(vm.report.unpricedCount).toBe(0)
   })
 
   it('계열별 효율 지표 라벨을 구분한다 — GHP는 EERa가 아닌 COPc로 표기', () => {
