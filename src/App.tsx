@@ -20,7 +20,7 @@ export default function App() {
   const [repo] = useState(() => new InMemoryPlanRepository(bootstrapPlan(catalog)))
 
   const [plan, setPlan] = useState(() => repo.load())
-  const [selRoom, setSelRoom] = useState('AC_001')
+  const [selRooms, setSelRooms] = useState<string[]>(['AC_001'])
   const [tab, setTab] = useState<'in' | 'out'>('in')
   const [mapOpen, setMapOpen] = useState(false)
   const [placed, setPlaced] = useState(false)
@@ -152,8 +152,8 @@ export default function App() {
       </div>
 
       <div className="stage">
-        <Viewer rooms={ROOMS} selRoom={selRoom} placed={placed} onPick={setSelRoom} onEscape={() => setMapOpen(false)} />
-        <ModelPanel rooms={ROOMS} groups={groups} selRoom={selRoom} tab={tab} setTab={setTab} models={MODELS} />
+        <Viewer rooms={ROOMS} selectedIds={selRooms} placed={placed} onSelectionChange={setSelRooms} onEscape={() => setMapOpen(false)} />
+        <ModelPanel rooms={ROOMS} groups={groups} selRooms={selRooms} tab={tab} setTab={setTab} models={MODELS} />
       </div>
       <div className="bottom">▲ 장비 리스트</div>
 

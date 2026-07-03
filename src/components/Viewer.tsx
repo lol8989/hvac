@@ -9,6 +9,8 @@ const BASE_W = FIT.w // 줌 100% 기준 폭
 const MIN_W = BASE_W / 8 // 최대 확대
 const MAX_W = BASE_W * 3 // 최대 축소
 
+type Mode = 'select' | 'pan'
+
 interface ViewBox {
   x: number
   y: number
@@ -18,34 +20,66 @@ interface ViewBox {
 
 interface ViewerProps {
   rooms: Record<string, Room>
-  selRoom: string
+  selectedIds: string[]
   placed: boolean
-  onPick: (id: string) => void
-  onEscape?: () => void // Esc: 모달 닫기 등
+  onSelectionChange: (ids: string[]) => void
+  onEscape?: () => void // Esc: 팝업 닫기 등
   drawingSrc?: string
+}
+
+const clampW = (nw: number, nh: number): [number, number] => {
+  if (nw < MIN_W) { const k = MIN_W / nw; return [nw * k, nh * k] }
+  if (nw > MAX_W) { const k = MAX_W / nw; return [nw * k, nh * k] }
+  return [nw, nh]
 }
 
 /**
  * SVG 도면 뷰어.
  * - 휠: 커서 아래 지점 고정 확대/축소 (getScreenCTM 기반)
- * - 드래그 / Space+드래그: 화면 이동(팬) — CTM 스케일로 정확 변환
- * - 단축키: Space(팬) · 0(맞춤 리셋) · Esc(모달 닫기)
- * - 우상단 플로팅 위젯: 단축키 힌트(접기/펼치기)
+ * - 선택 모드: 실 클릭 선택(Shift 토글) · 빈 곳 드래그로 영역 다중선택(마퀴)
+ * - 손 모드 / Space+드래그: 화면 이동(팬)
+ * - 단축키: V(선택) · H·Space(손) · 0(맞춤) · Esc(선택 해제/팝업)
+ * - 하단 중앙 Figma식 도구바 + 우상단 플로팅 힌트 위젯
  */
-export default function Viewer({ rooms, selRoom, placed, onPick, onEscape, drawingSrc }: ViewerProps) {
+export default function Viewer({ rooms, selectedIds, placed, onSelectionChange, onEscape, drawingSrc }: ViewerProps) {
   const [view, setView] = useState<ViewBox>(FIT)
+  const [mode, setMode] = useState<Mode>('select')
   const [spaceDown, setSpaceDown] = useState(false)
   const [panning, setPanning] = useState(false)
+  const [marquee, setMarquee] = useState<ViewBox | null>(null)
   const [hintOpen, setHintOpen] = useState(true)
+  const [toolMenuOpen, setToolMenuOpen] = useState(false)
 
   const svgRef = useRef<SVGSVGElement | null>(null)
   const panRef = useRef<{ sx: number; sy: number; vx: number; vy: number; a: number; d: number } | null>(null)
-  const movedRef = useRef(false)
+  const marqRef = useRef<{ sx: number; sy: number; additive: boolean } | null>(null)
   const spaceRef = useRef(false)
+  const selRef = useRef(selectedIds)
+  useEffect(() => { selRef.current = selectedIds }, [selectedIds])
 
   const zoomPct = Math.round((BASE_W / view.w) * 100)
+  const panActive = mode === 'pan' || spaceDown
 
-  // 휠 확대/축소: 커서 아래 지점을 고정한 채 스케일. React onWheel은 passive라 네이티브로 등록.
+  // 클라이언트 좌표 → 도면 좌표(라이브 CTM 기준)
+  const toSvg = (cx: number, cy: number) => {
+    const svg = svgRef.current
+    const ctm = svg?.getScreenCTM()
+    if (!svg || !ctm) return null
+    const pt = svg.createSVGPoint()
+    pt.x = cx
+    pt.y = cy
+    return pt.matrixTransform(ctm.inverse())
+  }
+
+  const selectRoom = (id: string, additive: boolean) => {
+    if (additive) {
+      onSelectionChange(selRef.current.includes(id) ? selRef.current.filter((x) => x !== id) : [...selRef.current, id])
+    } else {
+      onSelectionChange([id])
+    }
+  }
+
+  // 휠 확대/축소: 커서 아래 지점 고정. React onWheel은 passive라 네이티브로 등록.
   useEffect(() => {
     const svg = svgRef.current
     if (!svg) return
@@ -56,13 +90,10 @@ export default function Viewer({ rooms, selRoom, placed, onPick, onEscape, drawi
       const pt = svg.createSVGPoint()
       pt.x = e.clientX
       pt.y = e.clientY
-      const p = pt.matrixTransform(ctm.inverse()) // 커서의 도면 좌표(라이브 CTM 기준)
+      const p = pt.matrixTransform(ctm.inverse())
       const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1
       setView((v) => {
-        let nw = v.w * factor
-        let nh = v.h * factor
-        if (nw < MIN_W) { const k = MIN_W / nw; nw *= k; nh *= k }
-        if (nw > MAX_W) { const k = MAX_W / nw; nw *= k; nh *= k }
+        const [nw, nh] = clampW(v.w * factor, v.h * factor)
         const fracX = (p.x - v.x) / v.w
         const fracY = (p.y - v.y) / v.h
         return { x: p.x - fracX * nw, y: p.y - fracY * nh, w: nw, h: nh }
@@ -72,20 +103,47 @@ export default function Viewer({ rooms, selRoom, placed, onPick, onEscape, drawi
     return () => svg.removeEventListener('wheel', onWheel)
   }, [])
 
-  // 팬: 드래그 중 화면 밖으로 나가도 이어지도록 window 리스너로 처리.
+  // 팬/마퀴: 드래그가 화면 밖으로 나가도 이어지도록 window 리스너로 처리.
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const pn = panRef.current
-      if (!pn) return
-      const dx = (e.clientX - pn.sx) / pn.a
-      const dy = (e.clientY - pn.sy) / pn.d
-      if (Math.abs(e.clientX - pn.sx) > 3 || Math.abs(e.clientY - pn.sy) > 3) movedRef.current = true
-      setView((v) => ({ ...v, x: pn.vx - dx, y: pn.vy - dy }))
+      if (pn) {
+        const dx = (e.clientX - pn.sx) / pn.a
+        const dy = (e.clientY - pn.sy) / pn.d
+        setView((v) => ({ ...v, x: pn.vx - dx, y: pn.vy - dy }))
+        return
+      }
+      const mq = marqRef.current
+      if (mq) {
+        const p = toSvg(e.clientX, e.clientY)
+        if (!p) return
+        setMarquee({ x: Math.min(mq.sx, p.x), y: Math.min(mq.sy, p.y), w: Math.abs(p.x - mq.sx), h: Math.abs(p.y - mq.sy) })
+      }
     }
     const onUp = () => {
       if (panRef.current) {
         panRef.current = null
         setPanning(false)
+        return
+      }
+      const mq = marqRef.current
+      if (mq) {
+        setMarquee((rect) => {
+          if (rect) {
+            const big = rect.w > 3 || rect.h > 3
+            if (big) {
+              const hits = Object.entries(rooms)
+                .filter(([, r]) => !(r.x > rect.x + rect.w || r.x + r.w < rect.x || r.y > rect.y + rect.h || r.y + r.h < rect.y))
+                .map(([id]) => id)
+              const base = mq.additive ? selRef.current : []
+              onSelectionChange(Array.from(new Set([...base, ...hits])))
+            } else if (!mq.additive) {
+              onSelectionChange([]) // 빈 곳 클릭 → 선택 해제
+            }
+          }
+          return null
+        })
+        marqRef.current = null
       }
     }
     window.addEventListener('mousemove', onMove)
@@ -94,9 +152,9 @@ export default function Viewer({ rooms, selRoom, placed, onPick, onEscape, drawi
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
-  }, [])
+  }, [rooms, onSelectionChange])
 
-  // 단축키: Space(팬 커서) · 0(맞춤) · Esc(모달 닫기). 입력 중에는 무시.
+  // 단축키: V(선택) · H/Space(손) · 0(맞춤) · Esc(해제/팝업). 입력 중에는 무시.
   useEffect(() => {
     const typing = (t: EventTarget | null) => {
       const el = t as HTMLElement | null
@@ -107,11 +165,13 @@ export default function Viewer({ rooms, selRoom, placed, onPick, onEscape, drawi
       if (e.code === 'Space') {
         e.preventDefault()
         if (!spaceRef.current) { spaceRef.current = true; setSpaceDown(true) }
-      } else if (e.key === '0') {
-        setView(FIT)
-      } else if (e.key === 'Escape') {
-        onEscape?.()
+        return
       }
+      const k = e.key.toLowerCase()
+      if (k === 'v') setMode('select')
+      else if (k === 'h') setMode('pan')
+      else if (k === '0') setView(FIT)
+      else if (k === 'escape') { onSelectionChange([]); setToolMenuOpen(false); onEscape?.() }
     }
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') { spaceRef.current = false; setSpaceDown(false) }
@@ -122,36 +182,47 @@ export default function Viewer({ rooms, selRoom, placed, onPick, onEscape, drawi
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [onEscape])
+  }, [onEscape, onSelectionChange])
 
-  const startPan = (e: React.MouseEvent<SVGSVGElement>) => {
+  const startPan = (cx: number, cy: number) => {
     const ctm = svgRef.current?.getScreenCTM()
     if (!ctm) return
-    panRef.current = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, a: ctm.a, d: ctm.d }
-    movedRef.current = false
+    panRef.current = { sx: cx, sy: cy, vx: view.x, vy: view.y, a: ctm.a, d: ctm.d }
     setPanning(true)
+  }
+
+  // 배경(빈 곳) 마우스다운: 손 모드/Space면 팬, 아니면 마퀴 시작.
+  const onBgDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (panActive) { startPan(e.clientX, e.clientY); return }
+    const p = toSvg(e.clientX, e.clientY)
+    if (!p) return
+    marqRef.current = { sx: p.x, sy: p.y, additive: e.shiftKey }
+    setMarquee({ x: p.x, y: p.y, w: 0, h: 0 })
+  }
+
+  // 실 마우스다운: 손 모드/Space면 팬, 아니면 선택(Shift 토글).
+  const onRoomDown = (e: React.MouseEvent, id: string) => {
+    if (panActive) { startPan(e.clientX, e.clientY); return }
+    e.stopPropagation()
+    selectRoom(id, e.shiftKey)
   }
 
   const zoomButton = (factor: number) =>
     setView((v) => {
-      let nw = v.w * factor
-      let nh = v.h * factor
-      if (nw < MIN_W) { const k = MIN_W / nw; nw *= k; nh *= k }
-      if (nw > MAX_W) { const k = MAX_W / nw; nw *= k; nh *= k }
+      const [nw, nh] = clampW(v.w * factor, v.h * factor)
       return { x: v.x + (v.w - nw) / 2, y: v.y + (v.h - nh) / 2, w: nw, h: nh }
     })
 
   return (
     <div className="viewer">
-      <div className="vhint">[도면 뷰어 — 휠: 확대/축소(커서 기준) · 드래그/Space: 이동 · 0: 맞춤]</div>
+      <div className="vhint">[도면 뷰어 — 휠: 확대/축소 · 드래그: 영역선택 · Space/손: 이동 · 0: 맞춤]</div>
       <svg
         ref={svgRef}
-        className={`plansvg${spaceDown ? ' panmode' : ''}${panning ? ' panning' : ''}`}
+        className={`plansvg${panActive ? ' panmode' : ''}${panning ? ' panning' : ''}`}
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
-        onMouseDown={startPan}
+        onMouseDown={onBgDown}
       >
-        {/* === 실제 도면 레이어 (연동 지점) === */}
         <g className="drawing-layer">
           <rect x="0" y="0" width={PLAN_W} height={PLAN_H} fill="#ffffff" stroke="#CFCFCF" />
           {drawingSrc ? (
@@ -166,13 +237,9 @@ export default function Viewer({ rooms, selRoom, placed, onPick, onEscape, drawi
         {/* === 실 검출 오버레이 레이어 === */}
         <g className="room-layer">
           {Object.entries(rooms).map(([id, r]) => {
-            const on = id === selRoom
+            const on = selectedIds.includes(id)
             return (
-              <g
-                key={id}
-                onClick={() => { if (!movedRef.current) onPick(id) }}
-                style={{ cursor: spaceDown ? 'grab' : 'pointer' }}
-              >
+              <g key={id} onMouseDown={(e) => onRoomDown(e, id)} style={{ cursor: panActive ? 'grab' : 'pointer' }}>
                 <rect
                   x={r.x} y={r.y} width={r.w} height={r.h}
                   fill={on ? '#EDEDED' : placed ? '#F1F1F1' : '#FCFCFC'}
@@ -189,7 +256,33 @@ export default function Viewer({ rooms, selRoom, placed, onPick, onEscape, drawi
             )
           })}
         </g>
+
+        {marquee && (marquee.w > 0 || marquee.h > 0) && (
+          <rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h}
+                fill="rgba(34,34,34,0.06)" stroke="#333333" strokeWidth={1} strokeDasharray="4 3" />
+        )}
       </svg>
+
+      {/* 하단 중앙 Figma식 도구바 */}
+      <div className="figbar">
+        <button className="figtool" onClick={() => setToolMenuOpen((o) => !o)} title="도구 선택">
+          <span className="figtool-name">{mode === 'select' ? '선택' : '손 (이동)'}</span>
+          <span className="figtool-chev">▾</span>
+        </button>
+        {toolMenuOpen && (
+          <div className="figmenu">
+            <button className={`figitem${mode === 'select' ? ' active' : ''}`} onClick={() => { setMode('select'); setToolMenuOpen(false) }}>
+              <span className="tt"><b>선택</b><span>실 클릭 · 영역 다중선택</span></span>
+              <span className="kk">V</span>
+            </button>
+            <button className={`figitem${mode === 'pan' ? ' active' : ''}`} onClick={() => { setMode('pan'); setToolMenuOpen(false) }}>
+              <span className="tt"><b>손 (이동)</b><span>드래그로 화면 이동</span></span>
+              <span className="kk">H</span>
+            </button>
+          </div>
+        )}
+      </div>
+      {toolMenuOpen && <div className="figmenu-overlay" onClick={() => setToolMenuOpen(false)} />}
 
       {/* 우상단 플로팅 위젯 — 단축키 힌트(접기/펼치기) */}
       <div className={`vwidget${hintOpen ? '' : ' collapsed'}`}>
@@ -201,11 +294,12 @@ export default function Viewer({ rooms, selRoom, placed, onPick, onEscape, drawi
         </div>
         <div className="vw-body">
           <div className="vw-row"><kbd>휠</kbd> 확대/축소 (커서 기준)</div>
-          <div className="vw-row"><kbd>드래그</kbd> 화면 이동</div>
-          <div className="vw-row"><kbd>Space</kbd>+드래그 화면 이동</div>
+          <div className="vw-row"><kbd>드래그</kbd> 영역 다중선택</div>
+          <div className="vw-row"><kbd>Shift</kbd>+클릭 선택 추가/해제</div>
+          <div className="vw-row"><kbd>Space</kbd>·<kbd>H</kbd> 화면 이동(손)</div>
+          <div className="vw-row"><kbd>V</kbd> 선택 도구</div>
           <div className="vw-row"><kbd>0</kbd> 맞춤(100%) 리셋</div>
-          <div className="vw-row"><kbd>Esc</kbd> 팝업 닫기</div>
-          <div className="vw-row"><kbd>클릭</kbd> 실 선택</div>
+          <div className="vw-row"><kbd>Esc</kbd> 선택 해제 / 팝업</div>
         </div>
       </div>
 

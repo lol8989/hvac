@@ -5,23 +5,31 @@ import type { GroupView } from '../presentation/generation/planAdapter'
 interface ModelPanelProps {
   rooms: Record<string, Room>
   groups: GroupView[]
-  selRoom: string
+  selRooms: string[]
   tab: 'in' | 'out'
   setTab: (t: 'in' | 'out') => void
   models: { in: ModelCard[]; out: ModelCard[] }
 }
 
 // 우측 패널 — 실내기/실외기 모델 선택 전용 (용량 요약은 상단 리포트로 이관).
-export default function ModelPanel({ rooms, groups, selRoom, tab, setTab, models }: ModelPanelProps) {
+export default function ModelPanel({ rooms, groups, selRooms, tab, setTab, models }: ModelPanelProps) {
   const roomIds = Object.keys(rooms)
-  const sel = rooms[selRoom]
+  const primary = selRooms[0] // 대표 실(상세 표시용)
+  const sel = primary ? rooms[primary] : undefined
+  const extra = selRooms.length - 1
 
   return (
     <aside className="rpanel">
       <div className="rp-h">실내기 / 실외기 모델 선택 <button className="x">×</button></div>
       <div className="rp-room">
-        <span>{selRoom} ({sel.name})</span>
-        <span>{sel.area.toFixed(2)}㎡</span>
+        {sel ? (
+          <>
+            <span>{primary} ({sel.name}){extra > 0 ? ` 외 ${extra}실` : ''}</span>
+            <span>{sel.area.toFixed(2)}㎡</span>
+          </>
+        ) : (
+          <span style={{ color: '#999' }}>선택된 실 없음</span>
+        )}
       </div>
       <div className="rp-tabs">
         <button className={tab === 'in' ? 'on' : ''} onClick={() => setTab('in')}>실내기</button>
@@ -41,7 +49,7 @@ export default function ModelPanel({ rooms, groups, selRoom, tab, setTab, models
         <div className="subttl" style={{ marginTop: 12 }}><b>{roomIds.length}</b>개의 선택된 장비</div>
         {roomIds.map((id) => {
           const g = groupOfRoom(groups, id)
-          const on = id === selRoom
+          const on = selRooms.includes(id)
           return (
             <div key={id} className="selrow">
               <span className={'cb' + (on ? ' on' : '')}>{on ? '✓' : ''}</span>
