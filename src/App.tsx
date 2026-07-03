@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { ROOMS, MODELS } from './data'
 import type { OduCatalogEntry } from './data'
 import ReportStrip from './components/ReportStrip'
@@ -14,10 +14,8 @@ import { NotFoundError } from './domain/generation/errors'
 
 export default function App() {
   // 배정 상태는 도메인 AssignmentPlan이 소유하고, 인메모리 리포지토리 포트를 통해
-  // 유즈케이스가 로드/저장한다. 리포지토리는 세션 동안 1개(useRef)로 고정한다.
-  const repoRef = useRef<InMemoryPlanRepository | null>(null)
-  if (!repoRef.current) repoRef.current = new InMemoryPlanRepository(bootstrapPlan())
-  const repo = repoRef.current
+  // 유즈케이스가 로드/저장한다. 리포지토리는 세션 동안 1개로 고정(useState lazy 초기화).
+  const [repo] = useState(() => new InMemoryPlanRepository(bootstrapPlan()))
 
   const [plan, setPlan] = useState(() => repo.load())
   const [selRoom, setSelRoom] = useState('AC_001')

@@ -17,7 +17,11 @@
       "Bash(node -e ' *)",
       "Bash(npx tsc *)",
       "Bash(echo \"---TOTAL: $\\(npx tsc --noEmit 2>&1)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(npx eslint *)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(s\\);for\\(const f of r\\){if\\(!f.messages.length\\)continue;const p=f.filePath.split\\(/[\\\\\\\\/]/\\).slice\\(-2\\).join\\('/'\\);for\\(const m of f.messages\\)console.log\\(p+':'+m.line+'  '+m.ruleId+'  '+m.message.slice\\(0,70\\)\\)}}\\)\")",
+      "Bash(echo \"---exit $?---\")",
+      "Bash(echo \"exit $?\")"
     ]
   }
 }

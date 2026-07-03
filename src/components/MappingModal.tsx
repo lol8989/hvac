@@ -53,7 +53,7 @@ export default function MappingModal({ groups, pool, onMove, onReplace, onSplit,
     setOverKey(null)
     let payload: { id: string; from: string }
     try {
-      payload = JSON.parse(e.dataTransfer.getData('text/plain'))
+      payload = JSON.parse(e.dataTransfer.getData('text/plain')) as { id: string; from: string }
     } catch {
       return
     }
