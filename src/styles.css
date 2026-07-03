@@ -119,15 +119,15 @@ button{font-family:inherit;cursor:pointer;}
 .plansvg.panning,.plansvg.panning *{cursor:grabbing;}
 
 /* 뷰어 우상단 플로팅 위젯 (단축키 힌트) — 무채색 */
-.vwidget{position:absolute;top:12px;right:12px;width:210px;z-index:20;background:rgba(255,255,255,0.97);border:1px solid var(--line);border-radius:9px;box-shadow:0 4px 14px rgba(0,0,0,0.10);overflow:hidden;}
+.vwidget{position:absolute;top:12px;right:12px;width:236px;z-index:20;background:rgba(255,255,255,0.97);border:1px solid var(--line);border-radius:9px;box-shadow:0 4px 14px rgba(0,0,0,0.10);overflow:hidden;}
 .vw-head{display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 12px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;user-select:none;}
 .vwidget.collapsed .vw-head{color:var(--ink2);}
 .vw-btn{border:1px solid var(--line);background:#fff;color:var(--muted);width:22px;height:22px;border-radius:5px;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;font-weight:700;padding:0;flex-shrink:0;}
 .vw-btn:hover{background:var(--hover);color:var(--ink);}
 .vwidget.collapsed .vw-body{display:none;}
 .vw-body{padding:2px 12px 11px;display:flex;flex-direction:column;gap:6px;}
-.vw-row{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink2);}
-.vw-row kbd{background:#F5F5F5;border:1px solid #CCC;border-bottom-width:2px;border-radius:4px;padding:1px 6px;font-size:10px;font-family:inherit;font-weight:600;color:#333;min-width:16px;text-align:center;flex-shrink:0;white-space:nowrap;}
+.vw-row{font-size:11.5px;color:var(--ink2);line-height:1.85;}
+.vw-row kbd{display:inline-block;vertical-align:middle;background:#F5F5F5;border:1px solid #CCC;border-bottom-width:2px;border-radius:4px;padding:0 5px;margin:0 1px;font-size:10px;font-family:inherit;font-weight:600;color:#333;text-align:center;white-space:nowrap;}
 .zoom-pct{font-size:10px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums;}
 
 /* 하단 중앙 Figma식 도구바 (무채색) */
