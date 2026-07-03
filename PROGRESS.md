@@ -48,17 +48,17 @@ components/    Viewer·ReportStrip·ModelPanel·MappingModal  (App.tsx 조립)
 
 ## 3. 향후 과제 / 백로그
 
-### 3.1 진행 예정 — 도면 뷰어 기능 이식 (사용자 확정)
-> 출처: `C:\Users\lolfr\Documents\Project\move\에어컨 심볼 이동 및 회전\aircon-symbol-poc-v2.html` 분석.
-> 대상: `src/components/Viewer.tsx`(방 검출 뷰어). 무채색 규칙 유지. presentation 전용(도메인 무관).
+### 3.1 완료 — 도면 뷰어 기능 이식 (사용자 확정, 커밋 `efdf96a`·`83d26ab`)
+> 출처: `aircon-symbol-poc-v2.html` 분석. 대상: `src/components/Viewer.tsx`. 무채색·presentation 전용.
 
-- [ ] **커서 기준 휠 줌** — `createSVGPoint`+`getScreenCTM().inverse()`로 커서 아래 지점 고정 확대(현재 중앙 기준 교체), clamp `W/8~W*3`
-- [ ] **정확한 팬(pan)** — CTM 스케일(a,d)로 스크린Δ→좌표Δ 변환, `toSvg` 좌표 변환 정확화
-- [ ] **도면 단축키** — `Space`+드래그 팬, `0` 뷰 리셋, `Esc` 선택 해제(App selRoom 연동)
-- [ ] **실(방) 다중선택(마퀴)** — 빈 곳 드래그로 다중 선택, `Shift`+클릭 추가/해제 → 다중선택 상태 도입
-- [ ] **플로팅 위젯** — 우상단 접이식 단축키 힌트 패널 + **하단 중앙 Figma식 도구 드롭다운**(무채색화)
-- [ ] **용어: "방" → "실"** 표기로 통일(UI 라벨·주석)
-- 제외: 에어컨 심볼 이동/회전/삭제, 존 모서리 리사이즈, C/Z 도구모드
+- [x] **커서 기준 휠 줌** — `getScreenCTM().inverse()`로 커서 아래 지점 고정, clamp 100%×1/8~×3
+- [x] **정확한 팬(pan)** — CTM 스케일(a,d) 변환, window 리스너로 화면 밖 지속, `toSvg` 좌표 변환
+- [x] **도면 단축키** — `Space`/`H`(팬) · `V`(선택) · `0`(맞춤) · `Esc`(선택 해제+팝업)
+- [x] **실 다중선택(마퀴)** — 영역 드래그 AABB 교차 · `Shift`+클릭 토글. App `selRooms: string[]`
+- [x] **플로팅 위젯** — 우상단 접이식 힌트 + 하단 중앙 Figma식 도구바(무채색)
+- [x] **용어: "방" → "실"** 표기 통일
+- 제외: 심볼 이동/회전/삭제, 존 모서리 리사이즈
+- 후속 후보: 실 다중선택 → 다중 그룹 배정 연동, 도구바에 줌 컨트롤 통합, 실 선택 시 상세 다중 표시
 
 ### 3.2 단가·에너지등급 후속 (리뷰 지적 중 defer)
 - [ ] **실데이터 교체** — ODU_CATALOG의 단가/등급/COP는 현재 **POC 플레이스홀더**. 장비일람표/장비선정표 기준 실값으로 교체(값 확정 시 사용자 확인 후).
