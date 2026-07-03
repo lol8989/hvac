@@ -5,6 +5,9 @@ import type { Room } from '../data'
 const PLAN_W = 720
 const PLAN_H = 470
 const FIT = { x: -40, y: -30, w: PLAN_W + 80, h: PLAN_H + 60 }
+const BASE_W = FIT.w // 줌 100% 기준 폭
+const MIN_W = BASE_W / 8 // 최대 확대
+const MAX_W = BASE_W * 3 // 최대 축소
 
 interface ViewBox {
   x: number
@@ -18,67 +21,135 @@ interface ViewerProps {
   selRoom: string
   placed: boolean
   onPick: (id: string) => void
+  onEscape?: () => void // Esc: 모달 닫기 등
   drawingSrc?: string
 }
 
 /**
- * SVG 도면 뷰어 스켈레톤.
- * - viewBox 기반 확대/축소(휠, +/- 버튼) · 드래그 이동(pan) · 맞춤(fit)
- * - drawing-layer: 실제 도면 마운트 지점 (DXF 파싱 결과 <path>/<g>, 또는 <image href={drawingSrc}>)
- * - room-layer: 방 검출 결과 오버레이(클릭 선택). props 인터페이스는 기존과 동일.
+ * SVG 도면 뷰어.
+ * - 휠: 커서 아래 지점 고정 확대/축소 (getScreenCTM 기반)
+ * - 드래그 / Space+드래그: 화면 이동(팬) — CTM 스케일로 정확 변환
+ * - 단축키: Space(팬) · 0(맞춤 리셋) · Esc(모달 닫기)
+ * - 우상단 플로팅 위젯: 단축키 힌트(접기/펼치기)
  */
-export default function Viewer({ rooms, selRoom, placed, onPick, drawingSrc }: ViewerProps) {
+export default function Viewer({ rooms, selRoom, placed, onPick, onEscape, drawingSrc }: ViewerProps) {
   const [view, setView] = useState<ViewBox>(FIT)
-  const drag = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null)
-  const svgRef = useRef<SVGSVGElement | null>(null)
+  const [spaceDown, setSpaceDown] = useState(false)
+  const [panning, setPanning] = useState(false)
+  const [hintOpen, setHintOpen] = useState(true)
 
-  const zoomAt = (factor: number) =>
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  const panRef = useRef<{ sx: number; sy: number; vx: number; vy: number; a: number; d: number } | null>(null)
+  const movedRef = useRef(false)
+  const spaceRef = useRef(false)
+
+  const zoomPct = Math.round((BASE_W / view.w) * 100)
+
+  // 휠 확대/축소: 커서 아래 지점을 고정한 채 스케일. React onWheel은 passive라 네이티브로 등록.
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const ctm = svg.getScreenCTM()
+      if (!ctm) return
+      const pt = svg.createSVGPoint()
+      pt.x = e.clientX
+      pt.y = e.clientY
+      const p = pt.matrixTransform(ctm.inverse()) // 커서의 도면 좌표(라이브 CTM 기준)
+      const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1
+      setView((v) => {
+        let nw = v.w * factor
+        let nh = v.h * factor
+        if (nw < MIN_W) { const k = MIN_W / nw; nw *= k; nh *= k }
+        if (nw > MAX_W) { const k = MAX_W / nw; nw *= k; nh *= k }
+        const fracX = (p.x - v.x) / v.w
+        const fracY = (p.y - v.y) / v.h
+        return { x: p.x - fracX * nw, y: p.y - fracY * nh, w: nw, h: nh }
+      })
+    }
+    svg.addEventListener('wheel', onWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', onWheel)
+  }, [])
+
+  // 팬: 드래그 중 화면 밖으로 나가도 이어지도록 window 리스너로 처리.
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const pn = panRef.current
+      if (!pn) return
+      const dx = (e.clientX - pn.sx) / pn.a
+      const dy = (e.clientY - pn.sy) / pn.d
+      if (Math.abs(e.clientX - pn.sx) > 3 || Math.abs(e.clientY - pn.sy) > 3) movedRef.current = true
+      setView((v) => ({ ...v, x: pn.vx - dx, y: pn.vy - dy }))
+    }
+    const onUp = () => {
+      if (panRef.current) {
+        panRef.current = null
+        setPanning(false)
+      }
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
+  // 단축키: Space(팬 커서) · 0(맞춤) · Esc(모달 닫기). 입력 중에는 무시.
+  useEffect(() => {
+    const typing = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (typing(e.target)) return
+      if (e.code === 'Space') {
+        e.preventDefault()
+        if (!spaceRef.current) { spaceRef.current = true; setSpaceDown(true) }
+      } else if (e.key === '0') {
+        setView(FIT)
+      } else if (e.key === 'Escape') {
+        onEscape?.()
+      }
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') { spaceRef.current = false; setSpaceDown(false) }
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [onEscape])
+
+  const startPan = (e: React.MouseEvent<SVGSVGElement>) => {
+    const ctm = svgRef.current?.getScreenCTM()
+    if (!ctm) return
+    panRef.current = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, a: ctm.a, d: ctm.d }
+    movedRef.current = false
+    setPanning(true)
+  }
+
+  const zoomButton = (factor: number) =>
     setView((v) => {
-      const nw = v.w * factor
-      const nh = v.h * factor
+      let nw = v.w * factor
+      let nh = v.h * factor
+      if (nw < MIN_W) { const k = MIN_W / nw; nw *= k; nh *= k }
+      if (nw > MAX_W) { const k = MAX_W / nw; nw *= k; nh *= k }
       return { x: v.x + (v.w - nw) / 2, y: v.y + (v.h - nh) / 2, w: nw, h: nh }
     })
 
-  // 휠 확대/축소: React의 onWheel은 passive 리스너라 preventDefault가 무시된다.
-  // → 네이티브 wheel 리스너를 { passive: false }로 직접 등록해 브라우저 스크롤을 막는다.
-  useEffect(() => {
-    const el = svgRef.current
-    if (!el) return
-    const handler = (e: WheelEvent) => {
-      e.preventDefault()
-      zoomAt(e.deltaY > 0 ? 1.1 : 0.9)
-    }
-    el.addEventListener('wheel', handler, { passive: false })
-    return () => el.removeEventListener('wheel', handler)
-  }, [])
-
-  const onDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    drag.current = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y }
-  }
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!drag.current) return
-    const scale = view.w / e.currentTarget.clientWidth
-    setView((v) => ({
-      ...v,
-      x: drag.current!.ox - (e.clientX - drag.current!.sx) * scale,
-      y: drag.current!.oy - (e.clientY - drag.current!.sy) * scale,
-    }))
-  }
-  const onUp = () => {
-    drag.current = null
-  }
-
   return (
     <div className="viewer">
-      <div className="vhint">[도면 뷰어 — SVG · 휠: 확대/축소 · 드래그: 이동]</div>
+      <div className="vhint">[도면 뷰어 — 휠: 확대/축소(커서 기준) · 드래그/Space: 이동 · 0: 맞춤]</div>
       <svg
         ref={svgRef}
-        className="plansvg"
+        className={`plansvg${spaceDown ? ' panmode' : ''}${panning ? ' panning' : ''}`}
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
-        onMouseDown={onDown}
-        onMouseMove={onMove}
-        onMouseUp={onUp}
-        onMouseLeave={onUp}
+        preserveAspectRatio="xMidYMid meet"
+        onMouseDown={startPan}
       >
         {/* === 실제 도면 레이어 (연동 지점) === */}
         <g className="drawing-layer">
@@ -92,12 +163,16 @@ export default function Viewer({ rooms, selRoom, placed, onPick, drawingSrc }: V
           )}
         </g>
 
-        {/* === 방 검출 오버레이 레이어 === */}
+        {/* === 실 검출 오버레이 레이어 === */}
         <g className="room-layer">
           {Object.entries(rooms).map(([id, r]) => {
             const on = id === selRoom
             return (
-              <g key={id} onClick={() => onPick(id)} style={{ cursor: 'pointer' }}>
+              <g
+                key={id}
+                onClick={() => { if (!movedRef.current) onPick(id) }}
+                style={{ cursor: spaceDown ? 'grab' : 'pointer' }}
+              >
                 <rect
                   x={r.x} y={r.y} width={r.w} height={r.h}
                   fill={on ? '#EDEDED' : placed ? '#F1F1F1' : '#FCFCFC'}
@@ -116,10 +191,29 @@ export default function Viewer({ rooms, selRoom, placed, onPick, drawingSrc }: V
         </g>
       </svg>
 
+      {/* 우상단 플로팅 위젯 — 단축키 힌트(접기/펼치기) */}
+      <div className={`vwidget${hintOpen ? '' : ' collapsed'}`}>
+        <div className="vw-head">
+          <span>단축키 / 조작</span>
+          <button className="vw-btn" onClick={() => setHintOpen((o) => !o)} title={hintOpen ? '접기' : '펼치기'}>
+            {hintOpen ? '−' : '+'}
+          </button>
+        </div>
+        <div className="vw-body">
+          <div className="vw-row"><kbd>휠</kbd> 확대/축소 (커서 기준)</div>
+          <div className="vw-row"><kbd>드래그</kbd> 화면 이동</div>
+          <div className="vw-row"><kbd>Space</kbd>+드래그 화면 이동</div>
+          <div className="vw-row"><kbd>0</kbd> 맞춤(100%) 리셋</div>
+          <div className="vw-row"><kbd>Esc</kbd> 팝업 닫기</div>
+          <div className="vw-row"><kbd>클릭</kbd> 실 선택</div>
+        </div>
+      </div>
+
       <div className="zoom">
-        <button onClick={() => zoomAt(0.9)} title="확대">+</button>
-        <button onClick={() => zoomAt(1.1)} title="축소">−</button>
+        <button onClick={() => zoomButton(1 / 1.1)} title="확대">+</button>
+        <button onClick={() => zoomButton(1.1)} title="축소">−</button>
         <button onClick={() => setView(FIT)} title="맞춤">⤢</button>
+        <div className="zoom-pct">{zoomPct}%</div>
       </div>
     </div>
   )

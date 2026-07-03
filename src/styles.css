@@ -114,8 +114,21 @@ button{font-family:inherit;cursor:pointer;}
 .ofoot .field{flex:1;min-width:130px;padding:5px 8px;font-size:11px;}
 .ofoot .btn{padding:5px 9px;}
 .ofoot .btn:disabled{opacity:.45;cursor:not-allowed;}
-.plansvg{position:absolute;inset:0;width:100%;height:100%;display:block;background:#F7F7F8;cursor:grab;touch-action:none;overscroll-behavior:contain;}
-.plansvg:active{cursor:grabbing;}
+.plansvg{position:absolute;inset:0;width:100%;height:100%;display:block;background:#F7F7F8;touch-action:none;overscroll-behavior:contain;}
+.plansvg.panmode,.plansvg.panmode *{cursor:grab;}
+.plansvg.panning,.plansvg.panning *{cursor:grabbing;}
+
+/* 뷰어 우상단 플로팅 위젯 (단축키 힌트) — 무채색 */
+.vwidget{position:absolute;top:12px;right:12px;width:210px;z-index:20;background:rgba(255,255,255,0.97);border:1px solid var(--line);border-radius:9px;box-shadow:0 4px 14px rgba(0,0,0,0.10);overflow:hidden;}
+.vw-head{display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 12px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;user-select:none;}
+.vwidget.collapsed .vw-head{color:var(--ink2);}
+.vw-btn{border:1px solid var(--line);background:#fff;color:var(--muted);width:22px;height:22px;border-radius:5px;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;font-weight:700;padding:0;flex-shrink:0;}
+.vw-btn:hover{background:var(--hover);color:var(--ink);}
+.vwidget.collapsed .vw-body{display:none;}
+.vw-body{padding:2px 12px 11px;display:flex;flex-direction:column;gap:6px;}
+.vw-row{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink2);}
+.vw-row kbd{background:#F5F5F5;border:1px solid #CCC;border-bottom-width:2px;border-radius:4px;padding:1px 6px;font-size:10px;font-family:inherit;font-weight:600;color:#333;min-width:16px;text-align:center;flex-shrink:0;white-space:nowrap;}
+.zoom-pct{font-size:10px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums;}
 .room-layer text{user-select:none;pointer-events:none;}
 
 .toast{position:fixed;left:50%;bottom:64px;transform:translate(-50%,20px);background:#222;color:#fff;padding:10px 16px;border-radius:8px;font-size:12px;opacity:0;pointer-events:none;transition:.25s;z-index:200;}

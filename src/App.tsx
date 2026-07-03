@@ -101,7 +101,7 @@ export default function App() {
 
   const aiPlace = () => {
     setPlaced(true)
-    flash('✦ AI가 방 ' + Object.keys(ROOMS).length + '곳에 실내기를 자동 배치했습니다 (권장 모델 적용)')
+    flash('✦ AI가 실 ' + Object.keys(ROOMS).length + '곳에 실내기를 자동 배치했습니다 (권장 모델 적용)')
     setTimeout(() => setPlaced(false), 1300)
   }
 
@@ -125,7 +125,7 @@ export default function App() {
 
       <div className="sub">
         <a href="#" className="back">← 목록으로</a>
-        <div className="title">생성 작업 — 방 검출 결과</div>
+        <div className="title">생성 작업 — 실 검출 결과</div>
         <span className="b done">완료</span>
         <span className="b">검출 78개</span>
       </div>
@@ -144,7 +144,7 @@ export default function App() {
           <option>레이어: 전체</option>
           <option>실내기</option>
           <option>실외기</option>
-          <option>방 경계</option>
+          <option>실 경계</option>
         </select>
         <div className="sp" />
         <button className="btn sm">⭳ 결과 다운로드</button>
@@ -152,7 +152,7 @@ export default function App() {
       </div>
 
       <div className="stage">
-        <Viewer rooms={ROOMS} selRoom={selRoom} placed={placed} onPick={setSelRoom} />
+        <Viewer rooms={ROOMS} selRoom={selRoom} placed={placed} onPick={setSelRoom} onEscape={() => setMapOpen(false)} />
         <ModelPanel rooms={ROOMS} groups={groups} selRoom={selRoom} tab={tab} setTab={setTab} models={MODELS} />
       </div>
       <div className="bottom">▲ 장비 리스트</div>
