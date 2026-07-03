@@ -1,0 +1,43 @@
+﻿Issue Type,Summary,Epic Name,Epic Link,Component,Assignee Group,Priority,Story Points,Status,Labels,Description
+Epic,[E1] 생성 - 실외기 조합 매핑,생성 - 실외기 조합 매핑,,,,High,,To Do,e1,에픽: 생성 - 실외기 조합 매핑
+Task,[E1-S1] 공유 값객체(Capacity/ComboRatio/EnergySource/ModelCode/Price/EnergyGrade),,생성 - 실외기 조합 매핑,domain,도메인,High,5,Done,domain;도메인,완료조건(AC): 불변·자기검증·경계 테스트 그린
+Task,[E1-S2] OutdoorGroup 애그리거트(계열/최대수/중복 불변식),,생성 - 실외기 조합 매핑,domain,도메인,High,5,Done,domain;도메인,완료조건(AC): assign/replace/split 불변식 테스트 그린
+Task,[E1-S3] AssignmentPlan 조율자(교차 불변식: 정확히 한 곳),,생성 - 실외기 조합 매핑,domain,도메인,High,5,Done,domain;도메인,완료조건(AC): reassign 유실·중복 없음 테스트
+Task,[E1-S4] 유즈케이스(reassign/replace/add/remove/split) + 포트/InMemory 리포지토리,,생성 - 실외기 조합 매핑,application,BE,High,5,Done,application;BE,완료조건(AC): 규칙위반 거부·이벤트 발행 테스트
+Task,[E1-S5] OutdoorModelCatalog 포트 + maxConnections 스펙 주입,,생성 - 실외기 조합 매핑,application,BE,Medium,3,Done,application;BE,완료조건(AC): 모델 스펙 주입→불변식 구동 테스트
+Task,[E1-S6] 매핑 팝업 UI(드래그 배정/해제·교체·분할·삭제·조합비·경고),,생성 - 실외기 조합 매핑,presentation,FE,High,8,Done,presentation;FE,완료조건(AC): 동작 보존·회귀 없음
+Task,[E1-S7] 조합 리포트 6 KPI(설치용량/실외기대수/배정/미배정/평균조합비/과부하),,생성 - 실외기 조합 매핑,presentation,FE,Medium,3,Done,presentation;FE,완료조건(AC): 목업/요구사항 6 KPI 일치
+Story,[E1-S8] 실외기 자동 선정 로직(용량·조합비·효율 기준 최적 모델),,생성 - 실외기 조합 매핑,domain,BE,High,8,To Do,domain;BE,완료조건(AC): 부하 총량 기준 후보 조회·최적 선정·적정성 검증
+Story,"[E1-S9] 조합 결과 도메인 영속화(서버 PlanRepository, SQS 재시도)",,생성 - 실외기 조합 매핑,infrastructure,BE,High,8,To Do,infrastructure;BE,완료조건(AC): 저장/복구·워커 재시도·동시성 처리
+Story,[E1-S10] 실외기 배치/구역 지정(CAD 좌표 산정·심볼 INSERT),,생성 - 실외기 조합 매핑,domain,BE,Medium,5,To Do,domain;BE,완료조건(AC): 지정 구역 내 배치 좌표 산정·블록 생성
+Epic,[E2] 생성 - 실 검출 & 도면 뷰어,생성 - 실 검출 & 도면 뷰어,,,,High,,To Do,e2,에픽: 생성 - 실 검출 & 도면 뷰어
+Task,[E2-S1] SVG 뷰어(커서 줌·CTM 팬·단축키·플로팅 위젯·격자),,생성 - 실 검출 & 도면 뷰어,presentation,FE,High,8,Done,presentation;FE,완료조건(AC): 커서기준 줌·화면밖 팬 지속
+Task,[E2-S2] 실 다중선택(마퀴) + Figma 도구바(C/Z/H 모드),,생성 - 실 검출 & 도면 뷰어,presentation,FE,Medium,5,Done,presentation;FE,완료조건(AC): 영역선택·모드 전환
+Task,[E2-S3] 실내기 이동/회전/삭제 + 실 모서리 리사이즈(뷰어 로컬),,생성 - 실 검출 & 도면 뷰어,presentation,FE,Medium,5,Done,presentation;FE,완료조건(AC): 이동/회전(90°·15°)/삭제/리사이즈
+Story,[E2-S4] 실(방) 검출 AI 워커(DXF/PDF → 폴리곤·면적·라벨),,생성 - 실 검출 & 도면 뷰어,worker,BE,High,13,To Do,worker;BE,"완료조건(AC): 도면→Room 목록, 검증"
+Story,[E2-S5] 실내기 자동 배치(부하 계산 → 권장 모델·수량·타입),,생성 - 실 검출 & 도면 뷰어,domain,BE,High,8,To Do,domain;BE,완료조건(AC): 면적/부하 기준 수량·타입·좌표 산정
+Story,[E2-S6] 편집 결과 도메인 영속화(IndoorUnit 좌표/회전 유즈케이스),,생성 - 실 검출 & 도면 뷰어,application,BE,Medium,5,To Do,application;BE,완료조건(AC): 배치 저장·복구
+Story,"[E2-S7] 도면 업로드(PDF/DWG/DXF, S3 멀티파트, 진행률 WebSocket)",,생성 - 실 검출 & 도면 뷰어,infrastructure,BE,High,8,To Do,infrastructure;BE,완료조건(AC): 대용량 업로드·실시간 진행률
+Task,[E2-S8] Viewer 상호작용 로직 커스텀 훅 분리(리팩터),,생성 - 실 검출 & 도면 뷰어,presentation,FE,Low,3,To Do,presentation;FE,"완료조건(AC): Viewer<200줄, 훅 분리"
+Epic,[E3] 장비마스터 (관리자),장비마스터 (관리자),,,,High,,To Do,e3,에픽: 장비마스터 (관리자)
+Story,[E3-S1] 4단 분류 체계 CRUD(대/중/시리즈/모델),,장비마스터 (관리자),admin,FE/BE,High,8,To Do,admin;FE/BE,완료조건(AC): 계층 등록·수정·조회
+Story,[E3-S2] 스펙 정규화(정규화 필드 + JSONB 확장),,장비마스터 (관리자),admin,BE,High,8,To Do,admin;BE,완료조건(AC): 장비일람표 컬럼 정규화·확장 스펙 저장
+Story,[E3-S3] 엑셀 업로드/동기화(SPEC/CATALOG/PRICE),,장비마스터 (관리자),admin,BE,High,8,To Do,admin;BE,완료조건(AC): 업로드·매핑·검증·동기화
+Story,[E3-S4] 게시 게이트(DRAFT→PUBLISHED→ARCHIVED),,장비마스터 (관리자),admin,BE,High,5,To Do,admin;BE,완료조건(AC): 상태 전이·PUBLISHED만 외부 노출
+Story,"[E3-S5] 단가 등록/수정(product_prices, 현행가/VAT)",,장비마스터 (관리자),admin,FE/BE,High,5,To Do,admin;FE/BE,완료조건(AC): 단가 CRUD·현행가 게시뷰
+Task,[E3-S6] 목록 필터·정렬·페이지네이션,,장비마스터 (관리자),admin,FE,Medium,3,To Do,admin;FE,완료조건(AC): 유형/용량/모델 필터
+Epic,[E4] 검도 (Review),검도 (Review),,,,High,,To Do,e4,에픽: 검도 (Review)
+Story,[E4-S1] 도면-장비일람표 정합성 검증 로직,,검도 (Review),domain,BE,High,8,To Do,domain;BE,완료조건(AC): 정합/불일치 판정 규칙
+Story,[E4-S2] 검도 판정 결과 화면,,검도 (Review),presentation,FE,Medium,5,To Do,presentation;FE,완료조건(AC): 판정 결과·불일치 목록
+Story,[E4-S3] 검도 리포트 PDF 생성(판정 결과 종합),,검도 (Review),worker,BE,Medium,5,To Do,worker;BE,완료조건(AC): PDF 자동 생성·이력
+Epic,[E5] 산출물 생성,산출물 생성,,,,High,,To Do,e5,에픽: 산출물 생성
+Story,[E5-S1] 장비일람표(실내기/실외기 탭) 생성,,산출물 생성,domain,BE,High,8,To Do,domain;BE,완료조건(AC): 탭별 일람표·필터·정렬
+Task,[E5-S2] 총 단가/집계(totalOutdoorPrice·gradeDistribution 활용),,산출물 생성,domain,BE,Medium,3,To Do,domain;BE,완료조건(AC): 총액·유형별·미상 계상
+Story,[E5-S3] 배관 경로(Dijkstra) 길이 산출·집계,,산출물 생성,domain,BE,Medium,8,To Do,domain;BE,완료조건(AC): 실외기→실내기 최단경로·구역별 집계
+Story,[E5-S4] 설계 산출 종합 리포트(렌더·출력·저장),,산출물 생성,presentation,FE/BE,Medium,5,To Do,presentation;FE/BE,완료조건(AC): 리포트 레이아웃·출력·저장
+Epic,[E6] 공통 / 아키텍처 / 인프라,공통 / 아키텍처 / 인프라,,,,High,,To Do,e6,에픽: 공통 / 아키텍처 / 인프라
+Task,[E6-S1] Clean Arch 스캐폴딩 + 레이어 eslint 게이트,,공통 / 아키텍처 / 인프라,infrastructure,BE,High,3,Done,infrastructure;BE,완료조건(AC): domain→상위 import 차단
+Task,[E6-S2] TypeScript strict 전환,,공통 / 아키텍처 / 인프라,infrastructure,FE/BE,High,5,Done,infrastructure;FE/BE,"완료조건(AC): tsc 0, 판별 유니온·포트 인터페이스"
+Task,[E6-S3] 품질 게이트(validate: tsc/eslint/vitest) + Claude Hooks,,공통 / 아키텍처 / 인프라,infrastructure,BE,Medium,3,Done,infrastructure;BE,완료조건(AC): Stop 훅 그린 게이트
+Story,[E6-S4] 인증/세션(로그인·토큰 갱신·권한·동시로그인),,공통 / 아키텍처 / 인프라,infrastructure,BE,High,8,To Do,infrastructure;BE,완료조건(AC): 세션 만료·403·토큰 갱신
+Story,[E6-S5] CI 파이프라인(빌드·테스트·린트 게이트),,공통 / 아키텍처 / 인프라,infrastructure,BE,Medium,3,To Do,infrastructure;BE,완료조건(AC): PR 게이트 자동화
