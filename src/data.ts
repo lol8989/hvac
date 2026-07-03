@@ -25,13 +25,23 @@ export const ROOMS: Record<string, Room> = {
 
 // 실외기 스펙 카탈로그 항목. 장비마스터(Equipment Master)가 게시(PUBLISHED)하는
 // 실외기 모델 스펙의 단일 진실 공급원(SSOT) 목업.
-//   maxConn = 최대 연결 실내기 수 (모델 스펙). 조합 시 OutdoorGroup의 불변식에 주입된다.
+//   maxConn = 최대 연결 실내기 수. priceKrw/등급/COP = 게시 스펙(숫자 SSOT).
+//   ⚠️ 단가·등급·COP는 POC 플레이스홀더 값(미확정, 실데이터 교체 예정).
+//   실측 앵커: RPUW12BX9M/RPUW20BX9P/RPUQ141X9S(MODELS.out 기준), 나머지는 용량 스케일 보간.
 export interface OduCatalogEntry {
   model: string
   cat: string
   sys: EnergySourceCode
   cool: number
   maxConn: number
+  priceKrw: number // VAT별도 소비자가(정수 원)
+  priceTypeCode: string
+  priceWithVatKrw: number | null // 미상은 null
+  effectiveStartDate: string // yyyy-mm-dd
+  priority: number
+  efficiencyGradeId: number | null // 에너지소비효율등급(1~5). 미부여 시 null
+  copCooling: number | null // 냉방 효율비(mock EERa 상당)
+  copHeating: number | null // 난방 효율비
 }
 
 // 실외기 배치 레이아웃 (어떤 모델을 어느 실외기 위치에 두고 어떤 실내기를 연결하는가).
@@ -51,15 +61,16 @@ export const INITIAL_GROUPS: InitialGroup[] = [
 
 export const INITIAL_POOL: string[] = ['AC_002']
 
-// 장비마스터 PUBLISHED 실외기 스펙 (SSOT). maxConn은 모델별 최대 연결 실내기 수.
+// 장비마스터 PUBLISHED 실외기 스펙 (SSOT). 단가/등급/COP는 POC 플레이스홀더(미확정).
+const D = '2026-04-20' // effectiveStartDate 공통(목업)
 export const ODU_CATALOG: OduCatalogEntry[] = [
-  { model: 'RPUW08BX9E', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, maxConn: 13 },
-  { model: 'RPUW12BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, maxConn: 20 },
-  { model: 'RPUW16BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 45.0, maxConn: 26 },
-  { model: 'RPUW20BX9P', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0, maxConn: 33 },
-  { model: 'RPUQ141X9S', cat: '냉방전용', sys: 'EHP', cool: 39.2, maxConn: 23 },
-  { model: 'GPUW280C2S', cat: 'GHP', sys: 'GHP', cool: 28.0, maxConn: 16 },
-  { model: 'GPUW450C2S', cat: 'GHP', sys: 'GHP', cool: 45.0, maxConn: 26 },
+  { model: 'RPUW08BX9E', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, maxConn: 13, priceKrw: 2980000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 3278000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 2, copCooling: 5.1, copHeating: 4.3 },
+  { model: 'RPUW12BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, maxConn: 20, priceKrw: 4120000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 4532000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.2 },
+  { model: 'RPUW16BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 45.0, maxConn: 26, priceKrw: 5240000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 5764000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.8, copHeating: 4.05 },
+  { model: 'RPUW20BX9P', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0, maxConn: 33, priceKrw: 6350000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 6985000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.1 },
+  { model: 'RPUQ141X9S', cat: '냉방전용', sys: 'EHP', cool: 39.2, maxConn: 23, priceKrw: 3760000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: null, copCooling: 4.0, copHeating: null },
+  { model: 'GPUW280C2S', cat: 'GHP', sys: 'GHP', cool: 28.0, maxConn: 16, priceKrw: 8900000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 9790000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.55, copHeating: 1.45 },
+  { model: 'GPUW450C2S', cat: 'GHP', sys: 'GHP', cool: 45.0, maxConn: 26, priceKrw: 12400000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.5, copHeating: 1.4 },
 ]
 
 export interface ModelCard {

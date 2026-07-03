@@ -10,7 +10,9 @@ import { OutdoorGroup } from './OutdoorGroup'
 import type { GroupMeta } from './OutdoorGroup'
 import type { IndoorUnit } from './IndoorUnit'
 import type { OutdoorUnit } from './OutdoorUnit'
+import { DEFAULT_PRICE_TYPE } from './OutdoorUnit'
 import { AssignmentRejected, NotFoundError } from './errors'
+import { Price } from '../shared/Price'
 
 export interface AssignmentPlanProps {
   groups?: OutdoorGroup[]
@@ -118,6 +120,42 @@ export class AssignmentPlan {
     const groups = this._groups.filter((x) => x.key !== key)
     const pool = [...this._pool, ...released]
     return { plan: new AssignmentPlan({ groups, pool }), released }
+  }
+
+  // ── 순수 조회 집계(상태 변경 없음). '총 실외기 단가'는 그룹 경계를 넘는 도메인 집계이므로 조율자에 둔다. ──
+
+  // 실외기 단가 합. 단가 미보유 실외기는 unknownCount로 계상(조용한 부분합 함정 방지).
+  // 서로 다른 단가 유형(소비자가/공급가)이 섞이면 Price.plus가 예외로 차단한다.
+  totalOutdoorPrice(opts: { typeCode?: string; activeOnly?: boolean } = {}): { sum: Price; unknownCount: number } {
+    const groups = opts.activeOnly ? this._groups.filter((g) => g.indoorUnits.length > 0) : this._groups
+    let sum: Price | null = null
+    let unknownCount = 0
+    for (const g of groups) {
+      const p = opts.typeCode ? g.outdoorUnit.priceOf(opts.typeCode) : g.outdoorUnit.defaultPrice
+      if (!p) {
+        unknownCount++
+        continue
+      }
+      sum = sum ? sum.plus(p) : p
+    }
+    return { sum: sum ?? Price.zero(opts.typeCode ?? DEFAULT_PRICE_TYPE), unknownCount }
+  }
+
+  // 실외기 에너지등급 분포(등급 id → 대수)와 등급 미상 대수.
+  // 순서형 척도라 산술평균 대신 분포로 노출한다(고효율 대수 등은 소비측에서 파생).
+  gradeDistribution(opts: { activeOnly?: boolean } = {}): { byGrade: Map<number, number>; unknown: number } {
+    const groups = opts.activeOnly ? this._groups.filter((g) => g.indoorUnits.length > 0) : this._groups
+    const byGrade = new Map<number, number>()
+    let unknown = 0
+    for (const g of groups) {
+      const grade = g.outdoorUnit.grade
+      if (!grade) {
+        unknown++
+        continue
+      }
+      byGrade.set(grade.value, (byGrade.get(grade.value) ?? 0) + 1)
+    }
+    return { byGrade, unknown }
   }
 
   private _requireGroup(key: string): OutdoorGroup {

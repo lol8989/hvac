@@ -5,13 +5,27 @@
 import type { OutdoorModelCatalog, OutdoorModelSpec } from '../../application/generation/ports'
 import { ODU_CATALOG } from '../../data'
 
-// data.ts의 레거시 필드명(cat/sys/cool) → 표준 스펙 계약으로 변환
+// data.ts의 레거시 필드명(cat/sys/cool) → 표준 스펙 계약으로 변환.
+// 단가는 현행 소비자가 1건을 게시 엔트리 목록(prices)으로 담는다(게시뷰 계약 형태).
 const toSpec = (e: (typeof ODU_CATALOG)[number]): OutdoorModelSpec => ({
   model: e.model,
   category: e.cat,
   energySource: e.sys,
   capacityKw: e.cool,
   maxConnections: e.maxConn,
+  prices: [
+    {
+      priceTypeCode: e.priceTypeCode,
+      priceKrw: e.priceKrw,
+      priceWithVatKrw: e.priceWithVatKrw,
+      effectiveStartDate: e.effectiveStartDate,
+      priority: e.priority,
+      sourceReference: 'ODU_CATALOG(목업)',
+    },
+  ],
+  efficiencyGradeId: e.efficiencyGradeId,
+  copCooling: e.copCooling,
+  copHeating: e.copHeating,
 })
 
 export class InMemoryOutdoorModelCatalog implements OutdoorModelCatalog {

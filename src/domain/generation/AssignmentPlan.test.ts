@@ -126,4 +126,71 @@ describe('AssignmentPlan (그룹↔풀 조율자, 교차 불변식)', () => {
       expect(() => basePlan().split('없음', { key: 'X', label: 'x' })).toThrow(NotFoundError)
     })
   })
+
+  describe('집계 조회 (단가·등급)', () => {
+    const pentry = (krw: number, typeCode = 'CONSUMER') => ({
+      priceTypeCode: typeCode,
+      priceKrw: krw,
+      priceWithVatKrw: null,
+      effectiveStartDate: '2026-04-20',
+      priority: 10,
+    })
+
+    it('totalOutdoorPrice(activeOnly)는 활성 그룹 실외기 단가 합을 반환한다', () => {
+      const plan = new AssignmentPlan({
+        groups: [
+          grp('ODU1', [idu('AC_001', 11.2)], { priceEntries: [pentry(4120000)], efficiencyGradeId: 1 }),
+          grp('ODU2', [idu('AC_004', 14)], { priceEntries: [pentry(6350000)], efficiencyGradeId: 3 }),
+          grp('ODU3', [], { priceEntries: [pentry(8900000)], efficiencyGradeId: 4 }), // 빈 그룹=비활성
+        ],
+        pool: [],
+      })
+      const { sum, unknownCount } = plan.totalOutdoorPrice({ activeOnly: true })
+      expect(sum.krw).toBe(10470000) // 4.12M + 6.35M (ODU3 제외)
+      expect(unknownCount).toBe(0)
+    })
+
+    it('단가 미보유 실외기는 unknownCount로 계상하고 부분합을 낸다', () => {
+      const plan = new AssignmentPlan({
+        groups: [grp('ODU1', [idu('AC_001', 5)], { priceEntries: [pentry(4120000)] }), grp('ODU2', [idu('AC_002', 5)])],
+        pool: [],
+      })
+      const { sum, unknownCount } = plan.totalOutdoorPrice({ activeOnly: true })
+      expect(sum.krw).toBe(4120000)
+      expect(unknownCount).toBe(1)
+    })
+
+    it('그룹이 없으면 sum=0원, unknownCount=0', () => {
+      const { sum, unknownCount } = new AssignmentPlan({ groups: [], pool: [] }).totalOutdoorPrice()
+      expect(sum.krw).toBe(0)
+      expect(unknownCount).toBe(0)
+    })
+
+    it('[적대] 서로 다른 단가 유형이 섞이면 예외(혼합 합산 차단)', () => {
+      const plan = new AssignmentPlan({
+        groups: [
+          grp('ODU1', [idu('AC_001', 5)], { priceEntries: [pentry(4120000, 'CONSUMER')] }),
+          grp('ODU2', [idu('AC_002', 5)], { priceEntries: [pentry(3000000, 'SUPPLY')] }),
+        ],
+        pool: [],
+      })
+      expect(() => plan.totalOutdoorPrice({ activeOnly: true })).toThrow()
+    })
+
+    it('gradeDistribution은 등급별 대수와 미상을 반환한다', () => {
+      const plan = new AssignmentPlan({
+        groups: [
+          grp('ODU1', [idu('AC_001', 5)], { efficiencyGradeId: 1 }),
+          grp('ODU2', [idu('AC_002', 5)], { efficiencyGradeId: 1 }),
+          grp('ODU3', [idu('AC_003', 5)], { efficiencyGradeId: 3 }),
+          grp('ODU4', [idu('AC_004', 5)]), // 등급 미상
+        ],
+        pool: [],
+      })
+      const { byGrade, unknown } = plan.gradeDistribution({ activeOnly: true })
+      expect(byGrade.get(1)).toBe(2)
+      expect(byGrade.get(3)).toBe(1)
+      expect(unknown).toBe(1)
+    })
+  })
 })
