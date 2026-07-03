@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>장비마스터 목업 — 도면검도시스템</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F2F2F2; --panel:#FFFFFF; --ink:#1A1A1A; --ink2:#333; --muted:#777;
+    --line:#DDDDDD; --line2:#E8E8E8; --head:#DCDEE0; --dark:#222222; --hover:#F7F7F7;
+    --chip:#E8E8E8; --warnbg:#EDEDED;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:'Noto Sans KR','맑은 고딕',sans-serif;background:var(--bg);color:var(--ink);font-size:13px;line-height:1.45;}
+  button{font-family:inherit;cursor:pointer;}
+  /* GNB */
+  .gnb{height:52px;background:#F2F2F2;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 18px;position:sticky;top:0;z-index:50;}
+  .gnb .brand{display:flex;align-items:center;gap:10px;}
+  .logo{width:26px;height:26px;border-radius:6px;background:var(--dark);}
+  .gnb .brand b{font-size:15px;}
+  .gnb .right{display:flex;align-items:center;gap:10px;color:var(--ink2);}
+  .gnb .badge-role{font-size:10px;border:1px solid var(--line);border-radius:10px;padding:2px 8px;background:#fff;color:#555;}
+  .avatar{width:26px;height:26px;border-radius:50%;background:#CCC;}
+  /* Layout */
+  .wrap{display:flex;min-height:calc(100vh - 52px);}
+  .side{width:220px;background:#FAFAFA;border-right:1px solid var(--line);padding:10px 0;flex-shrink:0;}
+  .side .grp{font-size:10px;color:#999;padding:10px 16px 4px;letter-spacing:.5px;}
+  .side a{display:flex;align-items:center;gap:9px;padding:9px 16px;color:#555;text-decoration:none;font-size:13px;border-left:3px solid transparent;}
+  .side a .ic{width:15px;height:15px;border-radius:4px;background:#CFCFCF;flex-shrink:0;}
+  .side a:hover{background:#F0F0F0;}
+  .side a.active{background:#EDEDED;color:var(--ink);font-weight:700;border-left-color:var(--dark);}
+  .side a.active .ic{background:#666;}
+  .main{flex:1;min-width:0;padding:16px 22px 40px;}
+  .crumb{color:var(--muted);font-size:12px;margin-bottom:6px;}
+  .ptitle{font-size:20px;font-weight:700;margin:0 0 2px;}
+  .psub{color:var(--muted);font-size:12px;margin-bottom:14px;}
+  /* Tabs */
+  .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px;flex-wrap:wrap;}
+  .tab{padding:9px 15px;font-size:13px;color:#666;background:transparent;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;}
+  .tab .num{display:inline-block;font-size:10px;color:#999;border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-right:5px;}
+  .tab:hover{color:var(--ink);}
+  .tab.active{color:var(--ink);font-weight:700;border-bottom-color:var(--dark);}
+  .tab.active .num{background:var(--dark);color:#fff;border-color:var(--dark);}
+  .view{display:none;}
+  .view.active{display:block;}
+  /* Buttons */
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink2);border-radius:6px;padding:7px 12px;font-size:12px;}
+  .btn:hover{background:var(--hover);}
+  .btn.primary{background:var(--dark);color:#fff;border-color:var(--dark);}
+  .btn.primary:hover{background:#000;}
+  .btn.sm{padding:4px 9px;font-size:11px;}
+  .btn.icon{font-weight:700;}
+  /* Cards / panels */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;}
+  .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .toolbar .sp{flex:1;}
+  .field{border:1px solid var(--line);background:#fff;border-radius:6px;padding:7px 10px;font-size:12px;color:var(--ink2);}
+  select.field{appearance:none;padding-right:24px;background-image:linear-gradient(45deg,transparent 50%,#888 50%),linear-gradient(135deg,#888 50%,transparent 50%);background-position:calc(100% - 14px) 15px,calc(100% - 9px) 15px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
+  input.field::placeholder{color:#999;}
+  /* V1 list */
+  .v1{display:flex;gap:14px;}
+  .tree{width:230px;flex-shrink:0;}
+  .tree .th{background:var(--dark);color:#fff;font-size:12px;font-weight:700;padding:9px 12px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center;}
+  .tree .body{border:1px solid var(--line);border-top:none;border-radius:0 0 8px 8px;background:#fff;padding:6px 0;}
+  .tnode{padding:6px 12px;cursor:pointer;font-size:12px;color:#444;display:flex;justify-content:space-between;align-items:center;}
+  .tnode.lv1{font-weight:700;color:var(--ink);}
+  .tnode.lv2{padding-left:26px;color:#555;}
+  .tnode.lv3{padding-left:40px;color:#777;font-size:11px;}
+  .tnode:hover{background:var(--hover);}
+  .tnode.sel{background:#EDEDED;color:var(--ink);font-weight:700;}
+  .tnode .cnt{font-size:10px;color:#999;background:#F0F0F0;border-radius:9px;padding:0 6px;}
+  .listwrap{flex:1;min-width:0;}
+  .tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:#fff;}
+  table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line2);text-align:left;}
+  thead th{background:var(--head);font-weight:700;color:var(--ink2);position:sticky;top:0;}
+  tbody tr:hover{background:var(--hover);}
+  td.num,th.num{text-align:right;}
+  .badge{font-size:10px;border-radius:10px;padding:2px 8px;border:1px solid var(--line);display:inline-block;}
+  .badge.pub{background:var(--dark);color:#fff;border-color:var(--dark);}
+  .badge.draft{background:#fff;color:#666;}
+  .badge.eol{background:#EDEDED;color:#888;border-style:dashed;}
+  .rowact{display:flex;gap:6px;}
+  .iconbtn{border:1px solid var(--line);background:#fff;border-radius:5px;width:24px;height:24px;font-size:11px;color:#555;display:inline-flex;align-items:center;justify-content:center;}
+  .iconbtn:hover{background:var(--hover);}
+  .pager{display:flex;align-items:center;justify-content:space-between;padding:11px 4px 0;color:var(--muted);font-size:12px;}
+  .pgs{display:flex;gap:4px;}
+  .pgs button{border:1px solid var(--line);background:#fff;border-radius:5px;min-width:26px;height:26px;font-size:11px;color:#555;}
+  .pgs button.on{background:var(--dark);color:#fff;border-color:var(--dark);}
+  /* V2 form */
+  .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .sec{padding:14px 16px;margin-bottom:14px;}
+  .sec h4{margin:0 0 12px;font-size:13px;border-left:3px solid var(--dark);padding-left:8px;}
+  .frow{display:grid;grid-template-columns:110px 1fr;gap:8px;align-items:center;margin-bottom:9px;}
+  .frow label{color:#555;font-size:12px;}
+  .frow .req{color:#111;font-weight:700;}
+  .frow .field{width:100%;}
+  .hint{font-size:11px;color:#999;margin-top:2px;}
+  .kv{display:flex;gap:6px;flex-wrap:wrap;}
+  /* V3 mapping */
+  .board{display:flex;gap:14px;align-items:flex-start;}
+  .odus{flex:2;min-width:0;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .pool{flex:1;min-width:230px;position:sticky;top:64px;}
+  .pool .th,.odu .oh{background:var(--dark);color:#fff;font-size:12px;font-weight:700;padding:9px 12px;border-radius:8px 8px 0 0;}
+  .pool .pbody{border:1px solid var(--line);border-top:none;border-radius:0 0 8px 8px;background:#fff;padding:10px;min-height:120px;}
+  .odu{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;}
+  .odu .oh{display:flex;justify-content:space-between;align-items:center;border-radius:0;}
+  .odu .ometa{padding:9px 12px;font-size:11px;color:#666;border-bottom:1px solid var(--line2);}
+  .gauge{height:8px;background:#EEE;border-radius:5px;overflow:hidden;margin-top:6px;}
+  .gauge > i{display:block;height:100%;background:#555;}
+  .gauge.warn > i{background:repeating-linear-gradient(45deg,#333,#333 4px,#777 4px,#777 8px);}
+  .drop{padding:10px 12px;min-height:96px;}
+  .drop.dragover{background:#EDEDED;outline:2px dashed #888;outline-offset:-6px;}
+  .chip{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:6px;padding:6px 9px;margin-bottom:7px;background:#fff;font-size:12px;cursor:grab;}
+  .chip:active{cursor:grabbing;}
+  .chip .x{border:none;background:transparent;color:#999;font-size:13px;}
+  .chip .cap{color:#888;font-size:11px;}
+  .chip.eol{border-style:dashed;}
+  .warnbar{display:none;background:var(--warnbg);border-top:1px solid var(--line);color:#111;font-size:11px;padding:7px 12px;}
+  .warnbar.show{display:block;}
+  .warnbar b{font-weight:700;}
+  .odu .ofoot{display:flex;gap:6px;padding:9px 12px;border-top:1px solid var(--line2);}
+  .note{background:#F7F7F7;border:1px solid var(--line);border-radius:8px;padding:10px 14px;font-size:11px;color:#666;margin-bottom:14px;}
+  /* V4 upload */
+  .steps{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .dropzone{border:2px dashed var(--line);border-radius:8px;padding:34px;text-align:center;color:#888;background:#FAFAFA;}
+  .dropzone b{color:#555;}
+  .valgrid{display:flex;gap:10px;margin:12px 0;}
+  .stat{flex:1;border:1px solid var(--line);border-radius:8px;padding:12px;text-align:center;background:#fff;}
+  .stat .n{font-size:22px;font-weight:700;}
+  .stat .l{font-size:11px;color:#888;}
+  .stat.err .n{text-decoration:underline;}
+  /* V5 */
+  .gate{display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:14px;}
+  .switch{width:44px;height:24px;border-radius:14px;background:#CCC;position:relative;transition:.2s;flex-shrink:0;}
+  .switch.on{background:var(--dark);}
+  .switch > i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;}
+  .switch.on > i{left:22px;}
+  h4.sub{font-size:13px;margin:16px 0 8px;}
+  .legend{font-size:11px;color:#999;margin-top:8px;}
+</style>
+</head>
+<body>
+  <div class="gnb">
+    <div class="brand"><div class="logo"></div><b>Hvac 관리자 시스템</b></div>
+    <div class="right"><span>홍길동님</span><span class="badge-role">SUPER ADMIN</span><div class="avatar"></div></div>
+  </div>
+  <div class="wrap">
+    <nav class="side">
+      <div class="grp">관리</div>
+      <a href="#"><span class="ic"></span>대시보드</a>
+      <a href="#"><span class="ic"></span>권한 관리</a>
+      <a href="#"><span class="ic"></span>사용자 관리</a>
+      <a href="#"><span class="ic"></span>조직 관리</a>
+      <a href="#"><span class="ic"></span>협력사 관리</a>
+      <a href="#"><span class="ic"></span>감사 로그</a>
+      <div class="grp">서비스</div>
+      <a href="#"><span class="ic"></span>검도 목록 관리</a>
+      <a href="#"><span class="ic"></span>생성 작업 관리</a>
+      <a href="#" class="active"><span class="ic"></span>장비마스터</a>
+    </nav>
+    <main class="main">
+      <div class="crumb">관리자 &nbsp;›&nbsp; 장비마스터</div>
+      <h1 class="ptitle">장비마스터</h1>
+      <div class="psub">검도·생성이 공통으로 참조하는 장비 마스터(SSOT). 이 화면은 장비의 <b>분류·스펙·단가를 등록·관리</b>합니다. 실외기–실내기 <b>조합·배치 매핑은 생성(Front) 화면</b>에서 수행하며, 마스터는 매칭 근거가 되는 <b>제품군·계열 정보</b>를 제공합니다.</div>
+
+      <div class="tabs">
+        <button class="tab active" data-v="v1"><span class="num">V1</span>장비 목록</button>
+        <button class="tab" data-v="v2"><span class="num">V2</span>상세 · 등록 · 수정</button>
+        <button class="tab" data-v="v4"><span class="num">V3</span>엑셀 업로드 · 동기화</button>
+        <button class="tab" data-v="v5"><span class="num">V4</span>게시 · 단가</button>
+      </div>
+
+      <!-- V1 : 목록 -->
+      <section class="view active" id="v1">
+        <div class="v1">
+          <aside class="tree">
+            <div class="th">분류 트리 <span style="font-weight:400;font-size:10px;opacity:.8">▾</span></div>
+            <div class="body" id="tree"></div>
+          </aside>
+          <div class="listwrap">
+            <div class="toolbar">
+              <select class="field" id="f-type" onchange="onTypeSelect(this.value)">
+                <option value="outdoor">유형: 실외기</option>
+                <option value="indoor">유형: 실내기</option>
+              </select>
+              <input class="field" id="f-search" placeholder="모델명 검색" oninput="renderTable()" style="width:180px">
+              <select class="field" id="f-status" onchange="renderTable()">
+                <option value="">상태: 전체</option>
+                <option value="pub">게시</option>
+                <option value="draft">작성중</option>
+                <option value="eol">단종예정</option>
+              </select>
+              <button class="btn sm" onclick="resetFilters()">초기화</button>
+              <div class="sp"></div>
+              <button class="btn sm icon" onclick="go('v4')">⭱ 엑셀 업로드</button>
+              <button class="btn sm primary icon" onclick="go('v2')">+ 신규 등록</button>
+            </div>
+            <div class="tablebox">
+              <table id="tbl"><thead></thead><tbody></tbody></table>
+            </div>
+            <div class="pager">
+              <span id="pgtxt">—</span>
+              <div class="pgs">
+                <button>‹</button><button class="on">1</button><button>2</button><button>3</button><button>›</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- V2 : 상세/등록/수정 -->
+      <section class="view" id="v2">
+        <div class="toolbar">
+          <button class="btn sm" onclick="go('v1')">‹ 목록으로</button>
+          <b style="font-size:14px">장비 등록 / 수정</b>
+          <span class="badge draft">작성중</span>
+          <div class="sp"></div>
+          <button class="btn sm">임시저장</button>
+          <button class="btn sm primary">저장 후 게시 요청</button>
+        </div>
+        <div class="formgrid">
+          <div>
+            <div class="card sec">
+              <h4>기본 정보</h4>
+              <div class="frow"><label><span class="req">*</span> 대분류</label><select class="field"><option>실외기</option><option>실내기</option><option>환기</option><option>판넬</option></select></div>
+              <div class="frow"><label><span class="req">*</span> 중분류(제품군)</label><select class="field"><option>EHP (Multi V)</option><option>GHP</option><option>AWHP</option><option>Chiller</option><option>Single(PAC)</option></select></div>
+              <div class="frow"><label>시리즈</label><select class="field"><option>Multi V Super 5 (고급형)</option><option>Multi V i</option></select></div>
+              <div class="frow"><label><span class="req">*</span> 모델명</label><input class="field" value="RPUW12BX9M"></div>
+              <div class="frow"><label>제조사</label><input class="field" value="LG전자" disabled></div>
+              <div class="frow"><label>운전특성</label><div class="kv"><span class="badge">냉난방 절환형</span><span class="badge draft">냉방전용</span><span class="badge draft">히트펌프</span></div></div>
+            </div>
+            <div class="card sec">
+              <h4>공통 스펙 <span style="font-weight:400;color:#999;font-size:11px">— 장비일람표 필수 필드</span></h4>
+              <div class="frow"><label>냉방능력(W)</label><input class="field" value="34,800"></div>
+              <div class="frow"><label>난방능력(W)</label><input class="field" value="39,200"></div>
+              <div class="frow"><label>난방 -15℃(W)</label><input class="field" value="29,000"></div>
+              <div class="frow"><label>전원</label><input class="field" value="3, 4, 380, 60"></div>
+              <div class="frow"><label>효율(EERa/COP)</label><input class="field" value="4.99"></div>
+              <div class="frow"><label>냉매 / 배관</label><input class="field" value="R410A / 12.7 · 28.58"></div>
+            </div>
+          </div>
+          <div>
+            <div class="card sec">
+              <h4>확장 스펙 (JSONB) <span style="font-weight:400;color:#999;font-size:11px">— 제품군별 동적</span></h4>
+              <div class="frow"><label>송풍기 형식</label><input class="field" value="프로펠러식"></div>
+              <div class="frow"><label>송풍기 풍량(CMM)</label><input class="field" value="240"></div>
+              <div class="frow"><label>최대 연결 실내기</label><input class="field" value="8 대"></div>
+              <div class="hint">※ 제품군을 GHP로 바꾸면 엔진·연료·냉각수 필드가 이 영역에 자동 추가됩니다.</div>
+            </div>
+            <div class="card sec">
+              <h4>판넬 매핑 <span style="font-weight:400;color:#999;font-size:11px">— 실내기 전용</span></h4>
+              <div class="kv"><span class="badge">PT-UAC · 기본</span><span class="badge draft">PT-UMC</span><button class="btn sm">+ 판넬 연결</button></div>
+            </div>
+            <div class="card sec">
+              <h4>단가</h4>
+              <div class="frow"><label>공급단가(원)</label><input class="field" value="4,120,000"></div>
+              <div class="frow"><label>적용일</label><input class="field" value="2026.04.20"></div>
+              <div class="hint">적용일 기준 이력이 쌓이며, 게시(PUBLISHED) 시 사용자 화면에 노출됩니다.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- V3(호환·조합 매핑) 제거: 조합/배치 매핑은 생성(Front)에서 수행 -->
+
+      <!-- V4 : 엑셀 업로드 -->
+      <section class="view" id="v4">
+        <div class="steps">
+          <div class="card sec">
+            <h4>1. 업로드 템플릿</h4>
+            <p style="color:#666;margin:4px 0 12px">등록 양식에 맞춰 작성 후 업로드하세요. (xlsx, 최대 10MB)</p>
+            <div class="note" style="margin:0 0 12px">※ 제조사는 LG전자로 고정되어 템플릿에서 변경할 수 없습니다.</div>
+            <button class="btn">⭳ 템플릿 다운로드</button>
+          </div>
+          <div class="card sec">
+            <h4>2. 파일 업로드</h4>
+            <div class="dropzone">파일을 드래그하거나 클릭하여 선택<br><b>지원: .xlsx / .xls · 최대 10MB</b></div>
+            <div style="margin-top:10px"><button class="btn">파일 선택</button> <span style="color:#888;font-size:11px">equipment_upload_202607.xlsx</span></div>
+          </div>
+        </div>
+        <h4 class="sub">3. 검증 미리보기</h4>
+        <div class="valgrid">
+          <div class="stat"><div class="n">124</div><div class="l">총 행</div></div>
+          <div class="stat"><div class="n">118</div><div class="l">정상</div></div>
+          <div class="stat err"><div class="n">4</div><div class="l">오류(라벨 미매칭)</div></div>
+          <div class="stat"><div class="n">2</div><div class="l">중복</div></div>
+        </div>
+        <div class="tablebox">
+          <table>
+            <thead><tr><th>행</th><th>모델명</th><th>유형</th><th>냉방(W)</th><th>단가(원)</th><th>상태</th><th>사유</th></tr></thead>
+            <tbody>
+              <tr><td class="num">1</td><td>RPUW12BX9M</td><td>실외기</td><td class="num">34,800</td><td class="num">4,120,000</td><td><span class="badge pub">정상</span></td><td>—</td></tr>
+              <tr><td class="num">2</td><td>R-W0320C2S</td><td>실내기</td><td class="num">3,200</td><td class="num">610,000</td><td><span class="badge pub">정상</span></td><td>—</td></tr>
+              <tr><td class="num">3</td><td>GPUW280C2S</td><td>실외기</td><td class="num">28,000</td><td class="num">—</td><td><span class="badge draft">오류</span></td><td>단가 열 누락</td></tr>
+              <tr><td class="num">4</td><td>RPUW12BX9M</td><td>실외기</td><td class="num">34,800</td><td class="num">4,120,000</td><td><span class="badge eol">중복</span></td><td>기존 모델과 중복 (A/B조건 검토)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="toolbar" style="margin-top:12px"><div class="sp"></div><button class="btn">오류 행 다운로드</button><button class="btn primary">정상 118건 반영</button></div>
+      </section>
+
+      <!-- V5 : 게시/단가 -->
+      <section class="view" id="v5">
+        <div class="card gate">
+          <div class="switch on" id="pubsw" onclick="this.classList.toggle('on')"><i></i></div>
+          <div>
+            <b>게시 상태 : PUBLISHED</b>
+            <div style="color:#888;font-size:11px">DRAFT → PUBLISHED 전환 시 필수 항목을 검증합니다. 검도·생성은 PUBLISHED 데이터만 조회합니다.</div>
+          </div>
+          <div class="sp"></div>
+          <span class="badge pub">게시됨</span>
+        </div>
+        <h4 class="sub">단가 이력 (적용일 기준)</h4>
+        <div class="tablebox">
+          <table>
+            <thead><tr><th>모델명</th><th>단가(원)</th><th>적용 시작일</th><th>적용 종료일</th><th>등록자</th><th>상태</th></tr></thead>
+            <tbody>
+              <tr><td>RPUW12BX9M</td><td class="num">4,120,000</td><td>2026.04.20</td><td>—</td><td>홍길동</td><td><span class="badge pub">현행</span></td></tr>
+              <tr><td>RPUW12BX9M</td><td class="num">3,980,000</td><td>2026.01.01</td><td>2026.04.19</td><td>홍길동</td><td><span class="badge draft">만료</span></td></tr>
+              <tr><td>RPUW20BX9P</td><td class="num">6,350,000</td><td>2026.04.20</td><td>—</td><td>홍길동</td><td><span class="badge pub">현행</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script>
+/* ===== 목업 데이터 (장비일람표 기반) ===== */
+const OUTDOOR = [
+  {no:1,status:'pub',model:'RPUW12BX9M',cat:'냉난방 절환형',sys:'EHP',cool:34800,heat:39200,cold:29000,power:'3,4,380,60',eff:'4.99',grade:'3',ref:'R410A',pipe:'12.7 / 28.58',price:4120000},
+  {no:2,status:'pub',model:'RPUW20BX9P',cat:'냉난방 절환형',sys:'EHP',cool:57000,heat:63000,cold:47300,power:'3,4,380,60',eff:'4.99',grade:'3',ref:'R410A',pipe:'15.88 / 28.58',price:6350000},
+  {no:3,status:'pub',model:'RPUQ141X9S',cat:'냉방전용',sys:'EHP',cool:39200,heat:0,cold:0,power:'3,4,380,60',eff:'4.00',grade:'-',ref:'R410A',pipe:'12.7 / 28.58',price:3760000},
+  {no:4,status:'draft',model:'GPUW280C2S',cat:'GHP',sys:'GHP',cool:28000,heat:31500,cold:25000,power:'3,4,380,60',eff:'-',grade:'-',ref:'R410A',pipe:'12.7 / 28.58',price:0},
+  {no:5,status:'eol',model:'RPUW08BX9E',cat:'냉난방 절환형',sys:'EHP',cool:23300,heat:25900,cold:19000,power:'3,4,380,60',eff:'4.20',grade:'4',ref:'R410A',pipe:'9.52 / 22.2',price:3120000},
+];
+const INDOOR = [
+  {no:1,status:'pub',model:'R-W0200C2S',cat:'1WAY 카세트',sys:'EHP',cool:2000,heat:2200,power:'1,2,220,60',cons:'0.01',cmm:8.2,weight:12.3,dim:'860×132×450',price:520000},
+  {no:2,status:'pub',model:'R-W0230C2S',cat:'1WAY 카세트',sys:'EHP',cool:2300,heat:2600,power:'1,2,220,60',cons:'0.02',cmm:8.7,weight:12.3,dim:'860×132×450',price:545000},
+  {no:3,status:'pub',model:'R-W0320C2S',cat:'1WAY 카세트',sys:'EHP',cool:3200,heat:3600,power:'1,2,220,60',cons:'0.02',cmm:10.0,weight:12.3,dim:'860×132×450',price:610000},
+  {no:4,status:'pub',model:'R-W0400C2S',cat:'1WAY 카세트',sys:'EHP',cool:4000,heat:4500,power:'1,2,220,60',cons:'0.03',cmm:10.9,weight:12.3,dim:'860×132×450',price:660000},
+  {no:5,status:'pub',model:'R-W0600C2S',cat:'1WAY 카세트',sys:'EHP',cool:6000,heat:6800,power:'1,2,220,60',cons:'0.04',cmm:13.9,weight:15.4,dim:'1180×132×450',price:720000},
+  {no:6,status:'pub',model:'R-W0601A2U',cat:'4WAY 카세트',sys:'EHP',cool:6000,heat:6800,power:'1,2,220,60',cons:'0.03',cmm:17,weight:21.0,dim:'840×204×840',price:780000},
+  {no:7,status:'pub',model:'R-W0831A2U',cat:'4WAY 카세트',sys:'EHP',cool:8300,heat:9300,power:'1,2,220,60',cons:'0.037',cmm:19,weight:21.0,dim:'840×204×840',price:910000},
+  {no:8,status:'draft',model:'R-W1301A2U',cat:'4WAY 카세트',sys:'EHP',cool:13000,heat:14600,power:'1,2,220,60',cons:'0.097',cmm:33,weight:27.0,dim:'840×288×840',price:1180000},
+];
+const COLS = {
+  outdoor:[['status','상태'],['model','모델명'],['cat','분류'],['cool','냉방(W)','n'],['heat','난방(W)','n'],['cold','난방-15℃(W)','n'],['power','전원'],['eff','효율'],['grade','등급'],['ref','냉매'],['pipe','배관(액/가스)'],['price','단가(원)','n']],
+  indoor:[['status','상태'],['model','모델명'],['cat','분류'],['cool','냉방(W)','n'],['heat','난방(W)','n'],['power','전원'],['cons','소비전력(kW)'],['cmm','풍량(CMM)','n'],['weight','중량(kg)','n'],['dim','본체치수'],['price','단가(원)','n']]
+};
+const TREE = [
+  {lv:1,label:'실외기',type:'outdoor',cat:null},
+  {lv:2,label:'EHP (Multi V)',type:'outdoor',cat:'EHP'},
+  {lv:3,label:'냉난방 절환형',type:'outdoor',cat:'냉난방 절환형'},
+  {lv:3,label:'냉방전용',type:'outdoor',cat:'냉방전용'},
+  {lv:2,label:'GHP',type:'outdoor',cat:'GHP'},
+  {lv:1,label:'실내기',type:'indoor',cat:null},
+  {lv:2,label:'1WAY 카세트',type:'indoor',cat:'1WAY 카세트'},
+  {lv:2,label:'4WAY 카세트',type:'indoor',cat:'4WAY 카세트'},
+  {lv:2,label:'덕트형',type:'indoor',cat:'덕트형'},
+];
+let curType='outdoor', curCat=null;
+const won=n=> n? n.toLocaleString('ko-KR'):'—';
+const badge=s=> s==='pub'?'<span class="badge pub">게시</span>': s==='draft'?'<span class="badge draft">작성중</span>':'<span class="badge eol">단종예정</span>';
+
+function renderTree(){
+  const counts={};
+  [...OUTDOOR,...INDOOR].forEach(r=>{counts[r.cat]=(counts[r.cat]||0)+1;});
+  document.getElementById('tree').innerHTML = TREE.map((n,i)=>{
+    const sel = (n.type===curType && n.cat===curCat) || (n.cat===null && n.type===curType && curCat===null);
+    const cnt = n.cat? (counts[n.cat]||0) : (n.type==='outdoor'?OUTDOOR.length:INDOOR.length);
+    return `<div class="tnode lv${n.lv} ${sel?'sel':''}" onclick="pickTree(${i})">${n.label}<span class="cnt">${cnt}</span></div>`;
+  }).join('');
+}
+function pickTree(i){const n=TREE[i];curType=n.type;curCat=n.cat;document.getElementById('f-type').value=n.type;renderTree();renderTable();}
+function onTypeSelect(v){curType=v;curCat=null;renderTree();renderTable();}
+function resetFilters(){curCat=null;document.getElementById('f-search').value='';document.getElementById('f-status').value='';renderTree();renderTable();}
+
+function renderTable(){
+  const cols=COLS[curType];
+  const data=curType==='outdoor'?OUTDOOR:INDOOR;
+  const q=(document.getElementById('f-search').value||'').toUpperCase();
+  const st=document.getElementById('f-status').value;
+  const rows=data.filter(r=>(!curCat||r.cat===curCat)&&(!q||r.model.toUpperCase().includes(q))&&(!st||r.status===st));
+  document.querySelector('#tbl thead').innerHTML='<tr>'+cols.map(c=>`<th class="${c[2]==='n'?'num':''}">${c[1]}</th>`).join('')+'<th>관리</th></tr>';
+  document.querySelector('#tbl tbody').innerHTML = rows.length? rows.map(r=>'<tr>'+cols.map(c=>{
+    let v=r[c[0]];
+    if(c[0]==='status')v=badge(v);
+    else if(c[0]==='price')v=won(v);
+    else if(c[2]==='n')v=(v||v===0)?Number(v).toLocaleString('ko-KR'):'—';
+    else v=(v===0||v==='')?'—':v;
+    return `<td class="${c[2]==='n'?'num':''}">${v}</td>`;
+  }).join('')+'<td><div class="rowact"><button class="iconbtn" title="수정" onclick="go(\'v2\')">✎</button><button class="iconbtn" title="삭제">🗑</button></div></td></tr>').join('')
+    : `<tr><td colspan="${cols.length+1}" style="text-align:center;color:#999;padding:26px">조건에 맞는 장비가 없습니다.</td></tr>`;
+  document.getElementById('pgtxt').textContent=`전체 ${rows.length}건 중 1-${rows.length}건 표시`;
+}
+
+/* (V3 조합 매핑 로직 제거됨 — 조합·배치 매핑은 생성(Front)에서 수행) */
+
+/* ===== tabs ===== */
+function go(v){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.v===v));document.querySelectorAll('.view').forEach(s=>s.classList.toggle('active',s.id===v));window.scrollTo(0,0);}
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>go(t.dataset.v)));
+
+renderTree();renderTable();
+</script>
+</body>
+</html>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                

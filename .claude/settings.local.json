@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth *)",
+      "Bash(git config *)",
+      "PowerShell($gh = Get-Command gh -ErrorAction SilentlyContinue; if \\($gh\\) { \"gh: $\\($gh.Source\\)\"; gh auth status } else { \"gh NOT installed\" })",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}

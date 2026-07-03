@@ -1,0 +1,49 @@
+import { groupOfRoom } from '../data.js'
+
+// 우측 패널 — 실내기/실외기 모델 선택 전용 (용량 요약은 상단 리포트로 이관).
+export default function ModelPanel({ rooms, groups, selRoom, tab, setTab, models }) {
+  const roomIds = Object.keys(rooms)
+  const sel = rooms[selRoom]
+
+  return (
+    <aside className="rpanel">
+      <div className="rp-h">실내기 / 실외기 모델 선택 <button className="x">×</button></div>
+      <div className="rp-room">
+        <span>{selRoom} ({sel.name})</span>
+        <span>{sel.area.toFixed(2)}㎡</span>
+      </div>
+      <div className="rp-tabs">
+        <button className={tab === 'in' ? 'on' : ''} onClick={() => setTab('in')}>실내기</button>
+        <button className={tab === 'out' ? 'on' : ''} onClick={() => setTab('out')}>실외기</button>
+      </div>
+      <div className="rp-body">
+        <div className="subttl">장비 리스트</div>
+        {models[tab].map((m, i) => (
+          <div key={i} className={'mcard' + (m.on ? ' on' : '')}>
+            {m.on && <span className="selbadge">선택됨</span>}
+            <div className="mn">{m.mn}</div>
+            <div className="ms">{m.ms}</div>
+            <div className="mp">{m.mp}</div>
+            <div className="md">{m.md}</div>
+          </div>
+        ))}
+        <div className="subttl" style={{ marginTop: 12 }}><b>{roomIds.length}</b>개의 선택된 장비</div>
+        {roomIds.map((id) => {
+          const g = groupOfRoom(groups, id)
+          const on = id === selRoom
+          return (
+            <div key={id} className="selrow">
+              <span className={'cb' + (on ? ' on' : '')}>{on ? '✓' : ''}</span>
+              <span>{id} <span style={{ color: '#999' }}>· {rooms[id].cool}kW</span></span>
+              <span className="rt">{g ? g.label : '미배정'}</span>
+            </div>
+          )
+        })}
+      </div>
+      <div className="rp-foot">
+        <button className="btn primary">모델 적용</button>
+        <button className="btn">취소</button>
+      </div>
+    </aside>
+  )
+}
