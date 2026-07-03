@@ -292,7 +292,7 @@ export default function Viewer({ rooms, selectedIds, onSelectionChange, onEscape
 
       <div className="vtools">
         <button className="btn sm" onClick={addUnit}>＋ 실내기</button>
-        <label className="vtoggle"><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> 스냅</label>
+        <label className="vtoggle"><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> 격자</label>
       </div>
 
       <svg
@@ -304,6 +304,17 @@ export default function Viewer({ rooms, selectedIds, onSelectionChange, onEscape
       >
         <g className="drawing-layer">
           <rect x="0" y="0" width={PLAN_W} height={PLAN_H} fill="#ffffff" stroke="#CFCFCF" />
+          {/* 그리드(스냅 격자) — 스냅 ON일 때만 표시. GRID 간격, 도면 시트 위. */}
+          {snapOn && (
+            <g>
+              {Array.from({ length: Math.floor(PLAN_W / GRID) + 1 }, (_, i) => i * GRID).map((x) => (
+                <line key={`gv${x}`} x1={x} y1={0} x2={x} y2={PLAN_H} stroke="#ECECEC" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+              ))}
+              {Array.from({ length: Math.floor(PLAN_H / GRID) + 1 }, (_, i) => i * GRID).map((y) => (
+                <line key={`gh${y}`} x1={0} y1={y} x2={PLAN_W} y2={y} stroke="#ECECEC" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+              ))}
+            </g>
+          )}
           {drawingSrc ? (
             <image href={drawingSrc} x="0" y="0" width={PLAN_W} height={PLAN_H} />
           ) : (
