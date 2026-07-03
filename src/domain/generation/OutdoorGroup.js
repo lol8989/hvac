@@ -8,6 +8,7 @@
 // 애플리케이션 유즈케이스가 unassign/assign을 조율한다(도메인은 자기 불변식만 책임).
 
 import { ComboRatio } from '../shared/ComboRatio.js'
+import { AssignmentRejected } from './errors.js'
 
 export const ASSIGN_REASON = {
   SERIES_MISMATCH: 'SERIES_MISMATCH', // 계열 불일치
@@ -58,7 +59,7 @@ export class OutdoorGroup {
   assign(indoor) {
     const check = this.canAssign(indoor)
     if (!check.ok) {
-      throw new Error(`실내기 ${indoor.id} 배정 불가: ${check.reason}`)
+      throw new AssignmentRejected(indoor.id, check.reason)
     }
     return this._with([...this._indoorUnits, indoor])
   }
