@@ -11,7 +11,13 @@
       "Bash(git push *)",
       "Bash(npx vitest *)",
       "Bash(npm install *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(node -e \"console.log\\('ts', require\\('typescript/package.json'\\).version, '| @types/react', require\\('@types/react/package.json'\\).version\\)\")",
+      "Bash(git mv *)",
+      "Bash(node -e ' *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"---TOTAL: $\\(npx tsc --noEmit 2>&1)",
+      "Bash(npm run *)"
     ]
   }
 }
