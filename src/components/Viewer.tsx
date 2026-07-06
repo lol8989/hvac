@@ -28,7 +28,7 @@ interface ViewerProps {
   selectedIds: string[] // 선택된 실(존) id — ModelPanel 연동
   onSelectionChange: (ids: string[]) => void
   onEscape?: () => void
-  drawingSrc?: string
+  layers?: { id: string; label: string; src: string }[] // 도면 타입별 투명 레이어(체크박스 on/off)
   indoorInfo?: Record<string, { model: string; kind: string }> // 실별 실내기 모델명·유형(심볼 오버레이)
   outdoorGroups?: OutdoorGroupInfo[] // 실외기 배치 대상 그룹(placeOutdoors)
   planW?: number // 도면 정규화 좌표 폭(기본 720 목업 / 실도면은 종횡비 유지 폭)
@@ -48,7 +48,7 @@ export interface ViewerHandle {
  * 좌표계는 planW×planH(목업 720×470 또는 실도면 DXF 월드 mm) 기준.
  */
 const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
-  { rooms, selectedIds, onSelectionChange, onEscape, drawingSrc, indoorInfo, outdoorGroups, planW, planH, mmPerUnit }: ViewerProps,
+  { rooms, selectedIds, onSelectionChange, onEscape, layers, indoorInfo, outdoorGroups, planW, planH, mmPerUnit }: ViewerProps,
   ref,
 ) {
   // 도면 좌표계 상수(프롭 기반). 실도면(대형 mm)이면 패딩·격자 간격을 비례 조정.
@@ -88,6 +88,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const [panning, setPanning] = useState(false)
   const [marquee, setMarquee] = useState<ViewBox | null>(null)
   const [snapOn, setSnapOn] = useState(true)
+  const [layersOn, setLayersOn] = useState<Set<string>>(() => new Set(layers?.map((l) => l.id) ?? []))
   const [hintOpen, setHintOpen] = useState(true)
   const [toolMenuOpen, setToolMenuOpen] = useState(false)
 
@@ -401,6 +402,24 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       <div className="vtools">
         <button className="btn sm" onClick={addUnit}>＋ 실내기</button>
         <label className="vtoggle"><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> 격자{gridLabel ? ` (${gridLabel})` : ''}</label>
+        {layers && layers.length > 0 && (
+          <span className="vlayers">
+            <span className="vlayers-h">도면 레이어</span>
+            {layers.map((l) => (
+              <label key={l.id} className="vtoggle">
+                <input
+                  type="checkbox"
+                  checked={layersOn.has(l.id)}
+                  onChange={(e) => setLayersOn((prev) => {
+                    const n = new Set(prev)
+                    if (e.target.checked) n.add(l.id); else n.delete(l.id)
+                    return n
+                  })}
+                /> {l.label}
+              </label>
+            ))}
+          </span>
+        )}
       </div>
 
       <svg
@@ -423,8 +442,10 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
               ))}
             </g>
           )}
-          {drawingSrc ? (
-            <image href={drawingSrc} x="0" y="0" width={PLAN_W} height={PLAN_H} />
+          {layers && layers.length ? (
+            layers.filter((l) => layersOn.has(l.id)).map((l) => (
+              <image key={l.id} href={l.src} x="0" y="0" width={PLAN_W} height={PLAN_H} />
+            ))
           ) : (
             <text x={PLAN_W / 2} y={PLAN_H - 14} fontSize="10" textAnchor="middle" fill="#c8c8c8">도면 레이어 (DXF/SVG/이미지 마운트 지점)</text>
           )}

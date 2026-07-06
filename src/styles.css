@@ -187,8 +187,11 @@ button{font-family:inherit;cursor:pointer;}
 .figmenu-overlay{position:fixed;inset:0;z-index:29;background:transparent;}
 
 /* 뷰어 좌상단 도구(실내기 추가·스냅) */
-.vtools{position:absolute;top:12px;left:12px;z-index:20;display:flex;align-items:center;gap:8px;}
+.vtools{position:absolute;top:12px;left:12px;z-index:20;display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:calc(100% - 24px);}
 .vtools .btn{background:rgba(255,255,255,0.97);}
+.vlayers{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.97);border:1px solid var(--line);border-radius:6px;padding:4px 8px;flex-wrap:wrap;}
+.vlayers-h{font-size:10px;font-weight:700;color:#888;margin-right:2px;}
+.vlayers .vtoggle{border:none;background:transparent;padding:2px 3px;}
 .vtoggle{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2);background:rgba(255,255,255,0.97);border:1px solid var(--line);border-radius:6px;padding:5px 9px;cursor:pointer;}
 .vtoggle input{accent-color:#333;margin:0;}
 .room-layer text{user-select:none;pointer-events:none;}
