@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { ROOMS, MODELS, groupOfRoom, recommendedIndoorIdx, outdoorIdxByModel, resolveIndoorCard, indoorCoolByModel } from './data'
 import ReportStrip from './components/ReportStrip'
-import Viewer, { type ViewerHandle } from './components/Viewer'
+import Viewer, { type ViewerHandle, type TileManifest } from './components/Viewer'
 import ModelPanel from './components/ModelPanel'
 import MappingModal from './components/MappingModal'
 import Stepper from './components/Stepper'
@@ -77,37 +77,27 @@ export default function App() {
   const [step, setStep] = useState<StepId>('detect') // 업로드는 목록의 '생성'에서 완료 가정
   const [generated, setGenerated] = useState(false)
 
-  // 실제 도면: Python(ezdxf)로 전처리한 타입별 투명 레이어(plan_*.png) + 좌표 메타(plan.json).
-  // 메타(worldMin/Max, mm)로 뷰어 좌표계를 DXF 월드좌표에 맞춘다(검출·배치·export 정합의 토대).
+  // 실제 도면: Python(ezdxf)로 전처리한 딥줌 타일 피라미드(public/tiles/manifest.json).
+  // 매니페스트의 worldMin/Max(mm)로 뷰어 좌표계를 DXF 월드좌표에 맞춘다(검출·배치·export 정합의 토대).
   const [world, setWorld] = useState<{ w: number; h: number; minX: number; minY: number; maxX: number; maxY: number } | undefined>(undefined)
-  const [layerIds, setLayerIds] = useState<string[] | undefined>(undefined)
+  const [tiles, setTiles] = useState<TileManifest | undefined>(undefined)
   useEffect(() => {
     let alive = true
     const load = async () => {
-      const [pngRes, jsonRes] = await Promise.all([
-        fetch('/plan_base.png', { method: 'HEAD' }).catch(() => null),
-        fetch('/plan.json').catch(() => null),
-      ])
-      if (!alive || !pngRes?.ok || !jsonRes?.ok) return
-      const raw: unknown = await jsonRes.json()
-      const meta = raw as { worldMin?: number[]; worldMax?: number[]; layers?: string[] }
-      if (alive && meta.worldMin && meta.worldMax) {
-        const [ax, ay] = meta.worldMin
-        const [bx, by] = meta.worldMax
+      const res = await fetch('/tiles/manifest.json').catch(() => null)
+      if (!alive || !res?.ok) return
+      const raw: unknown = await res.json()
+      const m = raw as TileManifest
+      if (alive && m.worldMin && m.worldMax && m.levels) {
+        const [ax, ay] = m.worldMin
+        const [bx, by] = m.worldMax
         setWorld({ minX: ax, minY: ay, maxX: bx, maxY: by, w: bx - ax, h: by - ay })
-        setLayerIds(meta.layers ?? ['base'])
+        setTiles(m)
       }
     }
     void load()
     return () => { alive = false }
   }, [])
-
-  // 도면 레이어(타입 그룹) — 뷰어에서 체크박스로 on/off. base=선도면(벽·배관·가구는 한 레이어라 함께).
-  const drawingLayers = useMemo(() => {
-    if (!layerIds) return undefined
-    const label: Record<string, string> = { base: '선도면', dim: '치수', text: '문자', hatch: '해치', block: '장비' }
-    return layerIds.map((id) => ({ id, label: label[id] ?? id, src: `/plan_${id}.png` }))
-  }, [layerIds])
 
   // 뷰어 정규화 좌표계: 도면 종횡비 유지, 높이 470 기준(심볼·격자 크기 안정). mmPerUnit로 DXF mm 왕복.
   const planDims = useMemo(() => {
@@ -376,7 +366,8 @@ export default function App() {
               onSelectionChange={setSelRooms}
               onEscape={() => setMapOpen(false)}
               indoorInfo={indoorInfo}
-              layers={drawingLayers}
+              tiles={tiles}
+              tileBase="/tiles"
               outdoorGroups={groups.filter((g) => g.items.length).map((g) => ({ key: g.key, label: g.label, model: g.model }))}
             />
           </div>

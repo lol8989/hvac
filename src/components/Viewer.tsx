@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react'
+import type { ReactElement } from 'react'
 import type { Room } from '../data'
 import ACUnit from './viewer/ACUnit'
 import ODUnit from './viewer/ODUnit'
@@ -23,12 +24,24 @@ export interface OutdoorGroupInfo {
   model: string
 }
 
+// 딥줌 타일 피라미드 매니페스트(tools/dxf_to_tiles.py 산출).
+export interface TileLevel { z: number; pxW: number; pxH: number; cols: number; rows: number }
+export interface TileManifest {
+  tile: number
+  levels: TileLevel[]
+  masterPx: [number, number]
+  worldMin: [number, number]
+  worldMax: [number, number]
+  units: string
+}
+
 interface ViewerProps {
   rooms: Record<string, Room>
   selectedIds: string[] // 선택된 실(존) id — ModelPanel 연동
   onSelectionChange: (ids: string[]) => void
   onEscape?: () => void
-  layers?: { id: string; label: string; src: string }[] // 도면 타입별 투명 레이어(체크박스 on/off)
+  tiles?: TileManifest // 딥줌 타일 매니페스트(보이는 타일만 로드)
+  tileBase?: string // 타일 URL 베이스(예: /tiles)
   indoorInfo?: Record<string, { model: string; kind: string }> // 실별 실내기 모델명·유형(심볼 오버레이)
   outdoorGroups?: OutdoorGroupInfo[] // 실외기 배치 대상 그룹(placeOutdoors)
   planW?: number // 도면 정규화 좌표 폭(기본 720 목업 / 실도면은 종횡비 유지 폭)
@@ -48,7 +61,7 @@ export interface ViewerHandle {
  * 좌표계는 planW×planH(목업 720×470 또는 실도면 DXF 월드 mm) 기준.
  */
 const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
-  { rooms, selectedIds, onSelectionChange, onEscape, layers, indoorInfo, outdoorGroups, planW, planH, mmPerUnit }: ViewerProps,
+  { rooms, selectedIds, onSelectionChange, onEscape, tiles, tileBase, indoorInfo, outdoorGroups, planW, planH, mmPerUnit }: ViewerProps,
   ref,
 ) {
   // 도면 좌표계 상수(프롭 기반). 실도면(대형 mm)이면 패딩·격자 간격을 비례 조정.
@@ -88,7 +101,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const [panning, setPanning] = useState(false)
   const [marquee, setMarquee] = useState<ViewBox | null>(null)
   const [snapOn, setSnapOn] = useState(true)
-  const [layersOn, setLayersOn] = useState<Set<string>>(() => new Set(layers?.map((l) => l.id) ?? []))
+  const [svgW, setSvgW] = useState(1200) // 화면상 SVG 폭(px) — 타일 레벨 선택용
   const [hintOpen, setHintOpen] = useState(true)
   const [toolMenuOpen, setToolMenuOpen] = useState(false)
 
@@ -117,6 +130,17 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   // window 리스너(1회 등록)에서 읽는 최신 상태 스냅샷. 렌더 중이 아닌 effect에서 갱신(refs 규칙 준수).
   const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu })
   useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu } })
+
+  // SVG 화면 폭(px) 추적 — 타일 레벨 선택(화면 해상도 ≒ 타일 해상도)에 사용.
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const update = () => setSvgW(el.clientWidth || 1200)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // C(에어컨) 모드: 선택된 실내기 심볼 → 담당 실을 패널 선택으로 반영(단일 클릭·드래그 동일 동작).
   // 실도 함께 하이라이팅됨(selectedIds→ZoneRect). 마운트 시 초기 선택 보존, 방 밖 심볼 무시, 같은 실 다중 심볼 합침.
@@ -390,6 +414,31 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const zoomButton = (factor: number) =>
     setView((v) => { const [nw, nh] = clampW(v.w * factor, v.h * factor); return { x: v.x + (v.w - nw) / 2, y: v.y + (v.h - nh) / 2, w: nw, h: nh } })
 
+  // 딥줌: 현재 줌·뷰포트에 맞는 레벨의 '보이는 타일'만 렌더.
+  const tileEls: ReactElement[] | null = (() => {
+    if (!tiles || !tileBase) return null
+    const T = tiles.tile
+    const dppu = svgW / view.w // 화면 px per 정규화 단위
+    let lv = tiles.levels[tiles.levels.length - 1]
+    for (const L of tiles.levels) { if (L.pxW / PLAN_W >= dppu) { lv = L; break } }
+    const vx0 = view.x, vx1 = view.x + view.w, vy0 = view.y, vy1 = view.y + view.h
+    const els: ReactElement[] = []
+    for (let x = 0; x < lv.cols; x++) {
+      const tpxW = Math.min(T, lv.pxW - x * T)
+      const nx = (PLAN_W * (x * T)) / lv.pxW
+      const nw = (PLAN_W * tpxW) / lv.pxW
+      if (nx + nw < vx0 || nx > vx1) continue
+      for (let y = 0; y < lv.rows; y++) {
+        const tpxH = Math.min(T, lv.pxH - y * T)
+        const ny = (PLAN_H * (y * T)) / lv.pxH
+        const nh = (PLAN_H * tpxH) / lv.pxH
+        if (ny + nh < vy0 || ny > vy1) continue
+        els.push(<image key={`${lv.z}-${x}-${y}`} href={`${tileBase}/${lv.z}/${x}_${y}.png`} x={nx} y={ny} width={nw} height={nh} />)
+      }
+    }
+    return els
+  })()
+
   const isCassette = mode === 'cassette'
   const isZone = mode === 'zone'
   const isOutdoor = mode === 'outdoor'
@@ -402,24 +451,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       <div className="vtools">
         <button className="btn sm" onClick={addUnit}>＋ 실내기</button>
         <label className="vtoggle"><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> 격자{gridLabel ? ` (${gridLabel})` : ''}</label>
-        {layers && layers.length > 0 && (
-          <span className="vlayers">
-            <span className="vlayers-h">도면 레이어</span>
-            {layers.map((l) => (
-              <label key={l.id} className="vtoggle">
-                <input
-                  type="checkbox"
-                  checked={layersOn.has(l.id)}
-                  onChange={(e) => setLayersOn((prev) => {
-                    const n = new Set(prev)
-                    if (e.target.checked) n.add(l.id); else n.delete(l.id)
-                    return n
-                  })}
-                /> {l.label}
-              </label>
-            ))}
-          </span>
-        )}
       </div>
 
       <svg
@@ -442,12 +473,8 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
               ))}
             </g>
           )}
-          {layers && layers.length ? (
-            layers.filter((l) => layersOn.has(l.id)).map((l) => (
-              <image key={l.id} href={l.src} x="0" y="0" width={PLAN_W} height={PLAN_H} />
-            ))
-          ) : (
-            <text x={PLAN_W / 2} y={PLAN_H - 14} fontSize="10" textAnchor="middle" fill="#c8c8c8">도면 레이어 (DXF/SVG/이미지 마운트 지점)</text>
+          {tileEls ? tileEls : (
+            <text x={PLAN_W / 2} y={PLAN_H - 14} fontSize="10" textAnchor="middle" fill="#c8c8c8">도면 레이어 (딥줌 타일 마운트 지점)</text>
           )}
         </g>
 

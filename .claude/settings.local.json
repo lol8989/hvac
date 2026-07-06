@@ -45,7 +45,8 @@
       "Bash(python -c \"import cairosvg; print\\('cairosvg ok'\\)\")",
       "Bash(awk '$1!=\"-\" {print}')",
       "Bash(git check-ignore *)",
-      "Bash(time python tools/dxf_layers_to_png.py \"drawings/006. 경기신용보증재단 남양주본점 냉난방 배관평면도_260305.dxf\" public 8000)"
+      "Bash(time python tools/dxf_layers_to_png.py \"drawings/006. 경기신용보증재단 남양주본점 냉난방 배관평면도_260305.dxf\" public 8000)",
+      "Bash(python tools/dxf_to_tiles.py \"drawings/006. 경기신용보증재단 남양주본점 냉난방 배관평면도_260305.dxf\" public/tiles 16000)"
     ]
   }
 }
