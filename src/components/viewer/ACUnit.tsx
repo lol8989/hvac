@@ -6,6 +6,8 @@ interface ACUnitProps {
   selected: boolean
   hovered: boolean
   rotating: boolean
+  model?: string // 배정/추천 실내기 모델명(오버레이). 자유 심볼은 없음
+  kind?: string // 실내기 유형(벽걸이형 / 4WAY)
   onBodyDown: (e: React.MouseEvent, id: string) => void
   onRotateDown: (e: React.MouseEvent, id: string) => void
   onEnter: (id: string) => void
@@ -14,8 +16,9 @@ interface ACUnitProps {
 
 const GRILLE = [-8, -3, 2, 7]
 
-export default function ACUnit({ sym, selected, hovered, rotating, onBodyDown, onRotateDown, onEnter, onLeave }: ACUnitProps) {
+export default function ACUnit({ sym, selected, hovered, rotating, model, kind, onBodyDown, onRotateDown, onEnter, onLeave }: ACUnitProps) {
   const showHandle = hovered || rotating
+  const topLabel = kind ? `${kind} · ${sym.id}` : sym.id
   return (
     <g transform={`translate(${sym.x}, ${sym.y})`} onMouseEnter={() => onEnter(sym.id)} onMouseLeave={() => onLeave(sym.id)}>
       <g transform={`rotate(${sym.rot})`} onMouseDown={(e) => onBodyDown(e, sym.id)} style={{ cursor: 'move' }}>
@@ -32,14 +35,19 @@ export default function ACUnit({ sym, selected, hovered, rotating, onBodyDown, o
           <line x1={0} y1={22} x2={0} y2={40} />
           <polyline points="-6,33 0,41 6,33" />
         </g>
-        <text
-          x={0} y={-22} textAnchor="middle" fontSize={8} fontWeight="700"
-          fill={selected ? '#222222' : '#999999'}
-          style={{ transform: `rotate(${-sym.rot}deg)`, transformBox: 'fill-box', transformOrigin: 'center', pointerEvents: 'none' }}
-        >
-          {sym.id}
-        </text>
       </g>
+
+      {/* 라벨은 회전 그룹 밖(항상 수평). 상단: 유형 · 식별자, 하단: 모델명 오버레이 */}
+      <text x={0} y={-22} textAnchor="middle" fontSize={8} fontWeight="700"
+        fill={selected ? '#222222' : '#999999'} style={{ pointerEvents: 'none' }}>
+        {topLabel}
+      </text>
+      {model && (
+        <g style={{ pointerEvents: 'none' }}>
+          <rect x={-40} y={46} width={80} height={13} rx={3} fill="#222222" opacity={selected ? 0.92 : 0.72} />
+          <text x={0} y={55} textAnchor="middle" fontSize={6.8} fontWeight="700" fill="#FFFFFF">{model}</text>
+        </g>
+      )}
 
       {showHandle && (
         <g>

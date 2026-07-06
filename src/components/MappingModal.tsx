@@ -30,6 +30,7 @@ interface MappingModalProps {
   catalog: OutdoorModelSpec[]
   groups: GroupView[]
   pool: string[]
+  capByRoom: Record<string, number> // 실별 실내기 정격용량(B: 선택 장비 기준) — 조합비 산정
   onMove: (id: string, to: string) => boolean
   onReplace: (key: string, spec: OutdoorModelSpec) => void
   onSplit: (key: string) => void
@@ -43,7 +44,7 @@ interface MappingModalProps {
 // - 드래그: 실내기 ↔ 실외기 배정/해제
 // - 실외기 교체(카탈로그), 그룹 분할/삭제, 실외기 추가
 // - 조합비 실시간 계산, 호환 불가(GHP↔EHP) 경고/차단
-export default function MappingModal({ catalog, groups, pool, onMove, onReplace, onSplit, onAddGroup, onRemove, onClose, onApply }: MappingModalProps) {
+export default function MappingModal({ catalog, groups, pool, capByRoom, onMove, onReplace, onSplit, onAddGroup, onRemove, onClose, onApply }: MappingModalProps) {
   const [warnKey, setWarnKey] = useState<string | null>(null)
   const [overKey, setOverKey] = useState<string | null>(null)
   const [addModel, setAddModel] = useState(catalog[0].model)
@@ -104,7 +105,7 @@ export default function MappingModal({ catalog, groups, pool, onMove, onReplace,
         <div className="m-body">
           <div className="odus">
             {groups.map((g) => {
-              const r = ratioOf(g)
+              const r = ratioOf(g, capByRoom)
               const pct = Math.min(100, Math.round(r * 100))
               const warn = g.items.length && (r > 1.3 || r < 0.5)
               return (

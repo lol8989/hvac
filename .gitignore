@@ -31,3 +31,7 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# 대용량 CAD 원본(빌드 제외)
+drawings/
+*.dxf

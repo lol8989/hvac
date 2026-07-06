@@ -25,7 +25,26 @@
       "Bash(npm audit *)",
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(s\\);for\\(const [k,v] of Object.entries\\(r.vulnerabilities||{}\\)\\){console.log\\(v.severity.toUpperCase\\(\\).padEnd\\(9\\), k, '| via:', \\(v.via||[]\\).map\\(x=>typeof x==='string'?x:x.title?.slice\\(0,50\\)\\).join\\(', '\\)\\);}console.log\\('---meta---', JSON.stringify\\(r.metadata?.vulnerabilities\\)\\);}\\)\")",
       "Bash(npm view *)",
-      "Bash(git --no-pager diff HEAD --stat)"
+      "Bash(git --no-pager diff HEAD --stat)",
+      "Read(//c/Users/lolfr/Desktop/도면검도시스템/**)",
+      "Bash(ls memory *)",
+      "Bash(ls \"C:/Users/lolfr/.claude/projects/C--Users-lolfr-Desktop---------POC/memory\")",
+      "Bash(cat \"C:/Users/lolfr/.claude/projects/C--Users-lolfr-Desktop---------POC/memory/MEMORY.md\")",
+      "Bash(grep -n -A1 '\\\\$INSUNITS' sample.dxf)",
+      "Bash(grep -n -A2 '\\\\$EXTMIN\\\\|\\\\$EXTMAX' sample.dxf)",
+      "Bash(python -c \"import ezdxf; print\\('ezdxf', ezdxf.__version__\\)\")",
+      "Bash(python -c \"import shapely; print\\('shapely', shapely.__version__\\)\")",
+      "Bash(rm -f src/presentation/viewer/dxf.ts src/presentation/viewer/dxf.test.ts)",
+      "Bash(npm uninstall *)",
+      "Bash(time python tools/dxf_to_svg.py \"public/006. 경기신용보증재단 남양주본점 냉난방 배관평면도_260305.dxf\" public/plan.svg)",
+      "Bash(mkdir -p drawings)",
+      "Bash(mv \"public/006. 경기신용보증재단 남양주본점 냉난방 배관평면도_260305.dxf\" drawings/)",
+      "Bash(rm -f public/sample.dxf public/sample.svg)",
+      "Bash(grep -q \"drawings/\" .gitignore)",
+      "Bash(printf '\\\\n# 대용량 CAD 원본\\(빌드 제외\\)\\\\ndrawings/\\\\n*.dxf\\\\n')",
+      "Bash(python -c \"import cairosvg; print\\('cairosvg ok'\\)\")",
+      "Bash(awk '$1!=\"-\" {print}')",
+      "Bash(git check-ignore *)"
     ]
   }
 }

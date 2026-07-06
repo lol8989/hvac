@@ -79,13 +79,18 @@ export interface ModelCard {
   mp: string
   md: string
   on: boolean
+  cool?: number // 실내기 냉방용량(kW) — 실 부하 근사 매칭에 사용. 실외기 카드는 미사용.
+  kind?: string // 실내기 유형(벽걸이형 / 4WAY 등) — 도면 심볼 태그 표시용.
 }
 
 export const MODELS: { in: ModelCard[]; out: ModelCard[] } = {
   in: [
-    { mn: 'LG AMNW09GTRA0', ms: '벽걸이형 · 냉방 2.64kW · 난방 3.30kW · 1등급', mp: '642,900원', md: '적용 2026.07.08', on: true },
-    { mn: 'R-W0401A2U', ms: '4WAY 카세트 · 냉방 4.0kW · 난방 4.5kW', mp: '660,000원', md: '적용 2026.04.20', on: false },
-    { mn: 'R-W0601A2U', ms: '4WAY 카세트 · 냉방 6.0kW · 난방 6.8kW', mp: '780,000원', md: '적용 2026.04.20', on: false },
+    { mn: 'LG AMNW09GTRA0', ms: '벽걸이형 · 냉방 2.64kW · 난방 3.30kW · 1등급', mp: '642,900원', md: '적용 2026.07.08', on: true, cool: 2.64, kind: '벽걸이형' },
+    { mn: 'R-W0401A2U', ms: '4WAY 카세트 · 냉방 4.0kW · 난방 4.5kW', mp: '660,000원', md: '적용 2026.04.20', on: false, cool: 4.0, kind: '4WAY' },
+    { mn: 'R-W0601A2U', ms: '4WAY 카세트 · 냉방 6.0kW · 난방 6.8kW', mp: '780,000원', md: '적용 2026.04.20', on: false, cool: 6.0, kind: '4WAY' },
+    { mn: 'R-W0901A2U', ms: '4WAY 카세트 · 냉방 9.0kW · 난방 10.0kW', mp: '980,000원', md: '적용 2026.04.20', on: false, cool: 9.0, kind: '4WAY' },
+    { mn: 'R-W1401A2U', ms: '4WAY 카세트 · 냉방 14.0kW · 난방 16.0kW', mp: '1,340,000원', md: '적용 2026.04.20', on: false, cool: 14.0, kind: '4WAY' },
+    { mn: 'R-W2201A2U', ms: '4WAY 카세트 · 냉방 22.4kW · 난방 25.0kW', mp: '1,920,000원', md: '적용 2026.04.20', on: false, cool: 22.4, kind: '4WAY' },
   ],
   out: [
     { mn: 'RPUW12BX9M', ms: '냉난방 절환형 · 냉방 34.8kW · EERa 4.99 · 3등급', mp: '4,120,000원', md: '적용 2026.04.20', on: true },
@@ -94,11 +99,50 @@ export const MODELS: { in: ModelCard[]; out: ModelCard[] } = {
   ],
 }
 
-// 조합비 = 연결 실내기 냉방용량 합 / 실외기 용량
-export const ratioOf = (group: { items: string[]; cool: number }): number => {
-  const sum = group.items.reduce((a, id) => a + (ROOMS[id]?.cool || 0), 0)
+// 조합비 = 연결 실내기 냉방용량 합 / 실외기 용량.
+// capByRoom(실별 실내기 정격용량 맵)을 주면 그 값으로 합산(B: 선택 장비 기준),
+// 없으면 방 부하(ROOMS.cool)를 프록시로 사용(하위 호환).
+export const ratioOf = (
+  group: { items: string[]; cool: number },
+  capByRoom?: Record<string, number>,
+): number => {
+  const capOf = (id: string) => (capByRoom ? capByRoom[id] ?? 0 : ROOMS[id]?.cool || 0)
+  const sum = group.items.reduce((a, id) => a + capOf(id), 0)
   return group.cool ? sum / group.cool : 0
 }
 
+// 실내기 모델명 → 정격 냉방용량(kW). 미매칭/미지정은 0.
+export const indoorCoolByModel = (model: string | undefined): number =>
+  (model ? MODELS.in.find((m) => m.mn === model)?.cool : undefined) ?? 0
+
 export const groupOfRoom = <T extends { items: string[] }>(groups: T[], roomId: string): T | null =>
   groups.find((g) => g.items.includes(roomId)) || null
+
+// 실 냉방부하(kW)에 가장 가까운 용량의 실내기 카드 인덱스(근사 매칭). 동률이면 더 큰 용량 우선.
+export const recommendedIndoorIdx = (coolKw: number, cards: ModelCard[] = MODELS.in): number => {
+  let best = 0
+  let bestDiff = Infinity
+  cards.forEach((c, i) => {
+    const cap = c.cool ?? 0
+    const diff = Math.abs(cap - coolKw)
+    if (diff < bestDiff || (diff === bestDiff && cap > (cards[best].cool ?? 0))) {
+      best = i
+      bestDiff = diff
+    }
+  })
+  return best
+}
+
+// 실외기 모델 코드로 실외기 카드 인덱스 조회(선택 실이 속한 그룹의 실외기 하이라이트용). 없으면 -1.
+export const outdoorIdxByModel = (model: string, cards: ModelCard[] = MODELS.out): number =>
+  cards.findIndex((c) => c.mn === model)
+
+// 실의 실내기 카드 해석: 적용 모델(appliedModel)이 있으면 그 카드, 없으면 부하 근사 추천.
+// App/패널/뷰어가 동일 규칙(모델명·유형)을 공유하는 단일 소스.
+export const resolveIndoorCard = (coolKw: number, appliedModel?: string): ModelCard => {
+  if (appliedModel) {
+    const found = MODELS.in.find((m) => m.mn === appliedModel)
+    if (found) return found
+  }
+  return MODELS.in[recommendedIndoorIdx(coolKw)]
+}
