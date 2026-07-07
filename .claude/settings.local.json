@@ -46,7 +46,11 @@
       "Bash(awk '$1!=\"-\" {print}')",
       "Bash(git check-ignore *)",
       "Bash(time python tools/dxf_layers_to_png.py \"drawings/006. 경기신용보증재단 남양주본점 냉난방 배관평면도_260305.dxf\" public 8000)",
-      "Bash(python tools/dxf_to_tiles.py \"drawings/006. 경기신용보증재단 남양주본점 냉난방 배관평면도_260305.dxf\" public/tiles 16000)"
+      "Bash(python tools/dxf_to_tiles.py \"drawings/006. 경기신용보증재단 남양주본점 냉난방 배관평면도_260305.dxf\" public/tiles 16000)",
+      "Bash(python *)",
+      "Bash(PYTHONIOENCODING=utf-8 python \"C:\\\\Users\\\\lolfr\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-lolfr-Desktop---------POC\\\\a158eb41-18e2-4f4c-aed4-5decddf7dde1\\\\scratchpad\\\\detect_proto.py\")",
+      "Bash(perl -i -pe \"s/export const CSV_BOM = '.*' \\\\/\\\\/ Excel/export const CSV_BOM = '\\\\\\\\\\\\\\\\uFEFF' \\\\/\\\\/ Excel/\" src/presentation/download.ts)"
     ]
-  }
+  },
+  "prefersReducedMotion": true
 }

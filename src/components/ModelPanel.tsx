@@ -154,7 +154,6 @@ export default function ModelPanel({
       </div>
       <div className="rp-foot">
         <button className="btn primary" onClick={onApply}>모델 적용</button>
-        <button className="btn">취소</button>
       </div>
     </aside>
   )

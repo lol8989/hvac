@@ -4,7 +4,7 @@ import type { Room } from '../data'
 import ACUnit from './viewer/ACUnit'
 import ODUnit from './viewer/ODUnit'
 import ZoneRect from './viewer/ZoneRect'
-import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectsIntersect, roomIdsForUnits } from './viewer/geometry'
+import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectsIntersect, roomIdsForUnits, zoneAreaM2 } from './viewer/geometry'
 import type { UnitSym, ZoneBox, Corner } from './viewer/geometry'
 
 type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' // 에어컨(실내기) / 존(실) / 손 / 실외기
@@ -16,6 +16,35 @@ const niceGrid = (w: number): number => {
   return [1, 2, 5, 10].map((m) => m * pow).find((c) => c >= target) ?? 10 * pow
 }
 interface ViewBox { x: number; y: number; w: number; h: number }
+
+// ＋실내기 수동 추가 시 선택 가능한 실내기 유형(도면 심볼 태그).
+const IDU_KINDS: readonly string[] = ['벽걸이형', '2WAY', '4WAY']
+
+// 단축키 도움말(플로팅 위젯) — 단축키 하나당 한 행.
+const SHORTCUTS: readonly { key: string; desc: string }[] = [
+  { key: 'C', desc: '에어컨(실내기) 모드' },
+  { key: 'Z', desc: '존(실) 모드' },
+  { key: 'O', desc: '실외기 모드' },
+  { key: 'H', desc: '손(화면 이동) 모드' },
+  { key: 'Space', desc: '누르는 동안 화면 이동' },
+  { key: '휠', desc: '확대 / 축소' },
+  { key: '0', desc: '화면 맞춤' },
+  { key: '드래그', desc: '이동 / 영역 선택' },
+  { key: 'Shift', desc: '선택 추가' },
+  { key: 'R', desc: '90° 회전' },
+  { key: '⟳', desc: '회전 핸들 15°' },
+  { key: 'Del', desc: '실내기 삭제' },
+  { key: 'Esc', desc: '선택 해제' },
+]
+
+// 레이어 필터: 툴바 셀렉트에서 선택 — 해당 레이어만 표시(도면 배경은 항상 표시).
+export type LayerFilter = 'all' | 'zone' | 'indoor' | 'outdoor'
+export const LAYER_OPTIONS: readonly { value: LayerFilter; label: string }[] = [
+  { value: 'all', label: '레이어: 전체' },
+  { value: 'indoor', label: '실내기' },
+  { value: 'outdoor', label: '실외기' },
+  { value: 'zone', label: '실 경계' },
+]
 
 // 실외기 배치용 그룹 요약(도면 심볼 라벨·모델).
 export interface OutdoorGroupInfo {
@@ -47,12 +76,16 @@ interface ViewerProps {
   planW?: number // 도면 정규화 좌표 폭(기본 720 목업 / 실도면은 종횡비 유지 폭)
   planH?: number // 도면 정규화 좌표 높이(기본 470)
   mmPerUnit?: number // 정규화 1단위 = 실 mm (격자 실치수 표기 + DXF 왕복)
+  layerFilter?: LayerFilter // 표시 레이어 필터(기본 all)
+  canAddUnit?: boolean // ＋실내기 수동 추가 허용 — 실검출·AI 배치 완료 전에는 비활성
+  canPlaceOutdoors?: boolean // ＋실외기 배치 허용 — 실외기 조합 단계에서만 활성
 }
 
 // App 버튼에서 호출하는 명령형 핸들.
 export interface ViewerHandle {
   placeUnits: () => void // 방별로 실내기 심볼을 자동 배치(빈 상태 → 채움)
   placeOutdoors: () => void // 그룹별 실외기 심볼을 도면 하단(건물 외부)에 배치
+  captureSvg: () => string | null // 현재 도면 SVG 직렬화(캡처 다운로드용)
 }
 
 /**
@@ -61,7 +94,7 @@ export interface ViewerHandle {
  * 좌표계는 planW×planH(목업 720×470 또는 실도면 DXF 월드 mm) 기준.
  */
 const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
-  { rooms, selectedIds, onSelectionChange, onEscape, tiles, tileBase, indoorInfo, outdoorGroups, planW, planH, mmPerUnit }: ViewerProps,
+  { rooms, selectedIds, onSelectionChange, onEscape, tiles, tileBase, indoorInfo, outdoorGroups, planW, planH, mmPerUnit, layerFilter = 'all', canAddUnit = true, canPlaceOutdoors = false }: ViewerProps,
   ref,
 ) {
   // 도면 좌표계 상수(프롭 기반). 실도면(대형 mm)이면 패딩·격자 간격을 비례 조정.
@@ -104,6 +137,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const [svgW, setSvgW] = useState(1200) // 화면상 SVG 폭(px) — 타일 레벨 선택용
   const [hintOpen, setHintOpen] = useState(true)
   const [toolMenuOpen, setToolMenuOpen] = useState(false)
+  const [addMenuOpen, setAddMenuOpen] = useState(false) // ＋실내기 유형 선택 메뉴
 
   const svgRef = useRef<SVGSVGElement | null>(null)
   const idRef = useRef(Object.keys(rooms).length)
@@ -115,17 +149,21 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const oduRef = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number } | null>(null)
   const spaceRef = useRef(false)
 
+  // 실외기 배치: 건물 외부(도면 하단)에 그룹당 하나씩 가로로 나열(폭에 비례 배치).
+  // 도면 영역 ＋실외기 배치 버튼과 명령형 핸들이 공유한다(재호출 시 기본 배치로 리셋).
+  const placeOutdoorsFn = useCallback(() => {
+    const gs = outdoorGroups ?? []
+    setOutdoors(gs.map((g, i) => ({ id: g.key, x: snap(PLAN_W * 0.12 + i * PLAN_W * 0.16), y: snap(PLAN_H + PLAN_H * 0.04), rot: 0 })))
+    setMode('outdoor')
+  }, [outdoorGroups, PLAN_W, PLAN_H])
+
   // 명령형 핸들: 실내기/실외기 자동 배치(재호출 시 기본 배치로 리셋).
   useImperativeHandle(ref, () => ({
     placeUnits: () =>
       setSymbols(Object.entries(rooms).map(([id, r]) => ({ id, x: snap(r.x + r.w / 2), y: snap(r.y + r.h / 2), rot: 0 }))),
-    placeOutdoors: () => {
-      // 건물 외부(도면 하단)에 그룹당 하나씩 가로로 나열(폭에 비례 배치).
-      const gs = outdoorGroups ?? []
-      setOutdoors(gs.map((g, i) => ({ id: g.key, x: snap(PLAN_W * 0.12 + i * PLAN_W * 0.16), y: snap(PLAN_H + PLAN_H * 0.04), rot: 0 })))
-      setMode('outdoor')
-    },
-  }), [rooms, outdoorGroups, PLAN_W, PLAN_H])
+    placeOutdoors: placeOutdoorsFn,
+    captureSvg: () => (svgRef.current ? new XMLSerializer().serializeToString(svgRef.current) : null),
+  }), [rooms, placeOutdoorsFn])
 
   // window 리스너(1회 등록)에서 읽는 최신 상태 스냅샷. 렌더 중이 아닌 effect에서 갱신(refs 규칙 준수).
   const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu })
@@ -145,6 +183,9 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   // C(에어컨) 모드: 선택된 실내기 심볼 → 담당 실을 패널 선택으로 반영(단일 클릭·드래그 동일 동작).
   // 실도 함께 하이라이팅됨(selectedIds→ZoneRect). 마운트 시 초기 선택 보존, 방 밖 심볼 무시, 같은 실 다중 심볼 합침.
   const firstSel = useRef(true)
+  // 순방향 동기화(심볼→실)가 발신한 selectedIds 변경 표식 — 역방향에서 1회 건너뛴다.
+  // 없으면 자유 심볼(IDU_) 클릭 → 실 선택 → 그 실의 바인딩 심볼까지 함께 선택되는 버그가 생긴다.
+  const selFromSymbols = useRef(false)
   useEffect(() => {
     if (firstSel.current) { firstSel.current = false; return }
     if (mode !== 'cassette') return
@@ -152,16 +193,22 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     const next = roomIdsForUnits(chosen, zones)
     const cur = st.current.selectedIds
     // 이미 동일하면 재호출 금지(역방향 동기화와의 핑퐁 루프 차단).
-    if (next.length !== cur.length || !next.every((id) => cur.includes(id))) onSelectionChange(next)
-    // symbols/zones/mode는 selUnits 변경 시점 값으로 충분.
+    if (next.length !== cur.length || !next.every((id) => cur.includes(id))) {
+      selFromSymbols.current = true
+      onSelectionChange(next)
+    }
+    // symbols·zones도 의존: 드래그로 심볼이 다른 실로 옮겨지면 하이라이팅이 따라간다.
+    // mode는 제외 — 모드 전환만으로 존 모드에서 만든 실 선택을 지우지 않기 위함.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selUnits, onSelectionChange])
+  }, [selUnits, symbols, zones, onSelectionChange])
 
   // 역방향 동기화: 패널 등에서 실 선택(selectedIds)이 바뀌면 실내기 심볼 선택도 맞춘다.
   //  · 선택된 장비 목록에서 체크 해제 → 해당 실내기 심볼 선택도 함께 해제(하이라이트 정리)
   //  · 방-바인딩 심볼(id=실id)은 selectedIds를 따르고, 자유 심볼(IDU_)은 로컬 선택 유지
   //  · 이미 일치하면 prev를 그대로 반환해 setState/루프를 막는다
+  //  · 순방향(심볼 클릭)이 발신한 변경이면 스킵 — 클릭한 심볼만 선택 유지(동일 존 심볼 오선택 방지)
   useEffect(() => {
+    if (selFromSymbols.current) { selFromSymbols.current = false; return }
     setSelUnits((prev) => {
       const zoneIds = new Set(zones.map((z) => z.id))
       const desired = new Set<string>()
@@ -325,7 +372,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
           if (id) { setOutdoors((prev) => prev.filter((u) => u.id !== id)); setSelOdu(null) }
         }
       } else if (k === 'escape') {
-        setSelUnits(new Set()); setSelOdu(null); onSelectionChange([]); setToolMenuOpen(false); onEscape?.()
+        setSelUnits(new Set()); setSelOdu(null); onSelectionChange([]); setToolMenuOpen(false); setAddMenuOpen(false); onEscape?.()
       }
     }
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') { spaceRef.current = false; setSpaceDown(false) } }
@@ -404,9 +451,10 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     onSelectionChange([id])
   }
 
-  const addUnit = () => {
+  // 유형(벽걸이형/2WAY/4WAY)을 선택해 자유 심볼을 추가한다(＋실내기 메뉴).
+  const addUnit = (kind: string) => {
     const id = 'IDU_' + ++idRef.current // 실과 무관한 자유 심볼(위치로 역참조)
-    setSymbols((prev) => [...prev, { id, x: snap(view.x + view.w / 2), y: snap(view.y + view.h / 2), rot: 0 }])
+    setSymbols((prev) => [...prev, { id, x: snap(view.x + view.w / 2), y: snap(view.y + view.h / 2), rot: 0, kind }])
     setSelUnits(new Set([id]))
     setMode('cassette')
   }
@@ -442,6 +490,8 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const isCassette = mode === 'cassette'
   const isZone = mode === 'zone'
   const isOutdoor = mode === 'outdoor'
+  // 레이어 필터: 선택된 레이어만 표시(전체면 모두).
+  const layerOn = (name: LayerFilter): boolean => layerFilter === 'all' || layerFilter === name
   const modeLabel = mode === 'cassette' ? '에어컨' : mode === 'zone' ? '존(실)' : mode === 'outdoor' ? '실외기' : '손 (이동)'
 
   return (
@@ -449,8 +499,29 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       <div className="vhint">[휠: 확대/축소 · 드래그: 영역선택 · Space/손: 이동 · C·Z·H: 모드 · R: 90° · Del: 삭제]</div>
 
       <div className="vtools">
-        <button className="btn sm" onClick={addUnit}>＋ 실내기</button>
         <label className="vtoggle"><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> 격자{gridLabel ? ` (${gridLabel})` : ''}</label>
+      </div>
+      {/* 도면 영역 상단 가운데: 배치 액션 — ＋실내기(실내기 배치 단계), ＋실외기 배치(실외기 조합 단계) */}
+      <div className="vtools vtools-center">
+        <button
+          className="btn sm"
+          onClick={() => setAddMenuOpen((o) => !o)}
+          disabled={!canAddUnit}
+          title={canAddUnit ? '유형을 선택해 실내기를 추가' : '실내기 배치 단계에서 AI 실내기 배치 완료 후 추가할 수 있습니다'}
+        >＋ 실내기</button>
+        {addMenuOpen && (
+          <div className="addmenu">
+            {IDU_KINDS.map((k) => (
+              <button key={k} onClick={() => { addUnit(k); setAddMenuOpen(false) }}>{k}</button>
+            ))}
+          </div>
+        )}
+        <button
+          className="btn sm"
+          onClick={placeOutdoorsFn}
+          disabled={!canPlaceOutdoors}
+          title={canPlaceOutdoors ? '조합 그룹별 실외기를 도면 하단(건물 외부)에 배치' : '실외기 조합 단계에서 배치할 수 있습니다'}
+        >＋ 실외기 배치</button>
       </div>
 
       <svg
@@ -479,18 +550,26 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         </g>
 
         {/* 실(존) 레이어 */}
-        <g style={{ pointerEvents: isZone ? 'auto' : 'none', opacity: isZone ? 1 : 0.85 }}>
-          {zones.map((z) => (
-            <ZoneRect key={z.id} z={z} editing={isZone && selectedIds.includes(z.id)} selected={selectedIds.includes(z.id)} onDown={onZoneDown} onCornerDown={onCornerDown} />
-          ))}
+        <g style={{ pointerEvents: isZone ? 'auto' : 'none', opacity: isZone ? 1 : 0.85, display: layerOn('zone') ? undefined : 'none' }}>
+          {zones.map((z) => {
+            // 면적(㎡): 실도면이면 존 기하로 실시간 계산(리사이즈 반영), 목업이면 설계 면적.
+            const a = zoneAreaM2(z, mmPerUnit, rooms[z.id]?.area)
+            return (
+              <ZoneRect
+                key={z.id} z={z} editing={isZone && selectedIds.includes(z.id)} selected={selectedIds.includes(z.id)}
+                areaText={a != null ? `${a.toFixed(1)}㎡` : undefined}
+                onDown={onZoneDown} onCornerDown={onCornerDown}
+              />
+            )
+          })}
         </g>
 
         {/* 실내기(에어컨) 레이어 */}
-        <g style={{ pointerEvents: isCassette ? 'auto' : 'none', opacity: isCassette ? 1 : 0.5 }}>
+        <g style={{ pointerEvents: isCassette ? 'auto' : 'none', opacity: isCassette ? 1 : 0.5, display: layerOn('indoor') ? undefined : 'none' }}>
           {symbols.map((s) => (
             <ACUnit
               key={s.id} sym={s} selected={selUnits.has(s.id)} hovered={hoveredId === s.id} rotating={rotatingId === s.id}
-              model={indoorInfo?.[s.id]?.model} kind={indoorInfo?.[s.id]?.kind}
+              model={indoorInfo?.[s.id]?.model} kind={indoorInfo?.[s.id]?.kind ?? s.kind}
               onBodyDown={onUnitDown} onRotateDown={onRotateDown}
               onEnter={setHoveredId} onLeave={(id) => setHoveredId((h) => (h === id ? null : h))}
             />
@@ -498,7 +577,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         </g>
 
         {/* 실외기 레이어 */}
-        <g style={{ pointerEvents: isOutdoor ? 'auto' : 'none', opacity: isOutdoor ? 1 : 0.55 }}>
+        <g style={{ pointerEvents: isOutdoor ? 'auto' : 'none', opacity: isOutdoor ? 1 : 0.55, display: layerOn('outdoor') ? undefined : 'none' }}>
           {outdoors.map((u) => {
             const g = outdoorGroups?.find((x) => x.key === u.id)
             return (
@@ -536,6 +615,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         )}
       </div>
       {toolMenuOpen && <div className="figmenu-overlay" onClick={() => setToolMenuOpen(false)} />}
+      {addMenuOpen && <div className="figmenu-overlay" onClick={() => setAddMenuOpen(false)} />}
 
       {/* 우상단 플로팅 힌트 위젯 */}
       <div className={`vwidget${hintOpen ? '' : ' collapsed'}`}>
@@ -544,11 +624,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
           <button className="vw-btn" onClick={() => setHintOpen((o) => !o)} title={hintOpen ? '접기' : '펼치기'}>{hintOpen ? '−' : '+'}</button>
         </div>
         <div className="vw-body">
-          <div className="vw-row"><kbd>C</kbd> 에어컨 · <kbd>Z</kbd> 존 · <kbd>O</kbd> 실외기 · <kbd>H</kbd> 손</div>
-          <div className="vw-row"><kbd>휠</kbd> 확대/축소 · <kbd>0</kbd> 맞춤</div>
-          <div className="vw-row"><kbd>드래그</kbd> 이동/영역선택 · <kbd>Shift</kbd> 추가</div>
-          <div className="vw-row"><kbd>R</kbd> 90° 회전 · <kbd>⟳</kbd> 핸들 15°</div>
-          <div className="vw-row"><kbd>Del</kbd> 실내기 삭제 · <kbd>Esc</kbd> 해제</div>
+          {SHORTCUTS.map((s) => (
+            <div className="vw-row" key={s.key}>
+              <kbd>{s.key}</kbd>
+              <span>{s.desc}</span>
+            </div>
+          ))}
         </div>
       </div>
 

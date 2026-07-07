@@ -20,7 +20,13 @@ export default function ACUnit({ sym, selected, hovered, rotating, model, kind, 
   const showHandle = hovered || rotating
   const topLabel = kind ? `${kind} · ${sym.id}` : sym.id
   return (
-    <g transform={`translate(${sym.x}, ${sym.y})`} onMouseEnter={() => onEnter(sym.id)} onMouseLeave={() => onLeave(sym.id)}>
+    <g
+      transform={`translate(${sym.x}, ${sym.y})`}
+      data-unit-id={sym.id}
+      data-selected={selected ? 'true' : undefined}
+      onMouseEnter={() => onEnter(sym.id)}
+      onMouseLeave={() => onLeave(sym.id)}
+    >
       <g transform={`rotate(${sym.rot})`} onMouseDown={(e) => onBodyDown(e, sym.id)} style={{ cursor: 'move' }}>
         {selected && (
           <rect x={-44} y={-26} width={88} height={70} rx={7} fill="rgba(34,34,34,0.05)" stroke="#222222" strokeWidth={1.2} strokeDasharray="5 4" />

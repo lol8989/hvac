@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pointInZone, zoneOfPoint, roomIdsForUnits } from './geometry'
+import { pointInZone, zoneOfPoint, roomIdsForUnits, zoneAreaM2 } from './geometry'
 import type { ZoneBox, UnitSym } from './geometry'
 
 const z = (id: string, x: number, y: number, w: number, h: number): ZoneBox => ({ id, name: id, x, y, w, h })
@@ -37,10 +37,14 @@ describe('zoneOfPoint', () => {
   })
 })
 
-describe('roomIdsForUnits (선택 심볼 → 담당 실 id, 정체성 우선)', () => {
-  it('심볼 식별자가 실 id와 같으면 위치와 무관하게 그 실을 반환한다', () => {
-    // 식별자는 AC_001인데 좌표는 AC_002 영역 → 정체성이 이긴다
+describe('roomIdsForUnits (선택 심볼 → 담당 실 id, 위치 우선)', () => {
+  it('바인딩 심볼이 다른 실 위로 옮겨지면 그 위치의 실을 반환한다 (드래그 이동 하이라이팅)', () => {
+    // 식별자는 AC_001인데 좌표는 AC_002 영역 → 위치가 이긴다
     const syms = [{ id: 'AC_001', x: 150, y: 50, rot: 0 }]
+    expect(roomIdsForUnits(syms, ZONES)).toEqual(['AC_002'])
+  })
+  it('바인딩 심볼이 어느 존 밖이면 정체성(자기 실)으로 폴백한다', () => {
+    const syms = [{ id: 'AC_001', x: 999, y: 999, rot: 0 }]
     expect(roomIdsForUnits(syms, ZONES)).toEqual(['AC_001'])
   })
   it('식별자가 실과 무관한 자유 심볼은 위치로 역참조한다', () => {
@@ -57,5 +61,18 @@ describe('roomIdsForUnits (선택 심볼 → 담당 실 id, 정체성 우선)', 
   })
   it('선택 심볼이 모두 실과 무관/밖이면 빈 배열', () => {
     expect(roomIdsForUnits([u('IDU_FREE', 999, 999)], ZONES)).toEqual([])
+  })
+})
+
+describe('zoneAreaM2 (존 면적 ㎡ 계산)', () => {
+  it('mmPerUnit이 있으면 사각형 기하로 면적을 계산한다 (리사이즈 반영)', () => {
+    // 1단위 = 100mm → 50×40단위 = 5m×4m = 20㎡
+    expect(zoneAreaM2({ w: 50, h: 40 }, 100)).toBeCloseTo(20)
+  })
+  it('mmPerUnit이 없으면(목업 좌표계) 설계 면적 폴백을 반환한다', () => {
+    expect(zoneAreaM2({ w: 250, h: 150 }, undefined, 31.89)).toBe(31.89)
+  })
+  it('mmPerUnit도 폴백도 없으면 null을 반환한다', () => {
+    expect(zoneAreaM2({ w: 250, h: 150 })).toBeNull()
   })
 })

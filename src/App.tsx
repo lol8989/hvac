@@ -1,9 +1,13 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ROOMS, MODELS, groupOfRoom, recommendedIndoorIdx, outdoorIdxByModel, resolveIndoorCard, indoorCoolByModel } from './data'
+import { ROOMS, MODELS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, recommendedIndoorIdx, outdoorIdxByModel, resolveIndoorCard, indoorCoolByModel } from './data'
 import ReportStrip from './components/ReportStrip'
-import Viewer, { type ViewerHandle, type TileManifest } from './components/Viewer'
+import Viewer, { LAYER_OPTIONS, type LayerFilter, type ViewerHandle, type TileManifest } from './components/Viewer'
+import { buildScheduleRows, toCsv } from './presentation/generation/schedule'
+import { buildDrawingSvg } from './presentation/generation/drawingSvg'
+import { downloadText, CSV_BOM } from './presentation/download'
 import ModelPanel from './components/ModelPanel'
 import MappingModal from './components/MappingModal'
+import ConfirmModal from './components/ConfirmModal'
 import Stepper from './components/Stepper'
 import StepOverlay from './components/steps/StepOverlay'
 import { STEPS, stepDef, stepIndex, prevStep, isFirstStep } from './presentation/generation/steps'
@@ -70,6 +74,8 @@ export default function App() {
     localStorage.setItem('poc.panel.w', String(panelW))
   }, [panelW])
   const [mapOpen, setMapOpen] = useState(false)
+  const [layerFilter, setLayerFilter] = useState<LayerFilter>('all') // 툴바 레이어 셀렉트 → 뷰어 표시 필터
+  const [confirmMsg, setConfirmMsg] = useState<string | null>(null) // 모델 적용 확인 팝업 메시지(null=닫힘)
   const [toast, setToast] = useState('')
   const viewerRef = useRef<ViewerHandle>(null) // 'AI 실내기 배치' 명령용
 
@@ -225,6 +231,24 @@ export default function App() {
   // 장비 카드 선택(현재 탭 기준). 실 선택이 바뀌기 전까지 파생값을 덮어쓴다.
   const selectModel = (idx: number) => setPick((p) => ({ ...p, [tab]: idx }))
 
+  // '모델 적용' 클릭 → 유효성 검사 후 확인 팝업을 띄운다(일괄 적용 전 주의).
+  // 팝업의 확인 = applyModel 실행, 취소 = 아무 이벤트 없이 닫힘.
+  const requestApply = () => {
+    if (tab === 'in') {
+      const m = MODELS.in[effIn]
+      if (!m) return
+      if (selRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
+      const scope = selRooms.length > 1 ? `${primary} 외 ${selRooms.length - 1}실` : primary
+      setConfirmMsg(`실내기 ${m.mn}을(를) 선택한 ${scope}에 일괄 적용합니다. 계속하시겠습니까?`)
+      return
+    }
+    const m = MODELS.out[effOut]
+    if (!m) return
+    const g = primary ? groupOfRoom(groups, primary) : null
+    if (!g) { flash('선택한 실이 실외기 그룹에 배정되어 있지 않습니다'); return }
+    setConfirmMsg(`${g.label}의 실외기 모델을 ${m.mn}(으)로 교체합니다. 계속하시겠습니까?`)
+  }
+
   // 선택 모델을 선택 실에 적용(쓰기).
   //  · 실내기: 선택된 모든 실에 모델을 배정(indoorByRoom) → 목록/헤더에 반영
   //  · 실외기: 대표 실이 속한 그룹의 실외기를 실제 교체(도메인 유즈케이스 재사용)
@@ -263,6 +287,24 @@ export default function App() {
     flash('✦ AI가 실 ' + Object.keys(ROOMS).length + '곳에 실내기를 자동 배치·선정했습니다 (부하 근사 모델)')
   }
 
+  // 산출물 다운로드(목업 데이터 기반 생성): 장비일람표 CSV(Excel 호환) · 독립 SVG 도면 · 현재 화면 캡처.
+  const downloadSchedule = () => {
+    const rows = buildScheduleRows(groups, indoorByRoom, ROOMS, MODELS.in)
+    if (!rows.length) { flash('다운로드할 결과가 없습니다 — 실내기 배치·조합을 먼저 진행하세요'); return }
+    downloadText('장비일람표.csv', CSV_BOM + toCsv(rows), 'text/csv;charset=utf-8')
+    flash(`장비일람표.csv를 생성했습니다 (${rows.length}행)`)
+  }
+  const downloadDrawing = () => {
+    downloadText('도면.svg', buildDrawingSvg(ROOMS, indoorByRoom, groups), 'image/svg+xml')
+    flash('도면.svg를 생성했습니다')
+  }
+  const captureView = () => {
+    const svg = viewerRef.current?.captureSvg()
+    if (!svg) { flash('캡처할 도면 화면이 없습니다'); return }
+    downloadText('도면_캡처.svg', svg, 'image/svg+xml')
+    flash('현재 도면 화면을 캡처했습니다 (SVG)')
+  }
+
   // 단계 전환 핸들러(파이프라인 진행). 목업 단계는 플래그만 세우고 다음으로.
   const placed = Object.keys(indoorByRoom).length > 0
   const doDetect = () => { setStep('place'); flash(`AI가 도면에서 실 ${Object.keys(ROOMS).length}곳을 검출했습니다`) }
@@ -284,13 +326,13 @@ export default function App() {
         <div className="l">
           <span className="logo">LG 전자 HVAC 포털</span>
           <nav>
-            <a href="#">대시보드</a>
-            <a href="#">검도</a>
-            <a href="#" className="on">생성</a>
+            {GNB_MENUS.map((m) => (
+              <a key={m} href="#" className={m === ACTIVE_MENU ? 'on' : undefined}>{m}</a>
+            ))}
           </nav>
         </div>
         <div className="r">
-          <span>영업1팀 / 홍길동 (hong@lg.com)</span>
+          <span>{CURRENT_USER.team} / {CURRENT_USER.name} ({CURRENT_USER.email})</span>
           <span>마이페이지</span>
           <span>로그아웃</span>
         </div>
@@ -317,7 +359,6 @@ export default function App() {
             {step === 'place' && placed && <button className="btn sm primary" onClick={() => setStep('adjust')}>미세조정 →</button>}
             {step === 'adjust' && <button className="btn sm primary" onClick={doAdjustDone}>미세조정 완료 →</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => setMapOpen(true)}>실외기 조합 매핑</button>}
-            {step === 'combine' && <button className="btn sm" onClick={() => viewerRef.current?.placeOutdoors()}>실외기 배치</button>}
             {step === 'combine' && <button className="btn sm primary" onClick={doCombineNext} disabled={pool.length > 0}>산출물로 →</button>}
             {step === 'output' && <button className="btn sm primary" onClick={doGenerate}>{generated ? '재생성' : '장비일람표·도면 생성'}</button>}
           </>
@@ -333,8 +374,8 @@ export default function App() {
         >
           {generated && (
             <>
-              <button className="btn">⭳ 장비일람표.xlsx</button>
-              <button className="btn">⭳ 도면.zip</button>
+              <button className="btn" onClick={downloadSchedule}>⭳ 장비일람표.csv</button>
+              <button className="btn" onClick={downloadDrawing}>⭳ 도면.svg</button>
             </>
           )}
         </StepOverlay>
@@ -344,15 +385,14 @@ export default function App() {
         <div className="stage">
           <div className="main-col">
             <div className="toolbar">
-              <select className="field">
-                <option>레이어: 전체</option>
-                <option>실내기</option>
-                <option>실외기</option>
-                <option>실 경계</option>
+              <select className="field" value={layerFilter} onChange={(e) => setLayerFilter(e.target.value as LayerFilter)}>
+                {LAYER_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
               </select>
               <div className="tb-actions">
-                <button className="btn sm">⭳ 결과 다운로드</button>
-                <button className="btn sm">◉ 캡처</button>
+                <button className="btn sm" onClick={downloadSchedule}>⭳ 결과 다운로드</button>
+                <button className="btn sm" onClick={captureView}>◉ 캡처</button>
               </div>
             </div>
             <Viewer
@@ -368,6 +408,9 @@ export default function App() {
               indoorInfo={indoorInfo}
               tiles={tiles}
               tileBase="/tiles"
+              layerFilter={layerFilter}
+              canAddUnit={step === 'place' && placed}
+              canPlaceOutdoors={step === 'combine'}
               outdoorGroups={groups.filter((g) => g.items.length).map((g) => ({ key: g.key, label: g.label, model: g.model }))}
             />
           </div>
@@ -387,7 +430,7 @@ export default function App() {
               onFocusRoom={focusRoom}
               selModelIdx={tab === 'in' ? effIn : effOut}
               onSelectModel={selectModel}
-              onApply={applyModel}
+              onApply={requestApply}
               indoorByRoom={indoorByRoom}
               aiRooms={aiRooms}
             />
@@ -396,6 +439,16 @@ export default function App() {
       )}
 
       {toast && <div className="toast show">{toast}</div>}
+
+      {confirmMsg && (
+        <ConfirmModal
+          title="모델 적용 확인"
+          message={confirmMsg}
+          confirmLabel="확인"
+          onConfirm={() => { setConfirmMsg(null); applyModel() }}
+          onCancel={() => setConfirmMsg(null)}
+        />
+      )}
 
       {mapOpen && (
         <MappingModal

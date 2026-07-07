@@ -5,13 +5,14 @@ interface ZoneRectProps {
   z: ZoneBox
   editing: boolean
   selected: boolean
+  areaText?: string // 면적 표기(예: '31.9㎡') — 이름 아래 보조 라벨
   onDown: (e: React.MouseEvent, id: string) => void
   onCornerDown: (e: React.MouseEvent, id: string, corner: Corner) => void
 }
 
 const HS = 9 // 핸들 크기
 
-export default function ZoneRect({ z, editing, selected, onDown, onCornerDown }: ZoneRectProps) {
+export default function ZoneRect({ z, editing, selected, areaText, onDown, onCornerDown }: ZoneRectProps) {
   const corners: [Corner, number, number, string][] = editing
     ? [
         ['tl', z.x, z.y, 'nwse-resize'],
@@ -33,6 +34,11 @@ export default function ZoneRect({ z, editing, selected, onDown, onCornerDown }:
         <text x={z.x + 10} y={z.y + 18} fontSize={12} fontWeight="700" fill={selected ? '#222222' : '#777777'} style={{ pointerEvents: 'none' }}>
           {z.name}
         </text>
+        {areaText && (
+          <text x={z.x + 10} y={z.y + 32} fontSize={10} fill={selected ? '#444444' : '#999999'} style={{ pointerEvents: 'none' }}>
+            {areaText}
+          </text>
+        )}
       </g>
       {corners.map(([cn, cx, cy, cur]) => (
         <rect

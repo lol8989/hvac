@@ -7,12 +7,14 @@ export const ROT_SENS = 0.8 // 회전 드래그 감도
 export const snap = (v: number): number => Math.round(v / GRID) * GRID
 export const norm = (deg: number): number => ((Math.round(deg) % 360) + 360) % 360
 
-// 실내기(에어컨) 심볼: 좌표 + 회전.
+// 실내기(에어컨) 심볼: 좌표 + 회전. kind는 수동 추가 시 선택한 유형(벽걸이형/2WAY/4WAY) —
+// 실 바인딩 심볼은 indoorInfo(배정 모델)의 유형이 우선한다.
 export interface UnitSym {
   id: string
   x: number
   y: number
   rot: number
+  kind?: string
 }
 
 // 실(존): 이름 + 사각형 bounds (모서리 리사이즈 가능).
@@ -27,6 +29,13 @@ export interface ZoneBox {
 
 export type Corner = 'tl' | 'tr' | 'bl' | 'br'
 
+// 존 사각형의 면적(㎡). mmPerUnit(정규화 1단위=실 mm)이 있으면 기하로 계산해 리사이즈를 반영하고,
+// 없으면(목업 좌표계는 실 치수가 아님) 설계 면적 폴백을 쓴다. 둘 다 없으면 null.
+export const zoneAreaM2 = (z: { w: number; h: number }, mmPerUnit?: number, fallback?: number): number | null => {
+  if (mmPerUnit) return (z.w * mmPerUnit * (z.h * mmPerUnit)) / 1e6
+  return fallback ?? null
+}
+
 // AABB 교차 여부(마퀴 히트 테스트용).
 export const rectsIntersect = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean =>
   !(b.x > a.x + a.w || b.x + b.w < a.x || b.y > a.y + a.h || b.y + b.h < a.y)
@@ -39,20 +48,17 @@ export const pointInZone = (px: number, py: number, z: ZoneBox): boolean =>
 export const zoneOfPoint = (px: number, py: number, zones: ZoneBox[]): ZoneBox | null =>
   zones.find((z) => pointInZone(px, py, z)) ?? null
 
-// 선택된 실내기 심볼 → 담당 실 id 집합(중복 제거).
-// 심볼 식별자가 실 id와 같으면 그대로 사용(정체성: 실내기 = 그 실의 장비),
-// 식별자가 실과 무관한 자유 추가 심볼만 위치로 역참조. 어느 실에도 없으면 무시.
+// 선택된 실내기 심볼 → 담당 실 id 집합(중복 제거). 위치 우선:
+// 심볼이 놓인 존을 반환해 다른 실로 드래그하면 하이라이팅이 따라간다.
+// 어느 존 밖이면 바인딩 심볼(식별자=실 id)만 정체성으로 폴백, 자유 심볼은 무시.
 // C(에어컨) 모드에서 선택된 심볼을 패널의 실 선택으로 올리는 데 사용.
 export const roomIdsForUnits = (syms: UnitSym[], zones: ZoneBox[]): string[] => {
   const zoneIds = new Set(zones.map((z) => z.id))
   const ids = new Set<string>()
   for (const s of syms) {
-    if (zoneIds.has(s.id)) {
-      ids.add(s.id)
-    } else {
-      const z = zoneOfPoint(s.x, s.y, zones)
-      if (z) ids.add(z.id)
-    }
+    const z = zoneOfPoint(s.x, s.y, zones)
+    if (z) ids.add(z.id)
+    else if (zoneIds.has(s.id)) ids.add(s.id)
   }
   return Array.from(ids)
 }

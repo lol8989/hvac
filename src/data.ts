@@ -14,6 +14,16 @@ export interface Room {
   h: number
 }
 
+// 로그인 사용자·GNB 메뉴 목업 (실서비스: 인증/세션 API에서 로드)
+export interface CurrentUser {
+  team: string
+  name: string
+  email: string
+}
+export const CURRENT_USER: CurrentUser = { team: '영업1팀', name: '홍길동', email: 'hong@lg.com' }
+export const GNB_MENUS: readonly string[] = ['대시보드', '검도', '생성']
+export const ACTIVE_MENU = '생성'
+
 export const ROOMS: Record<string, Room> = {
   AC_001: { name: '거실', area: 31.89, type: '4WAY', cool: 11.2, sys: 'EHP', x: 24, y: 24, w: 250, h: 150 },
   AC_002: { name: '침실1', area: 18.5, type: '1WAY', cool: 5.6, sys: 'EHP', x: 292, y: 24, w: 180, h: 110 },

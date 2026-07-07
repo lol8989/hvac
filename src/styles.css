@@ -124,6 +124,8 @@ button{font-family:inherit;cursor:pointer;}
 
 .overlay{position:fixed;inset:0;background:rgba(20,20,20,.55);display:flex;align-items:center;justify-content:center;z-index:100;}
 .modal{width:min(1180px,94vw);height:min(760px,90vh);background:#fff;border-radius:12px;display:flex;flex-direction:column;overflow:hidden;}
+.modal.confirm{width:min(420px,92vw);height:auto;}
+.confirm-body{padding:20px 18px;font-size:13px;line-height:1.7;color:#222;}
 .m-h{background:var(--dark);color:#fff;padding:13px 18px;display:flex;justify-content:space-between;align-items:center;}
 .m-h .mt{font-weight:700;font-size:15px;}
 .m-h .x{border:none;background:transparent;color:#fff;font-size:18px;}
@@ -166,8 +168,9 @@ button{font-family:inherit;cursor:pointer;}
 .vw-btn{border:1px solid var(--line);background:#fff;color:var(--muted);width:22px;height:22px;border-radius:5px;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;font-weight:700;padding:0;flex-shrink:0;}
 .vw-btn:hover{background:var(--hover);color:var(--ink);}
 .vwidget.collapsed .vw-body{display:none;}
-.vw-body{padding:2px 12px 11px;display:flex;flex-direction:column;gap:6px;}
-.vw-row{font-size:11.5px;color:var(--ink2);line-height:1.85;}
+.vw-body{padding:2px 12px 11px;display:flex;flex-direction:column;gap:4px;}
+.vw-row{font-size:11.5px;color:var(--ink2);line-height:1.6;display:flex;align-items:center;gap:8px;}
+.vw-row kbd{min-width:38px;flex:none;}
 .vw-row kbd{display:inline-block;vertical-align:middle;background:#F5F5F5;border:1px solid #CCC;border-bottom-width:2px;border-radius:4px;padding:0 5px;margin:0 1px;font-size:10px;font-family:inherit;font-weight:600;color:#333;text-align:center;white-space:nowrap;}
 .zoom-pct{font-size:10px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums;}
 
@@ -189,6 +192,13 @@ button{font-family:inherit;cursor:pointer;}
 /* 뷰어 좌상단 도구(실내기 추가·스냅) */
 .vtools{position:absolute;top:12px;left:12px;z-index:20;display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:calc(100% - 24px);}
 .vtools .btn{background:rgba(255,255,255,0.97);}
+.vtools .btn:disabled{opacity:.45;cursor:not-allowed;}
+/* 배치 액션 버튼: 도면 영역 상단 가운데 정렬 (유형 메뉴가 클릭 차단 오버레이 z29 위에 오도록 z30) */
+.vtools-center{left:50%;transform:translateX(-50%);max-width:none;z-index:30;}
+/* ＋실내기 유형 선택 드롭다운 */
+.addmenu{position:absolute;top:calc(100% + 6px);left:0;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.16);padding:4px;display:flex;flex-direction:column;gap:2px;min-width:110px;}
+.addmenu button{border:none;background:transparent;text-align:left;padding:7px 10px;font-size:12px;font-family:inherit;color:#222;border-radius:6px;cursor:pointer;}
+.addmenu button:hover{background:#F2F2F2;}
 .vlayers{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.97);border:1px solid var(--line);border-radius:6px;padding:4px 8px;flex-wrap:wrap;}
 .vlayers-h{font-size:10px;font-weight:700;color:#888;margin-right:2px;}
 .vlayers .vtoggle{border:none;background:transparent;padding:2px 3px;}
