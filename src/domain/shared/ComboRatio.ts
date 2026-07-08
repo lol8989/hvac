@@ -2,8 +2,13 @@
 // 불변 + 자기검증. 조합비 = Σ(연결 실내기 냉방용량 kW) / 실외기 용량 kW.
 // Clean Architecture: 프레임워크(React/DB)에 의존하지 않는 순수 도메인.
 
-export const COMBO_MIN = 0.5
-export const COMBO_MAX = 1.3
+import { ComboRange } from './ComboRange'
+
+// 하위호환 상수 — 기본 범위는 ComboRange.DEFAULT가 SSOT.
+export const COMBO_MIN = ComboRange.DEFAULT.min
+export const COMBO_MAX = ComboRange.DEFAULT.max
+
+export type ComboJudgement = 'UNDERLOADED' | 'OK' | 'OVERLOADED'
 
 export class ComboRatio {
   readonly indoorTotalKw: number
@@ -24,15 +29,22 @@ export class ComboRatio {
   }
 
   get isWithinRange(): boolean {
-    return this.value >= COMBO_MIN && this.value <= COMBO_MAX
+    return this.judgeWith(ComboRange.DEFAULT) === 'OK'
   }
 
   get isOverloaded(): boolean {
-    return this.value > COMBO_MAX
+    return this.judgeWith(ComboRange.DEFAULT) === 'OVERLOADED'
   }
 
   get isUnderloaded(): boolean {
-    return this.value < COMBO_MIN
+    return this.judgeWith(ComboRange.DEFAULT) === 'UNDERLOADED'
+  }
+
+  // 제품군별 허용범위(ComboRange)로 3분기 판정.
+  judgeWith(range: ComboRange): ComboJudgement {
+    if (this.value < range.min) return 'UNDERLOADED'
+    if (this.value > range.max) return 'OVERLOADED'
+    return 'OK'
   }
 
   toFixed(digits = 2): string {

@@ -3,6 +3,7 @@ import { OutdoorUnit } from './OutdoorUnit'
 import { Capacity } from '../shared/Capacity'
 import { EnergySource } from '../shared/EnergySource'
 import { ModelCode } from '../shared/ModelCode'
+import { ComboRange } from '../shared/ComboRange'
 
 describe('OutdoorUnit (실외기 값객체)', () => {
   const make = (over = {}) =>
@@ -29,6 +30,25 @@ describe('OutdoorUnit (실외기 값객체)', () => {
     const odu = make({ maxConnections: undefined })
     expect(Number.isInteger(odu.maxConnections)).toBe(true)
     expect(odu.maxConnections).toBeGreaterThan(0)
+  })
+
+  describe('comboRange — 제품군별 조합비 허용범위', () => {
+    it('comboRange 미지정 시 기본값 ComboRange.DEFAULT(0.5~1.3)를 가진다', () => {
+      const odu = make()
+      expect(odu.comboRange.equals(ComboRange.DEFAULT)).toBe(true)
+    })
+
+    it('comboRange를 지정하면 그대로 노출한다', () => {
+      const odu = make({ comboRange: new ComboRange(0.3, 1.0) })
+      expect(odu.comboRange.min).toBe(0.3)
+      expect(odu.comboRange.max).toBe(1.0)
+    })
+
+    it('equals: comboRange가 다르면 false, 같으면 true', () => {
+      expect(make().equals(make({ comboRange: new ComboRange(0.3, 1.0) }))).toBe(false)
+      expect(make({ comboRange: new ComboRange(0.3, 1.0) }).equals(make({ comboRange: new ComboRange(0.3, 1.0) }))).toBe(true)
+      expect(make().equals(make({ comboRange: new ComboRange(0.5, 1.3) }))).toBe(true) // DEFAULT와 동값
+    })
   })
 
   // ─── 적대적 QA ───

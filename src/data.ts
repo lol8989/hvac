@@ -1,9 +1,12 @@
 // 목업 데이터 (장비일람표 기반). 실제 서비스에서는 장비마스터 API에서 로드.
 
 import type { EnergySourceCode } from './domain/shared/EnergySource'
+import { DEFAULT_UNIT_LOADS } from './domain/shared/UnitLoad'
 
 export interface Room {
   name: string
+  floor: string // 층 (예: '지상1층')
+  usage: string // 용도 (단위부하 조회 키 — DEFAULT_UNIT_LOADS)
   area: number
   type: string
   cool: number
@@ -13,6 +16,10 @@ export interface Room {
   w: number
   h: number
 }
+
+// 부하 = 면적 × 용도별 단위부하 × 1.163 (장비선정표 엑셀 산식). kW, 0.1 단위 반올림.
+const roomCoolKw = (areaM2: number, usage: string): number =>
+  Math.round((areaM2 * DEFAULT_UNIT_LOADS[usage].cool * 1.163) / 100) / 10
 
 // 로그인 사용자·GNB 메뉴 목업 (실서비스: 인증/세션 API에서 로드)
 export interface CurrentUser {
@@ -24,13 +31,14 @@ export const CURRENT_USER: CurrentUser = { team: '영업1팀', name: '홍길동'
 export const GNB_MENUS: readonly string[] = ['대시보드', '검도', '생성']
 export const ACTIVE_MENU = '생성'
 
+// cool은 하드코딩이 아닌 산식 파생값 (거실 6.3 / 침실1 3.2 / 회의실 5.6 / 사무실 8.8 / 로비 11.5 / 탕비실 2.1)
 export const ROOMS: Record<string, Room> = {
-  AC_001: { name: '거실', area: 31.89, type: '4WAY', cool: 11.2, sys: 'EHP', x: 24, y: 24, w: 250, h: 150 },
-  AC_002: { name: '침실1', area: 18.5, type: '1WAY', cool: 5.6, sys: 'EHP', x: 292, y: 24, w: 180, h: 110 },
-  AC_003: { name: '회의실', area: 28.5, type: '4WAY', cool: 9.0, sys: 'EHP', x: 490, y: 24, w: 206, h: 150 },
-  AC_004: { name: '사무실', area: 42.0, type: '4WAY', cool: 14.0, sys: 'EHP', x: 24, y: 196, w: 250, h: 150 },
-  AC_005: { name: '로비', area: 55.0, type: '4WAY', cool: 22.4, sys: 'EHP', x: 292, y: 152, w: 180, h: 194 },
-  AC_006: { name: '탕비실', area: 12.0, type: '1WAY', cool: 4.5, sys: 'EHP', x: 490, y: 196, w: 206, h: 150 },
+  AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 31.89, type: '4WAY', cool: roomCoolKw(31.89, '거실'), sys: 'EHP', x: 24, y: 24, w: 250, h: 150 },
+  AC_002: { name: '침실1', floor: '지상1층', usage: '침실', area: 18.5, type: '1WAY', cool: roomCoolKw(18.5, '침실'), sys: 'EHP', x: 292, y: 24, w: 180, h: 110 },
+  AC_003: { name: '회의실', floor: '지상1층', usage: '회의실', area: 28.5, type: '4WAY', cool: roomCoolKw(28.5, '회의실'), sys: 'EHP', x: 490, y: 24, w: 206, h: 150 },
+  AC_004: { name: '사무실', floor: '지상1층', usage: '사무실', area: 42.0, type: '4WAY', cool: roomCoolKw(42.0, '사무실'), sys: 'EHP', x: 24, y: 196, w: 250, h: 150 },
+  AC_005: { name: '로비', floor: '지상1층', usage: '로비', area: 55.0, type: '4WAY', cool: roomCoolKw(55.0, '로비'), sys: 'EHP', x: 292, y: 152, w: 180, h: 194 },
+  AC_006: { name: '탕비실', floor: '지상1층', usage: '탕비실', area: 12.0, type: '1WAY', cool: roomCoolKw(12.0, '탕비실'), sys: 'EHP', x: 490, y: 196, w: 206, h: 150 },
 }
 
 // 실외기 스펙 카탈로그 항목. 장비마스터(Equipment Master)가 게시(PUBLISHED)하는
@@ -43,7 +51,13 @@ export interface OduCatalogEntry {
   cat: string
   sys: EnergySourceCode
   cool: number
+  heatKw: number | null // 난방용량(kW). 냉방전용은 null. ⚠️ 냉방 ×1.12 근사 목업(실데이터 교체 예정)
+  hp: number // 마력(HP) — 장비번호(장비일람표 HP 표기)
   maxConn: number
+  // comboMin/Max: 제품군별 조합비 정책값 자리 — 실정책 확정 시 기입(예: DOAS 하한 완화).
+  // 미지정 시 기본 0.5~1.3 적용. 근거: 표준 260415 엑셀 GHP 1.106 / DOAS 0.32
+  comboMin?: number
+  comboMax?: number
   priceKrw: number // VAT별도 소비자가(정수 원)
   priceTypeCode: string
   priceWithVatKrw: number | null // 미상은 null
@@ -63,9 +77,10 @@ export interface InitialGroup {
   items: string[]
 }
 
+// 재튜닝: 부하 파생값화(현실화)로 하락 → 설계부하 기준 조합비 ODU1 ≈ 0.63, ODU2 ≈ 0.58
 export const INITIAL_GROUPS: InitialGroup[] = [
-  { key: 'ODU1', label: '실외기-1', model: 'RPUW12BX9M', items: ['AC_001', 'AC_003', 'AC_006'] },
-  { key: 'ODU2', label: '실외기-2', model: 'RPUW20BX9P', items: ['AC_004', 'AC_005'] },
+  { key: 'ODU1', label: '실외기-1', model: 'RPUW08BX9E', items: ['AC_001', 'AC_003', 'AC_006'] },
+  { key: 'ODU2', label: '실외기-2', model: 'RPUW12BX9M', items: ['AC_004', 'AC_005'] },
   { key: 'ODU3', label: '실외기-3', model: 'GPUW280C2S', items: [] },
 ]
 
@@ -73,14 +88,15 @@ export const INITIAL_POOL: string[] = ['AC_002']
 
 // 장비마스터 PUBLISHED 실외기 스펙 (SSOT). 단가/등급/COP는 POC 플레이스홀더(미확정).
 const D = '2026-04-20' // effectiveStartDate 공통(목업)
+// heatKw = 냉방 ×1.12 근사 목업(냉방전용은 null). comboMin/Max 전부 미지정(기본 0.5~1.3).
 export const ODU_CATALOG: OduCatalogEntry[] = [
-  { model: 'RPUW08BX9E', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, maxConn: 13, priceKrw: 2980000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 3278000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 2, copCooling: 5.1, copHeating: 4.3 },
-  { model: 'RPUW12BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, maxConn: 20, priceKrw: 4120000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 4532000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.2 },
-  { model: 'RPUW16BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 45.0, maxConn: 26, priceKrw: 5240000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 5764000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.8, copHeating: 4.05 },
-  { model: 'RPUW20BX9P', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0, maxConn: 33, priceKrw: 6350000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 6985000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.1 },
-  { model: 'RPUQ141X9S', cat: '냉방전용', sys: 'EHP', cool: 39.2, maxConn: 23, priceKrw: 3760000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: null, copCooling: 4.0, copHeating: null },
-  { model: 'GPUW280C2S', cat: 'GHP', sys: 'GHP', cool: 28.0, maxConn: 16, priceKrw: 8900000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 9790000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.55, copHeating: 1.45 },
-  { model: 'GPUW450C2S', cat: 'GHP', sys: 'GHP', cool: 45.0, maxConn: 26, priceKrw: 12400000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.5, copHeating: 1.4 },
+  { model: 'RPUW08BX9E', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, heatKw: 25.1, hp: 8, maxConn: 13, priceKrw: 2980000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 3278000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 2, copCooling: 5.1, copHeating: 4.3 },
+  { model: 'RPUW12BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, heatKw: 39.0, hp: 12, maxConn: 20, priceKrw: 4120000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 4532000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.2 },
+  { model: 'RPUW16BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 45.0, heatKw: 50.4, hp: 16, maxConn: 26, priceKrw: 5240000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 5764000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.8, copHeating: 4.05 },
+  { model: 'RPUW20BX9P', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0, heatKw: 63.8, hp: 20, maxConn: 33, priceKrw: 6350000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 6985000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.1 },
+  { model: 'RPUQ141X9S', cat: '냉방전용', sys: 'EHP', cool: 39.2, heatKw: null, hp: 14, maxConn: 23, priceKrw: 3760000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: null, copCooling: 4.0, copHeating: null },
+  { model: 'GPUW280C2S', cat: 'GHP', sys: 'GHP', cool: 28.0, heatKw: 31.4, hp: 10, maxConn: 16, priceKrw: 8900000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 9790000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.55, copHeating: 1.45 },
+  { model: 'GPUW450C2S', cat: 'GHP', sys: 'GHP', cool: 45.0, heatKw: 50.4, hp: 16, maxConn: 26, priceKrw: 12400000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.5, copHeating: 1.4 },
 ]
 
 export interface ModelCard {

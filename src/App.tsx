@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ROOMS, MODELS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, recommendedIndoorIdx, outdoorIdxByModel, resolveIndoorCard, indoorCoolByModel } from './data'
+import { ROOMS, MODELS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, outdoorIdxByModel } from './data'
+import type { ModelCard, Room } from './data'
 import ReportStrip from './components/ReportStrip'
 import Viewer, { LAYER_OPTIONS, type LayerFilter, type ViewerHandle, type TileManifest } from './components/Viewer'
 import { buildScheduleRows, toCsv } from './presentation/generation/schedule'
@@ -20,6 +21,16 @@ import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoor
 import { makeAddGroup, makeRemoveGroup, makeSplitGroup } from './application/generation/GroupCommands'
 import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta } from './presentation/generation/planAdapter'
 import { NotFoundError } from './domain/generation/errors'
+import { Room as DomainRoom } from './domain/generation/Room'
+import { Placement } from './domain/generation/Placement'
+import { applyAiPlacement, placementTotalsW } from './domain/generation/recalc'
+import { recommendIndoor } from './domain/generation/recommendIndoor'
+import { UnitLoad } from './domain/shared/UnitLoad'
+import { InMemoryIndoorModelCatalog } from './infrastructure/generation/InMemoryIndoorModelCatalog'
+import { buildSelectionTable } from './domain/generation/SelectionTable'
+import { buildSelectionCsv } from './presentation/generation/selectionCsv'
+import { SELECTION_CHANNEL } from './presentation/generation/selectionSync'
+import type { SelectionMsg, SelectionSnapshotMsg } from './presentation/generation/selectionSync'
 
 // 우측 패널 상태 복원 헬퍼(폭은 ModelPanel의 260~560 범위로 클램프).
 function loadPanelOpen(): boolean {
@@ -35,35 +46,84 @@ export default function App() {
   // 인메모리 리포지토리 포트를 통해 유즈케이스가 로드/저장한다. 모두 세션 1개로 고정(useState lazy).
   const [catalog] = useState(() => new InMemoryOutdoorModelCatalog())
   const [repo] = useState(() => new InMemoryPlanRepository(bootstrapPlan(catalog)))
+  // 실내기 모델 카탈로그(장비마스터 참조 데이터, 장비번호 코드 기반).
+  const [indoorCatalog] = useState(() => new InMemoryIndoorModelCatalog())
+  const indoorModels = useMemo(() => indoorCatalog.list(), [indoorCatalog])
 
   const [plan, setPlan] = useState(() => repo.load())
+  // 도메인 Room(층·실명·면적·용도·단위부하 Adjustable) — 선정표 그리드에서 편집되는 SSOT.
+  const [domainRooms, setDomainRooms] = useState<Record<string, DomainRoom>>(() =>
+    Object.fromEntries(
+      Object.entries(ROOMS).map(([id, r]) => [id, DomainRoom.create({ id, floor: r.floor, name: r.name, areaM2: r.area, usage: r.usage })]),
+    ),
+  )
+  // 실별 실내기 배치(모델+대수, AI 기본값+사용자 오버라이드) — 실내기 선정의 SSOT.
+  const [placements, setPlacements] = useState<Record<string, Placement>>({})
   const [selRooms, setSelRooms] = useState<string[]>([]) // 초기엔 선택 없음(뱃지·하이라이트 없음)
   const [tab, setTab] = useState<'in' | 'out'>('in')
   // 카드 선택은 기본적으로 대표 실에서 '파생'(실외기=그룹 모델, 실내기=배정/추천)한다.
   // 사용자가 카드를 직접 클릭하면 pick으로 그 파생을 덮어쓰고, 실 선택이 바뀌면 초기화한다.
   const [pick, setPick] = useState<{ in: number | null; out: number | null }>({ in: null, out: null })
   const [prevPrimary, setPrevPrimary] = useState<string | undefined>(undefined)
-  // 실별 적용된 실내기 모델(모델명). 'AI 실내기 배치'(자동) 또는 '모델 적용'(수동)으로 채워진다.
-  const [indoorByRoom, setIndoorByRoom] = useState<Record<string, string>>({})
-  // AI가 자동 선정한 실(수동 적용 시 해제) — 목록에서 'AI' 표기 구분용.
-  const [aiRooms, setAiRooms] = useState<Set<string>>(new Set())
+  // 우측 패널 실내기 카드 — 실내기 카탈로그(장비번호 코드)에서 파생. 단가는 마스터 미게시(플레이스홀더).
+  const indoorCards = useMemo<ModelCard[]>(
+    () =>
+      indoorModels.map((m) => ({
+        mn: m.model,
+        ms: `${m.type} · 냉방 ${(m.coolW / 1000).toFixed(1)}kW · 난방 ${(m.heatW / 1000).toFixed(1)}kW · [${m.code}]`,
+        mp: '단가 미정',
+        md: '적용 2026.04.20',
+        on: false,
+        cool: m.coolW / 1000,
+        kind: m.type,
+      })),
+    [indoorModels],
+  )
 
-  // 실별 실내기 정격용량(kW) — 조합 리포트/조합비의 'B: 선택 장비 기준' 산정용. 미적용은 0(미설치).
+  // ── placements 파생값들 (실내기 선정 SSOT → 레거시 컴포넌트 뷰) ──
+  // 실별 적용 실내기 모델명(도면 SVG·장비일람표용).
+  const indoorByRoom = useMemo<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        Object.entries(placements).map(([id, p]) => [id, indoorCatalog.byCode(p.effectiveSelection.modelCode)?.model ?? p.effectiveSelection.modelCode]),
+      ),
+    [placements, indoorCatalog],
+  )
+  // AI가 선정(오버라이드 없음)한 실 — 목록 'AI' 뱃지용.
+  const aiRooms = useMemo(() => new Set(Object.keys(placements).filter((id) => !placements[id].isOverridden)), [placements])
+
+  // 실별 실내기 설치용량(kW, 정격×대수) — 조합 리포트/조합비의 'B: 선택 장비 기준' 산정용. 미배치는 0.
   const indoorCapByRoom = useMemo(() => {
     const map: Record<string, number> = {}
-    for (const id of Object.keys(ROOMS)) map[id] = indoorCoolByModel(indoorByRoom[id])
-    return map
-  }, [indoorByRoom])
-
-  // 실별 실내기 표시정보(모델명·유형) — 도면 심볼 오버레이용. 배정값 우선, 없으면 부하 근사 추천.
-  const indoorInfo = useMemo(() => {
-    const map: Record<string, { model: string; kind: string }> = {}
-    for (const id of Object.keys(ROOMS)) {
-      const card = resolveIndoorCard(ROOMS[id].cool, indoorByRoom[id])
-      map[id] = { model: card.mn, kind: card.kind ?? '' }
+    for (const id of Object.keys(domainRooms)) {
+      const p = placements[id]
+      map[id] = p ? placementTotalsW(p, indoorModels).coolW / 1000 : 0
     }
     return map
-  }, [indoorByRoom])
+  }, [placements, domainRooms, indoorModels])
+
+  // 실별 실내기 표시정보(모델명·유형) — 도면 심볼 오버레이용. 배치값 우선, 없으면 부하 기반 추천.
+  const indoorInfo = useMemo(() => {
+    const map: Record<string, { model: string; kind: string }> = {}
+    for (const id of Object.keys(domainRooms)) {
+      const code = placements[id]?.effectiveSelection.modelCode ?? recommendIndoor(domainRooms[id].requiredLoadW.cool, indoorModels).modelCode
+      const m = indoorCatalog.byCode(code)
+      map[id] = m ? { model: m.model, kind: m.type } : { model: code, kind: '' }
+    }
+    return map
+  }, [placements, domainRooms, indoorCatalog, indoorModels])
+
+  // 뷰용 실 정보: 좌표·유형은 목업(ROOMS), 실명·부하(kW)는 도메인 Room에서 파생(그리드 편집 반영).
+  const viewRooms = useMemo<Record<string, Room>>(
+    () =>
+      Object.fromEntries(
+        Object.entries(ROOMS).map(([id, r]) => {
+          const dr = domainRooms[id]
+          return [id, { ...r, name: dr.name, cool: Math.round(dr.requiredLoadW.cool / 100) / 10 }]
+        }),
+      ),
+    [domainRooms],
+  )
   // 우측 패널 접힘/폭은 localStorage에 유지(새로고침 후에도 복원).
   const [panelOpen, setPanelOpen] = useState(() => loadPanelOpen())
   const [panelW, setPanelW] = useState(() => loadPanelW())
@@ -115,12 +175,12 @@ export default function App() {
 
   // 목업 실 좌표(720×470)를 정규화 좌표계로 스케일(도면 위 앵커링). 용량·이름 등은 유지.
   const worldRooms = useMemo(() => {
-    if (!planDims) return ROOMS
+    if (!planDims) return viewRooms
     const sx = planDims.w / 720, sy = planDims.h / 470
     return Object.fromEntries(
-      Object.entries(ROOMS).map(([id, r]) => [id, { ...r, x: r.x * sx, y: r.y * sy, w: r.w * sx, h: r.h * sy }] as const),
+      Object.entries(viewRooms).map(([id, r]) => [id, { ...r, x: r.x * sx, y: r.y * sy, w: r.w * sx, h: r.h * sy }] as const),
     )
-  }, [planDims])
+  }, [planDims, viewRooms])
 
   const flash = (msg: string) => {
     setToast(msg)
@@ -156,11 +216,11 @@ export default function App() {
   // pick(수동 클릭)이 있으면 그 값으로 덮어쓴다.
   const grpOfPrimary = primary ? groupOfRoom(groups, primary) : null
   const derivedOutIdx = grpOfPrimary ? outdoorIdxByModel(grpOfPrimary.model) : -1
-  const appliedIn = primary ? indoorByRoom[primary] : undefined
-  const derivedInIdx = appliedIn
-    ? Math.max(0, MODELS.in.findIndex((m) => m.mn === appliedIn))
+  const appliedCode = primary ? placements[primary]?.effectiveSelection.modelCode : undefined
+  const derivedInIdx = appliedCode
+    ? Math.max(0, indoorModels.findIndex((m) => m.code === appliedCode))
     : primary
-      ? recommendedIndoorIdx(ROOMS[primary].cool)
+      ? indoorModels.findIndex((m) => m.code === recommendIndoor(domainRooms[primary].requiredLoadW.cool, indoorModels).modelCode)
       : -1 // 선택 실 없으면 아무 카드도 선택 안 함
   const effIn = pick.in ?? derivedInIdx
   const effOut = pick.out ?? derivedOutIdx
@@ -235,7 +295,7 @@ export default function App() {
   // 팝업의 확인 = applyModel 실행, 취소 = 아무 이벤트 없이 닫힘.
   const requestApply = () => {
     if (tab === 'in') {
-      const m = MODELS.in[effIn]
+      const m = indoorCards[effIn]
       if (!m) return
       if (selRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
       const scope = selRooms.length > 1 ? `${primary} 외 ${selRooms.length - 1}실` : primary
@@ -254,15 +314,20 @@ export default function App() {
   //  · 실외기: 대표 실이 속한 그룹의 실외기를 실제 교체(도메인 유즈케이스 재사용)
   const applyModel = () => {
     if (tab === 'in') {
-      const m = MODELS.in[effIn]
+      const m = indoorCards[effIn]
       if (!m) return
       if (selRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
-      setIndoorByRoom((prev) => {
+      const model = indoorCatalog.byModel(m.mn)
+      if (!model) { flash('카탈로그에 없는 실내기 모델입니다'); return }
+      // 수동 적용 = 사용자 오버라이드(AI 재선정에도 보존). 대수는 기존 값 유지, 최초면 1.
+      setPlacements((prev) => {
         const next = { ...prev }
-        selRooms.forEach((id) => { next[id] = m.mn })
+        selRooms.forEach((id) => {
+          const sel = { modelCode: model.code, quantity: prev[id]?.effectiveSelection.quantity ?? 1 }
+          next[id] = (prev[id] ?? Placement.ai(id, sel)).overrideSelection(sel)
+        })
         return next
       })
-      setAiRooms((prev) => { const n = new Set(prev); selRooms.forEach((id) => n.delete(id)); return n }) // 수동 적용 → AI 표기 해제
       const scope = selRooms.length > 1 ? `${primary} 외 ${selRooms.length - 1}실` : primary
       flash(`실내기 ${m.mn}을(를) ${scope}에 적용했습니다`)
       return
@@ -279,23 +344,109 @@ export default function App() {
 
   const aiPlace = () => {
     viewerRef.current?.placeUnits() // 실제 배치 실행(빈 도면 → 방별 실내기 심볼)
-    // 방마다 냉방부하 근사 알고리듬으로 실내기 모델 자동 선정(AI 선택).
-    const picks: Record<string, string> = {}
-    for (const id of Object.keys(ROOMS)) picks[id] = MODELS.in[recommendedIndoorIdx(ROOMS[id].cool)].mn
-    setIndoorByRoom(picks)
-    setAiRooms(new Set(Object.keys(ROOMS)))
-    flash('✦ AI가 실 ' + Object.keys(ROOMS).length + '곳에 실내기를 자동 배치·선정했습니다 (부하 근사 모델)')
+    // 방마다 필요부하 기반으로 모델+대수 자동 선정. 사용자 수정 셀은 보존(AI값만 갱신).
+    setPlacements((prev) => applyAiPlacement(Object.values(domainRooms), prev, indoorModels))
+    flash('✦ AI가 실 ' + Object.keys(domainRooms).length + '곳에 실내기를 배치·선정했습니다 (수정 셀은 보존)')
+  }
+
+  // ── 선정표 그리드 편집 핸들러: 상류 수정 → 하류(AI 선정·조합비) 재계산 ──
+  const updateRoom = (id: string, fn: (r: DomainRoom) => DomainRoom) => {
+    const nextRooms = { ...domainRooms, [id]: fn(domainRooms[id]) }
+    setDomainRooms(nextRooms)
+    // 부하가 바뀌면 AI 선정도 재계산(오버라이드는 보존). 배치 전에는 건드리지 않는다.
+    if (Object.keys(placements).length) setPlacements(applyAiPlacement(Object.values(nextRooms), placements, indoorModels))
+  }
+  const renameRoom = (id: string, name: string) => {
+    try { updateRoom(id, (r) => r.rename(name)) } catch { flash('실명은 비워둘 수 없습니다') }
+  }
+  const overrideUnitLoad = (id: string, coolKcal: number, heatKcal: number) => {
+    try { updateRoom(id, (r) => r.overrideUnitLoad(new UnitLoad(coolKcal, heatKcal))) } catch { flash('단위부하는 0보다 큰 숫자여야 합니다') }
+  }
+  const resetUnitLoad = (id: string) => updateRoom(id, (r) => r.clearUnitLoadOverride())
+  const overrideIndoor = (id: string, modelCode: string, quantity: number) => {
+    if (!indoorCatalog.byCode(modelCode)) { flash('카탈로그에 없는 모델입니다'); return }
+    setPlacements((prev) => {
+      const sel = { modelCode, quantity }
+      return { ...prev, [id]: (prev[id] ?? Placement.ai(id, sel)).overrideSelection(sel) }
+    })
+  }
+  const resetIndoor = (id: string) => {
+    setPlacements((prev) => {
+      if (!prev[id]) return prev
+      // 오버라이드 해제 + 최신 부하 기준 AI 추천으로 갱신.
+      const ai = recommendIndoor(domainRooms[id].requiredLoadW.cool, indoorModels)
+      return { ...prev, [id]: prev[id].clearOverride().withAiSelection(ai) }
+    })
+  }
+  const moveRoomFromGrid = (id: string, to: string) => {
+    const cur = groupOfRoom(groups, id)?.key ?? 'pool'
+    if (cur === to) return
+    if (!moveRoom(id, to)) flash('계열이 호환되지 않거나 최대 연결 수를 초과해 이동할 수 없습니다')
+  }
+
+  // 장비선정표(행=실, 층합계, BOM) — 도메인 빌더로 매 렌더 파생(실 6개 규모라 저렴).
+  const selectionTable = buildSelectionTable({
+    rooms: Object.values(domainRooms),
+    placements,
+    groups: groups.map((g) => ({ key: g.key, label: g.label, model: g.model, items: g.items })),
+    indoorModels,
+    outdoorSpecs: catalog.list().map((s) => ({ model: s.model, coolKw: s.capacityKw, heatKw: s.heatKw, hp: s.hp, comboRange: s.comboRange })),
+  })
+
+  // ── 장비선정표 '새 창' 동기화 (도면을 가리지 않도록 별도 창에서 확인·조정) ──
+  // 최신 스냅샷·핸들러를 ref로 유지해 채널 콜백의 stale closure를 방지한다.
+  const selectionSnapshot: SelectionSnapshotMsg = {
+    type: 'table',
+    table: selectionTable,
+    groupOptions: groups.map((g) => ({ key: g.key, label: g.label })),
+    indoorModelOptions: indoorModels.map((m) => ({ code: m.code })),
+  }
+  const snapshotRef = useRef(selectionSnapshot)
+  snapshotRef.current = selectionSnapshot
+  const editRef = useRef({ renameRoom, overrideUnitLoad, resetUnitLoad, overrideIndoor, resetIndoor, moveRoomFromGrid })
+  editRef.current = { renameRoom, overrideUnitLoad, resetUnitLoad, overrideIndoor, resetIndoor, moveRoomFromGrid }
+  const bcRef = useRef<BroadcastChannel | null>(null)
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return
+    const bc = new BroadcastChannel(SELECTION_CHANNEL)
+    bcRef.current = bc
+    bc.onmessage = (e: MessageEvent<SelectionMsg>) => {
+      const m = e.data
+      if (m?.type === 'hello') { bc.postMessage(snapshotRef.current); return } // 새 창 접속 → 현재 스냅샷 응답
+      if (m?.type !== 'edit') return
+      const h = editRef.current
+      if (m.op === 'rename') h.renameRoom(m.roomId, m.name)
+      else if (m.op === 'unitLoad') h.overrideUnitLoad(m.roomId, m.coolKcal, m.heatKcal)
+      else if (m.op === 'resetUnitLoad') h.resetUnitLoad(m.roomId)
+      else if (m.op === 'indoor') h.overrideIndoor(m.roomId, m.modelCode, m.quantity)
+      else if (m.op === 'resetIndoor') h.resetIndoor(m.roomId)
+      else if (m.op === 'move') h.moveRoomFromGrid(m.roomId, m.to)
+    }
+    return () => { bc.close(); bcRef.current = null }
+  }, [])
+  // 상태가 바뀔 때마다 새 창에 스냅샷 재방송(편집 결과 즉시 반영).
+  useEffect(() => { bcRef.current?.postMessage(snapshotRef.current) }, [domainRooms, placements, plan])
+
+  // 선정표 새 창 열기 — 이름 있는 창이라 반복 클릭 시 같은 창을 재사용한다.
+  const openSelectionWindow = () => {
+    window.open(`${window.location.pathname}?view=selection`, 'poc-selection-window', 'width=1480,height=860')
   }
 
   // 산출물 다운로드(목업 데이터 기반 생성): 장비일람표 CSV(Excel 호환) · 독립 SVG 도면 · 현재 화면 캡처.
   const downloadSchedule = () => {
-    const rows = buildScheduleRows(groups, indoorByRoom, ROOMS, MODELS.in)
+    const rows = buildScheduleRows(groups, indoorByRoom, viewRooms, indoorCards)
     if (!rows.length) { flash('다운로드할 결과가 없습니다 — 실내기 배치·조합을 먼저 진행하세요'); return }
     downloadText('장비일람표.csv', CSV_BOM + toCsv(rows), 'text/csv;charset=utf-8')
     flash(`장비일람표.csv를 생성했습니다 (${rows.length}행)`)
   }
+  // 장비선정표(행=실, 층합계·BOM 포함) — 표준 260415 엑셀 양식의 CSV 직렬화.
+  const downloadSelection = () => {
+    if (!Object.keys(placements).length) { flash('다운로드할 선정 결과가 없습니다 — 실내기 배치를 먼저 진행하세요'); return }
+    downloadText('장비선정표.csv', CSV_BOM + buildSelectionCsv(selectionTable), 'text/csv;charset=utf-8')
+    flash('장비선정표.csv를 생성했습니다')
+  }
   const downloadDrawing = () => {
-    downloadText('도면.svg', buildDrawingSvg(ROOMS, indoorByRoom, groups), 'image/svg+xml')
+    downloadText('도면.svg', buildDrawingSvg(viewRooms, indoorByRoom, groups), 'image/svg+xml')
     flash('도면.svg를 생성했습니다')
   }
   const captureView = () => {
@@ -306,15 +457,15 @@ export default function App() {
   }
 
   // 단계 전환 핸들러(파이프라인 진행). 목업 단계는 플래그만 세우고 다음으로.
-  const placed = Object.keys(indoorByRoom).length > 0
-  const doDetect = () => { setStep('place'); flash(`AI가 도면에서 실 ${Object.keys(ROOMS).length}곳을 검출했습니다`) }
+  const placed = Object.keys(placements).length > 0
+  const doDetect = () => { setStep('place'); flash(`AI가 도면에서 실 ${Object.keys(domainRooms).length}곳을 검출했습니다`) }
   const doPlace = () => { aiPlace() } // 배치만(단계 유지) → 결과 확인 후 '미세조정 →'으로 진행
   const doAdjustDone = () => setStep('combine')
   const doCombineNext = () => {
     if (pool.length > 0) { flash(`미배정 실내기 ${pool.length}개가 남아 있습니다 — 조합 매핑에서 배정하세요`); return }
     setStep('output')
   }
-  const doGenerate = () => { setGenerated(true); flash('장비일람표(Excel)·도면 산출물을 생성했습니다') }
+  const doGenerate = () => { setGenerated(true); flash('장비선정표(Excel)·도면 산출물을 생성했습니다') }
 
   // 단계별 화면 구성.
   const showViewer = step === 'detect' || step === 'place' || step === 'adjust' || step === 'combine'
@@ -347,7 +498,7 @@ export default function App() {
       <Stepper current={step} onGo={setStep} />
 
       <ReportStrip
-        rooms={ROOMS}
+        rooms={viewRooms}
         groups={groups}
         pool={pool}
         capByRoom={indoorCapByRoom}
@@ -359,8 +510,12 @@ export default function App() {
             {step === 'place' && placed && <button className="btn sm primary" onClick={() => setStep('adjust')}>미세조정 →</button>}
             {step === 'adjust' && <button className="btn sm primary" onClick={doAdjustDone}>미세조정 완료 →</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => setMapOpen(true)}>실외기 조합 매핑</button>}
-            {step === 'combine' && <button className="btn sm primary" onClick={doCombineNext} disabled={pool.length > 0}>산출물로 →</button>}
-            {step === 'output' && <button className="btn sm primary" onClick={doGenerate}>{generated ? '재생성' : '장비일람표·도면 생성'}</button>}
+            {/* 선정표는 스텝이 아니라 새 창 — 도면을 가리지 않고 확인·조정(실시간 연동). */}
+            {step === 'combine' && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
+            {/* 미배정이 남아도 클릭은 받되, doCombineNext가 이유를 토스트로 안내(무반응 방지). */}
+            {step === 'combine' && <button className="btn sm primary" onClick={doCombineNext}>산출물로 →</button>}
+            {step === 'output' && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
+            {step === 'output' && <button className="btn sm primary" onClick={doGenerate}>{generated ? '재생성' : '장비선정표·도면 생성'}</button>}
           </>
         }
       />
@@ -369,17 +524,19 @@ export default function App() {
         <StepOverlay
           icon={generated ? '✓' : '⤓'}
           title={generated ? '산출물 생성 완료' : '산출물 생성'}
-          desc={generated ? '장비일람표(Excel)와 도면을 다운로드할 수 있습니다.' : '선정 데이터로 장비일람표·도면을 생성합니다.'}
-          meta={`총 설치 실 ${Object.keys(indoorByRoom).length}곳 · 실외기 ${groups.filter((g) => g.items.length).length}대`}
+          desc={generated ? '장비선정표·장비일람표(Excel)와 도면을 다운로드할 수 있습니다.' : '검토한 선정표로 산출물을 생성합니다.'}
+          meta={`총 설치 실 ${Object.keys(placements).length}곳 · 실외기 ${groups.filter((g) => g.items.length).length}대 · ${selectionTable.bom.hpTotal}HP`}
         >
           {generated && (
             <>
+              <button className="btn" onClick={downloadSelection}>⭳ 장비선정표.csv</button>
               <button className="btn" onClick={downloadSchedule}>⭳ 장비일람표.csv</button>
               <button className="btn" onClick={downloadDrawing}>⭳ 도면.svg</button>
             </>
           )}
         </StepOverlay>
       )}
+
 
       {showViewer && (
         <div className="stage">
@@ -416,12 +573,12 @@ export default function App() {
           </div>
           {showPanel && (
             <ModelPanel
-              rooms={ROOMS}
+              rooms={viewRooms}
               groups={groups}
               selRooms={selRooms}
               tab={tab}
               setTab={setTab}
-              models={MODELS}
+              models={{ in: indoorCards, out: MODELS.out }}
               open={panelOpen}
               width={panelW}
               onToggle={() => setPanelOpen((v) => !v)}

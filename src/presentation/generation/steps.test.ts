@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { STEPS, stepIndex, nextStep, prevStep, isFirstStep, isLastStep } from './steps'
 
 describe('generation steps', () => {
-  it('5단계가 정의된 순서대로다 (업로드는 목록에서 완료 가정)', () => {
+  it('5단계가 정의된 순서대로다 (선정표 검토는 스텝이 아니라 새 창)', () => {
     expect(STEPS.map((s) => s.id)).toEqual(['detect', 'place', 'adjust', 'combine', 'output'])
     expect(STEPS.map((s) => s.no)).toEqual([1, 2, 3, 4, 5])
   })

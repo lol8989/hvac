@@ -4,7 +4,7 @@ import type { GroupView } from './planAdapter'
 import type { Room, ModelCard } from '../../data'
 
 // 테스트 픽스처(목업 축약형)
-const room = (name: string, cool: number): Room => ({ name, area: 20, type: '4WAY', cool, sys: 'EHP', x: 0, y: 0, w: 100, h: 100 })
+const room = (name: string, cool: number): Room => ({ name, floor: '지상1층', usage: '거실', area: 20, type: '4WAY', cool, sys: 'EHP', x: 0, y: 0, w: 100, h: 100 })
 const ROOMS_FX: Record<string, Room> = {
   AC_001: room('거실', 11.2),
   AC_002: room('침실', 5.6),

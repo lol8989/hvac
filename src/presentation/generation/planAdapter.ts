@@ -47,6 +47,7 @@ export const outdoorUnitFromSpec = (spec: OutdoorModelSpec): OutdoorUnit =>
     sys: spec.energySource,
     capacityKw: spec.capacityKw,
     maxConnections: spec.maxConnections,
+    comboRange: spec.comboRange, // 제품군별 조합비 허용범위(도메인 불변식 구동)
     priceEntries: spec.prices,
     efficiencyGradeId: spec.efficiencyGradeId ?? null,
     copCooling: spec.copCooling ?? null,

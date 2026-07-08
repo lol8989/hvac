@@ -1,7 +1,7 @@
 // 실외기 조합 애그리거트 루트 (Generation Context).
 // 실외기 1대 + 연결된 실내기들의 묶음. 그룹 내부 불변식을 강제한다:
 //   ① 계열 일치(교차 계열 배정 금지)  ② 최대 연결 수 초과 금지  ③ 실내기 중복 금지
-// 조합비 범위(0.5~1.3)는 "경고"이지 배정 거부 사유가 아니다.
+// 조합비 범위(실외기 comboRange, 기본 0.5~1.3)는 "경고"이지 배정 거부 사유가 아니다.
 //
 // 불변(immutable): 상태 변경 메서드는 원본을 바꾸지 않고 새 OutdoorGroup을 반환한다.
 // 그룹 간 이동(다른 그룹/미배정 풀)은 여러 애그리거트에 걸친 트랜잭션이므로
@@ -98,11 +98,12 @@ export class OutdoorGroup {
   }
 
   // 조합비 기반 경고 코드 목록(배정을 막지는 않는다).
+  // 판정 기준은 고정 상수가 아니라 실외기의 제품군별 허용범위(comboRange)다.
   warnings(): string[] {
-    const r = this.comboRatio()
+    const judgement = this.comboRatio().judgeWith(this.outdoorUnit.comboRange)
     const w: string[] = []
-    if (r.isOverloaded) w.push('OVERLOADED')
-    if (r.isUnderloaded) w.push('UNDERLOADED')
+    if (judgement === 'OVERLOADED') w.push('OVERLOADED')
+    if (judgement === 'UNDERLOADED') w.push('UNDERLOADED')
     return w
   }
 

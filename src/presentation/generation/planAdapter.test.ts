@@ -7,6 +7,7 @@ import { IndoorUnit } from '../../domain/generation/IndoorUnit'
 import type { OutdoorModelSpec } from '../../application/generation/ports'
 import { InMemoryOutdoorModelCatalog } from '../../infrastructure/generation/InMemoryOutdoorModelCatalog'
 import { MODELS } from '../../data'
+import { ComboRange } from '../../domain/shared/ComboRange'
 
 describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터 스펙 주입)', () => {
   const catalog = new InMemoryOutdoorModelCatalog()
@@ -20,7 +21,7 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
 
   it('bootstrapPlan은 실외기 maxConnections를 장비마스터 카탈로그 스펙에서 주입한다', () => {
     const plan = bootstrapPlan(catalog)
-    const spec = catalog.findByModel('RPUW12BX9M')!
+    const spec = catalog.findByModel('RPUW08BX9E')!
     const odu = plan.groupByKey('ODU1')!.outdoorUnit
     expect(odu.maxConnections).toBe(spec.maxConnections)
     // 기본값(16) 하드코딩이 아니라 모델 스펙 값이 주입됨을 확인
@@ -33,10 +34,10 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
     expect(g1).toMatchObject({
       key: 'ODU1',
       label: '실외기-1',
-      model: 'RPUW12BX9M',
+      model: 'RPUW08BX9E',
       cat: '냉난방 절환형',
       sys: 'EHP',
-      cool: 34.8,
+      cool: 22.4,
     })
     expect(g1!.items.sort()).toEqual(['AC_001', 'AC_003', 'AC_006'])
     expect(vm.pool).toEqual(['AC_002'])
@@ -54,10 +55,10 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
 
   it('toViewModel은 그룹별 단가/등급 표시 문자열을 채운다(모달 카드용)', () => {
     const vm = toViewModel(bootstrapPlan())
-    const g1 = vm.groups.find((g) => g.key === 'ODU1')!
-    expect(g1.priceText).toBe('4,120,000원')
-    expect(g1.gradeText).toBe('3등급')
-    expect(g1.effText).toBe('EERa 4.99') // EHP는 전기식 EER
+    const g1 = vm.groups.find((g) => g.key === 'ODU1')! // RPUW08BX9E
+    expect(g1.priceText).toBe('2,980,000원')
+    expect(g1.gradeText).toBe('2등급')
+    expect(g1.effText).toBe('EERa 5.10') // EHP는 전기식 EER
   })
 
   it('계열별 효율 지표 라벨을 구분한다 — GHP는 EERa가 아닌 COPc로 표기', () => {
@@ -82,8 +83,17 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
     }
   })
 
+  it('outdoorUnitFromSpec은 스펙의 comboRange를 OutdoorUnit에 전달한다', () => {
+    const range = new ComboRange(0.32, 1.0) // 예: DOAS 하한 완화 정책
+    const spec: OutdoorModelSpec = { model: 'TESTCOMBO', category: '테스트', energySource: 'EHP', capacityKw: 30, maxConnections: 10, heatKw: null, hp: 10, comboRange: range }
+    expect(outdoorUnitFromSpec(spec).comboRange.equals(range)).toBe(true)
+    // 카탈로그 목업은 정책 미지정 → 기본 범위가 전달된다
+    const fromCatalog = outdoorUnitFromSpec(catalog.findByModel('RPUW08BX9E')!)
+    expect(fromCatalog.comboRange.equals(ComboRange.DEFAULT)).toBe(true)
+  })
+
   it('[통합] 주입된 maxConnections가 OutdoorGroup의 MAX_CONNECTIONS 불변식을 구동한다', () => {
-    const spec: OutdoorModelSpec = { model: 'TESTMAX2', category: '테스트', energySource: 'EHP', capacityKw: 30, maxConnections: 2 }
+    const spec: OutdoorModelSpec = { model: 'TESTMAX2', category: '테스트', energySource: 'EHP', capacityKw: 30, maxConnections: 2, heatKw: null, hp: 10, comboRange: ComboRange.DEFAULT }
     const idu = (id: string) => new IndoorUnit({ id, roomName: id, coolKw: 5, sys: 'EHP' })
     const g = new OutdoorGroup({ key: 'ODU9', label: 't', outdoorUnit: outdoorUnitFromSpec(spec) })
       .assign(idu('A'))

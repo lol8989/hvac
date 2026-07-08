@@ -1,6 +1,7 @@
 // 생성(Generation) 파이프라인의 작업 단계 정의 — presentation 전용, 순수/테스트 가능.
 // (업로드는 목록의 '생성' 메뉴에서 완료된 것으로 가정)
 // 실 검출 → AI 실내기 배치 → 인간 미세조정 → 실외기 조합 → 산출물 생성.
+// 장비선정표 검토는 파이프라인 스텝이 아니라 '새 창'에서 확인·조정한다(도면을 가리지 않기 위해).
 
 export type StepId = 'detect' | 'place' | 'adjust' | 'combine' | 'output'
 
@@ -15,8 +16,8 @@ export const STEPS: StepDef[] = [
   { id: 'detect', no: 1, label: '실 검출', hint: 'AI가 도면에서 실(공간)을 검출' },
   { id: 'place', no: 2, label: '실내기 배치', hint: 'AI가 실 면적·부하에 맞춰 실내기 자동 배치' },
   { id: 'adjust', no: 3, label: '미세조정', hint: '배치를 확인·이동·회전·삭제(사람 검토)' },
-  { id: 'combine', no: 4, label: '실외기 조합', hint: '실외기 선정·조합 매핑' },
-  { id: 'output', no: 5, label: '산출물 생성', hint: '장비일람표·도면 산출' },
+  { id: 'combine', no: 4, label: '실외기 조합', hint: '실외기 선정·조합 매핑 + 장비선정표 확인(새 창)' },
+  { id: 'output', no: 5, label: '산출물 생성', hint: '장비선정표·도면 산출' },
 ]
 
 export const stepIndex = (id: StepId): number => STEPS.findIndex((s) => s.id === id)

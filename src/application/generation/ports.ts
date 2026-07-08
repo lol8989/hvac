@@ -4,6 +4,8 @@
 //          추후 서버/워커 연동 리포지토리로 교체.
 
 import type { AssignmentPlan } from '../../domain/generation/AssignmentPlan'
+import type { IndoorModel } from '../../domain/generation/IndoorModel'
+import type { ComboRange } from '../../domain/shared/ComboRange'
 import type { EnergySourceCode } from '../../domain/shared/EnergySource'
 import type { PriceEntry } from '../../domain/shared/Price'
 
@@ -23,6 +25,9 @@ export interface OutdoorModelSpec {
   category: string
   energySource: EnergySourceCode
   capacityKw: number
+  heatKw: number | null // 난방용량(kW). 냉방전용 모델은 null
+  hp: number // 마력(HP) — 장비번호
+  comboRange: ComboRange // 제품군별 조합비 허용범위(정책 미지정 시 기본 0.5~1.3)
   maxConnections: number // 모델별 최대 연결 실내기 수
   prices?: ReadonlyArray<PriceEntry> // 현행 게시가 목록
   efficiencyGradeId?: number | null // 에너지소비효율등급 id(1~5). 미부여 시 null
@@ -35,4 +40,13 @@ export interface OutdoorModelSpec {
 export interface OutdoorModelCatalog {
   list(): OutdoorModelSpec[]
   findByModel(model: string): OutdoorModelSpec | undefined
+}
+
+// 실내기 모델 카탈로그 포트(읽기 전용). 장비마스터 참조 데이터.
+// 구현: infrastructure/generation/InMemoryIndoorModelCatalog (POC 시드),
+//       추후 장비마스터 API 클라이언트로 교체.
+export interface IndoorModelCatalog {
+  list(): readonly IndoorModel[]
+  byCode(code: string): IndoorModel | null
+  byModel(model: string): IndoorModel | null
 }

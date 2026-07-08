@@ -3,6 +3,7 @@ import { OutdoorGroup } from './OutdoorGroup'
 import { OutdoorUnit } from './OutdoorUnit'
 import { IndoorUnit } from './IndoorUnit'
 import { ComboRatio } from '../shared/ComboRatio'
+import { ComboRange } from '../shared/ComboRange'
 
 // ── 테스트 픽스처 헬퍼 ──
 const odu = (over = {}) =>
@@ -91,6 +92,18 @@ describe('OutdoorGroup (실외기 조합 애그리거트)', () => {
       expect(at(130).warnings()).not.toContain('OVERLOADED') // 1.30
       expect(at(49).warnings()).toContain('UNDERLOADED') // 0.49
       expect(at(131).warnings()).toContain('OVERLOADED') // 1.31
+    })
+
+    it('실외기 comboRange(0.3~1.0)를 따르면 조합비 0.32는 경고 없음이다', () => {
+      const doas = odu({ capacityKw: 100, maxConnections: 99, comboRange: new ComboRange(0.3, 1.0) })
+      const g = group({ outdoorUnit: doas, indoorUnits: [idu('AC_1', 32)] }) // 0.32 (DOAS 실데이터)
+      expect(g.warnings()).toEqual([])
+    })
+
+    it('실외기 comboRange(0.3~1.0)를 따르면 조합비 1.1은 OVERLOADED다', () => {
+      const doas = odu({ capacityKw: 100, maxConnections: 99, comboRange: new ComboRange(0.3, 1.0) })
+      const g = group({ outdoorUnit: doas, indoorUnits: [idu('AC_1', 110)] }) // 1.10
+      expect(g.warnings()).toContain('OVERLOADED')
     })
 
     it('조합비가 범위를 벗어나도 배정 자체는 허용된다(경고만)', () => {

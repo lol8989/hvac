@@ -8,7 +8,7 @@ import type { Room } from '../data'
 
 // 자유 추가 심볼은 뷰 중앙에 생성되므로, 도면 전체를 덮는 큰 실 하나로 '같은 존' 상황을 만든다.
 const ROOMS_FX: Record<string, Room> = {
-  AC_001: { name: '거실', area: 31.89, type: '4WAY', cool: 11.2, sys: 'EHP', x: 24, y: 24, w: 680, h: 420 },
+  AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 31.89, type: '4WAY', cool: 11.2, sys: 'EHP', x: 24, y: 24, w: 680, h: 420 },
 }
 
 function Harness({ handleRef }: { handleRef: React.RefObject<ViewerHandle> }) {
@@ -63,8 +63,8 @@ describe('Viewer 선택 동기화', () => {
   it('실내기를 드래그해 다른 실로 옮기면 옮겨진 실이 하이라이팅(선택)된다', () => {
     // 좌우로 나란한 두 실. 심볼은 실 중심(스냅 좌표)에 배치된다.
     const rooms: Record<string, Room> = {
-      AC_001: { name: '거실', area: 20, type: '4WAY', cool: 9, sys: 'EHP', x: 0, y: 0, w: 200, h: 200 },
-      AC_002: { name: '침실', area: 20, type: '4WAY', cool: 5.6, sys: 'EHP', x: 300, y: 0, w: 200, h: 200 },
+      AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 20, type: '4WAY', cool: 9, sys: 'EHP', x: 0, y: 0, w: 200, h: 200 },
+      AC_002: { name: '침실', floor: '지상1층', usage: '침실', area: 20, type: '4WAY', cool: 5.6, sys: 'EHP', x: 300, y: 0, w: 200, h: 200 },
     }
     const ref = createRef<ViewerHandle>()
     const Two = () => {

@@ -8,6 +8,7 @@ import { ModelCode } from '../shared/ModelCode'
 import { Price } from '../shared/Price'
 import type { PriceEntry } from '../shared/Price'
 import { EnergyGrade } from '../shared/EnergyGrade'
+import { ComboRange } from '../shared/ComboRange'
 
 export const DEFAULT_MAX_CONNECTIONS = 16
 export const DEFAULT_PRICE_TYPE = 'CONSUMER'
@@ -22,6 +23,7 @@ export interface OutdoorUnitProps {
   efficiencyGradeId?: number | null
   copCooling?: number | null
   copHeating?: number | null
+  comboRange?: ComboRange // 제품군별 조합비 허용범위 (미지정 시 ComboRange.DEFAULT)
 }
 
 // 우선순위(priority) 최댓값 → 동률 시 effectiveStartDate 최신 엔트리 선택.
@@ -41,11 +43,12 @@ export class OutdoorUnit {
   readonly energySource: EnergySource
   readonly capacity: Capacity
   readonly maxConnections: number
+  readonly comboRange: ComboRange
   readonly grade: EnergyGrade | undefined
   readonly copHeating: number | null
   private readonly _priceEntries: PriceEntry[]
 
-  constructor({ model, category, sys, capacityKw, maxConnections, priceEntries, efficiencyGradeId = null, copCooling = null, copHeating = null }: OutdoorUnitProps) {
+  constructor({ model, category, sys, capacityKw, maxConnections, priceEntries, efficiencyGradeId = null, copCooling = null, copHeating = null, comboRange }: OutdoorUnitProps) {
     this.model = model instanceof ModelCode ? model : new ModelCode(model)
     this.category = category ?? ''
     this.energySource = sys instanceof EnergySource ? sys : new EnergySource(sys)
@@ -56,6 +59,7 @@ export class OutdoorUnit {
       throw new Error('maxConnections는 1 이상의 정수여야 합니다')
     }
     this.maxConnections = max
+    this.comboRange = comboRange ?? ComboRange.DEFAULT
 
     // 단가 엔트리를 검증(Price VO 생성으로 자기검증) 후 보관.
     this._priceEntries = (priceEntries ?? []).map((e) => {
@@ -90,7 +94,8 @@ export class OutdoorUnit {
       other.model.equals(this.model) &&
       other.energySource.equals(this.energySource) &&
       other.capacity.equals(this.capacity) &&
-      other.maxConnections === this.maxConnections
+      other.maxConnections === this.maxConnections &&
+      other.comboRange.equals(this.comboRange)
     if (!coreEqual) return false
     return optEquals(this.defaultPrice, other.defaultPrice) && optEquals(this.grade, other.grade)
   }

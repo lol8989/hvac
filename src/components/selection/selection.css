@@ -1,0 +1,36 @@
+/* 장비선정표 검토 그리드 — 무채색 규칙(#000~#F2F2F2), Noto Sans KR */
+.review-window{height:100vh;display:flex;flex-direction:column;background:#fff;}
+.review-window .rw-h{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#262626;color:#fff;}
+.review-window .rw-h .mt{font-size:13px;font-weight:700;}
+.review-window .rw-wait{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#555;font-size:13px;text-align:center;}
+.review-window .rw-wait span{color:#999;font-size:11.5px;}
+.selgrid-wrap{flex:1;overflow:auto;background:#fff;padding:12px 16px 24px;}
+.selgrid-title{font-size:13px;font-weight:700;margin:4px 0 10px;color:#111;}
+.selgrid-title .hint{font-weight:400;color:#777;margin-left:8px;font-size:11.5px;}
+.selgrid{border-collapse:collapse;width:100%;min-width:1280px;font-size:11.5px;}
+.selgrid th{background:#DCDEE0;border:1px solid #CFCFCF;padding:5px 6px;font-weight:700;color:#111;white-space:nowrap;}
+.selgrid td{border:1px solid #DDDDDD;padding:3px 6px;color:#111;white-space:nowrap;text-align:right;}
+.selgrid td.t{text-align:left;}
+.selgrid td.c{text-align:center;}
+.selgrid tr.subtotal td{background:#F2F2F2;font-weight:700;}
+.selgrid td.floorcell{background:#FAFAFA;font-weight:700;text-align:center;vertical-align:top;}
+.selgrid input.cell{width:100%;box-sizing:border-box;border:1px solid transparent;background:transparent;font:inherit;text-align:right;padding:1px 2px;}
+.selgrid input.cell.t{text-align:left;}
+.selgrid input.cell:hover{border-color:#CCCCCC;}
+.selgrid input.cell:focus{border-color:#555555;background:#fff;outline:none;}
+.selgrid select.cell{width:100%;border:1px solid transparent;background:transparent;font:inherit;padding:1px 0;}
+.selgrid select.cell:hover,.selgrid select.cell:focus{border-color:#CCCCCC;}
+.selgrid .badge{display:inline-block;font-size:9.5px;line-height:1;padding:2px 4px;border-radius:2px;margin-left:4px;vertical-align:1px;}
+.selgrid .badge.ai{background:#E8E8E8;color:#333;}
+.selgrid .badge.manual{background:#333333;color:#fff;}
+.selgrid .badge.warn{background:#555555;color:#fff;}
+.selgrid button.reset{border:none;background:transparent;color:#999;cursor:pointer;font-size:11px;padding:0 2px;}
+.selgrid button.reset:hover{color:#111;}
+.selgrid td.combo-ok{color:#111;}
+.selgrid td.combo-warn{font-weight:700;background:#EBEBEB;}
+.selbom{display:flex;gap:24px;margin-top:16px;flex-wrap:wrap;align-items:flex-start;}
+.selbom table{border-collapse:collapse;font-size:11.5px;}
+.selbom th{background:#DCDEE0;border:1px solid #CFCFCF;padding:4px 10px;font-weight:700;}
+.selbom td{border:1px solid #DDDDDD;padding:3px 10px;}
+.selbom .ttl{font-size:12px;font-weight:700;margin-bottom:6px;color:#111;}
+.selbom .hp-total{font-weight:700;background:#F2F2F2;}
