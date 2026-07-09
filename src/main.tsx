@@ -24,13 +24,12 @@ const withTimeout = <T,>(p: Promise<T>, ms: number, label: string): Promise<T> =
 
 // 장비마스터(SSOT): SQLite 백엔드(sql.js+IndexedDB) 부팅. 캐시 키에 SEED_HASH 포함(시드 변경 자동 무효화).
 // 초기화 실패/지연(WASM 스톨 등) 시 null → 호출측이 폴백 처리.
+const bytesStore = createIdbBytesStore(`db.v${SCHEMA_VERSION}.${SEED_HASH}`)
+
 async function resolveSqliteHandle(): Promise<SqliteEquipmentMasterHandle | null> {
   try {
     return await withTimeout(
-      createSqliteEquipmentMaster({
-        initSql: browserSqlInit,
-        store: createIdbBytesStore(`db.v${SCHEMA_VERSION}.${SEED_HASH}`),
-      }),
+      createSqliteEquipmentMaster({ initSql: browserSqlInit, store: bytesStore }),
       8000,
       'SQLite init',
     )
@@ -38,6 +37,12 @@ async function resolveSqliteHandle(): Promise<SqliteEquipmentMasterHandle | null
     console.error('[EquipmentMaster] SQLite 초기화 실패/지연', e)
     return null
   }
+}
+
+// 관리 페이지 쓰기(등록·수정·게시·단가) 후 DB 바이트를 IndexedDB에 저장한다.
+// 커밋 직후 호출되므로 실패해도 메모리 상태는 유효 — 다음 쓰기에서 다시 저장된다.
+const persistOn = (handle: SqliteEquipmentMasterHandle) => () => {
+  void bytesStore.save(handle.db.export()).catch((e) => console.error('[EquipmentMaster] 영속 저장 실패', e))
 }
 
 const root = createRoot(rootEl)
@@ -50,7 +55,7 @@ if (view === 'selection') {
   const handle = await resolveSqliteHandle()
   render(
     handle ? (
-      <EquipmentAdminPage admin={new SqliteEquipmentAdminRepository(handle.db)} />
+      <EquipmentAdminPage admin={new SqliteEquipmentAdminRepository(handle.db, { onChange: persistOn(handle) })} />
     ) : (
       <div style={{ padding: 40, fontFamily: "'Noto Sans KR',sans-serif", color: '#666' }}>
         장비마스터 저장소(SQLite) 초기화에 실패했습니다. 새로고침하거나 브라우저 저장소 설정을 확인하세요.

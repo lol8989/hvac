@@ -1,16 +1,28 @@
 // 장비마스터 관리 리포지토리 SQLite 어댑터 (EquipmentAdminRepository 구현).
-// 게시 상태 무관 전 제품을 4단 분류 조인으로 평탄 조회한다. (쓰기는 후속 슬라이스에서 추가.)
+// 읽기: 게시 상태 무관 전 제품을 4단 분류 조인으로 평탄 조회.
+// 쓰기: 도메인 불변식(게시본 잠금·허용 전이·필드 유효성)을 먼저 강제한 뒤 트랜잭션으로 반영하고,
+//       성공 시에만 onChange()로 영속(IndexedDB 저장)을 트리거한다.
 
 import type { Database } from 'sql.js'
-import type { EquipmentAdminRepository, ProductRow } from '../../../application/equipment/adminPorts'
+import type { EquipmentAdminRepository, ProductRow, SeriesOption } from '../../../application/equipment/adminPorts'
 import type { PublishStatus } from '../../../domain/equipment/PublishStatus'
+import { assertTransition, assertSpecEditable, PUBLISH_STATUS } from '../../../domain/equipment/PublishStatus'
+import { EquipmentDomainError } from '../../../domain/equipment/errors'
+import {
+  assertValidDraft,
+  assertValidPatch,
+  assertValidPrice,
+  type ProductDraft,
+  type ProductPatch,
+  type PriceInput,
+} from '../../../domain/equipment/ProductDraft'
 import { queryRows, numOrNull, strOrNull } from './query'
 
 const LIST_SQL = `
   SELECT p.id, c.code AS category_code, c.name_ko AS category_name,
          sc.name_ko AS subcategory_name, sc.energy_source,
-         s.name_ko AS series_name, p.model_code, p.equipment_code,
-         p.horsepower, p.cooling_capacity_w, p.heating_capacity_w, p.status,
+         s.code AS series_code, s.name_ko AS series_name, p.model_code, p.equipment_code,
+         p.horsepower, p.cooling_capacity_w, p.heating_capacity_w, p.max_connections, p.status,
          pp.price_krw
   FROM products p
   JOIN product_series s        ON p.series_id = s.id
@@ -20,8 +32,43 @@ const LIST_SQL = `
   ORDER BY c.sort_order, p.id
 `
 
+const SERIES_SQL = `
+  SELECT s.code, s.name_ko, c.code AS category_code, c.name_ko AS category_name,
+         sc.name_ko AS subcategory_name, sc.energy_source
+  FROM product_series s
+  JOIN product_subcategories sc ON s.subcategory_id = sc.id
+  JOIN product_categories c     ON sc.category_id = c.id
+  ORDER BY c.sort_order, s.id
+`
+
+// 현행가(effective_end_date IS NULL) 1건. 단가 유형은 POC상 소비자가(CONSUMER=1) 고정.
+const CONSUMER_PRICE_TYPE_ID = 1
+
+export interface AdminRepoDeps {
+  onChange?: () => void // 쓰기 성공 후 영속 훅(db.export() → IndexedDB)
+  now?: () => string // 타임스탬프 주입(테스트 결정성)
+}
+
+// 수정 시 병합 검증에 쓰는 현재 스펙.
+interface CurrentSpec {
+  status: PublishStatus
+  coolingW: number | null
+  heatingW: number | null
+}
+
 export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository {
-  constructor(private readonly db: Database) {}
+  private readonly onChange: () => void
+  private readonly now: () => string
+
+  constructor(
+    private readonly db: Database,
+    deps: AdminRepoDeps = {},
+  ) {
+    this.onChange = deps.onChange ?? (() => {})
+    this.now = deps.now ?? (() => new Date().toISOString())
+  }
+
+  // ── 읽기 ──
 
   listProducts(): ProductRow[] {
     return queryRows(this.db, LIST_SQL).map((r) => ({
@@ -30,14 +77,185 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
       categoryName: String(r.category_name),
       subcategoryName: String(r.subcategory_name),
       energySource: strOrNull(r.energy_source),
+      seriesCode: String(r.series_code),
       seriesName: String(r.series_name),
       modelCode: String(r.model_code),
       equipmentCode: strOrNull(r.equipment_code),
       horsepower: numOrNull(r.horsepower),
       coolingW: numOrNull(r.cooling_capacity_w),
       heatingW: numOrNull(r.heating_capacity_w),
+      maxConnections: numOrNull(r.max_connections),
       status: String(r.status) as PublishStatus,
       priceKrw: numOrNull(r.price_krw),
     }))
+  }
+
+  listSeries(): SeriesOption[] {
+    return queryRows(this.db, SERIES_SQL).map((r) => ({
+      code: String(r.code),
+      nameKo: String(r.name_ko),
+      categoryCode: String(r.category_code),
+      categoryName: String(r.category_name),
+      subcategoryName: String(r.subcategory_name),
+      energySource: strOrNull(r.energy_source),
+    }))
+  }
+
+  // ── 쓰기 ──
+
+  createProduct(draft: ProductDraft): number {
+    assertValidDraft(draft)
+    const seriesId = this.seriesIdOf(draft.seriesCode)
+    this.assertModelCodeFree(draft.modelCode, null)
+
+    const ts = this.now()
+    return this.inTransaction(() => {
+      this.db.run(
+        `INSERT INTO products
+           (series_id, model_code, equipment_code, horsepower, cooling_capacity_w, heating_capacity_w,
+            max_connections, status, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        [
+          seriesId,
+          draft.modelCode.trim(),
+          draft.equipmentCode?.trim() ?? null,
+          draft.horsepower,
+          draft.coolingW,
+          draft.heatingW,
+          draft.maxConnections,
+          PUBLISH_STATUS.DRAFT, // 신규는 항상 DRAFT (게시 게이트)
+          ts,
+          ts,
+        ],
+      )
+      return this.lastInsertId()
+    })
+  }
+
+  updateProduct(id: number, patch: ProductPatch): void {
+    assertValidPatch(patch)
+    const cur = this.currentSpec(id)
+    assertSpecEditable(cur.status) // 게시본 잠금: DRAFT만 수정 가능
+
+    if (patch.modelCode !== undefined) this.assertModelCodeFree(patch.modelCode, id)
+    this.assertMergedCapacity(cur, patch)
+
+    const sets: string[] = []
+    const params: unknown[] = []
+    const put = (col: string, v: unknown) => {
+      sets.push(`${col} = ?`)
+      params.push(v)
+    }
+
+    if (patch.seriesCode !== undefined) put('series_id', this.seriesIdOf(patch.seriesCode))
+    if (patch.modelCode !== undefined) put('model_code', patch.modelCode.trim())
+    if (patch.equipmentCode !== undefined) put('equipment_code', patch.equipmentCode?.trim() ?? null)
+    if (patch.horsepower !== undefined) put('horsepower', patch.horsepower)
+    if (patch.coolingW !== undefined) put('cooling_capacity_w', patch.coolingW)
+    if (patch.heatingW !== undefined) put('heating_capacity_w', patch.heatingW)
+    if (patch.maxConnections !== undefined) put('max_connections', patch.maxConnections)
+    if (!sets.length) return // 빈 패치 = no-op (영속 훅도 부르지 않는다)
+
+    put('updated_at', this.now())
+    params.push(id)
+    this.inTransaction(() => {
+      this.db.run(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`, params as never[])
+    })
+  }
+
+  setStatus(id: number, next: PublishStatus): void {
+    const cur = this.currentSpec(id)
+    assertTransition(cur.status, next) // 선형 + 재게시만 허용
+
+    const ts = this.now()
+    // 게시 시각은 게시할 때 기록하고, 보관 해제(재게시) 시 단종일을 해제한다.
+    const publishedAt = next === PUBLISH_STATUS.PUBLISHED ? ts : null
+    const discontinuedAt = next === PUBLISH_STATUS.ARCHIVED ? ts : null
+
+    this.inTransaction(() => {
+      this.db.run(
+        `UPDATE products
+            SET status = ?,
+                published_at    = CASE WHEN ? IS NOT NULL THEN ? ELSE published_at END,
+                discontinued_at = ?,
+                updated_at = ?
+          WHERE id = ?`,
+        [next, publishedAt, publishedAt, discontinuedAt, ts, id],
+      )
+    })
+  }
+
+  setPrice(id: number, price: PriceInput): void {
+    assertValidPrice(price)
+    this.currentSpec(id) // 존재 확인(NOT_FOUND)
+
+    this.inTransaction(() => {
+      // 기존 현행가를 새 단가 적용일로 마감 → 이력 보존.
+      this.db.run(
+        `UPDATE product_prices SET effective_end_date = ?
+          WHERE product_id = ? AND effective_end_date IS NULL`,
+        [price.effectiveStartDate, id],
+      )
+      this.db.run(
+        `INSERT INTO product_prices
+           (product_id, price_type_id, price_krw, price_with_vat_krw, effective_start_date, effective_end_date, source_reference, priority)
+         VALUES (?,?,?,?,?,NULL,?,?)`,
+        [id, CONSUMER_PRICE_TYPE_ID, price.priceKrw, price.priceWithVatKrw, price.effectiveStartDate, '관리 페이지 입력', 0],
+      )
+    })
+  }
+
+  // ── 내부 헬퍼 ──
+
+  // 쓰기를 원자적으로 실행하고, 성공 시에만 영속 훅을 부른다. 실패 시 롤백.
+  private inTransaction<T>(fn: () => T): T {
+    this.db.run('BEGIN')
+    let out: T
+    try {
+      out = fn()
+    } catch (e) {
+      this.db.run('ROLLBACK')
+      throw e
+    }
+    this.db.run('COMMIT')
+    this.onChange()
+    return out
+  }
+
+  private lastInsertId(): number {
+    return queryRows(this.db, 'SELECT last_insert_rowid() AS id')[0].id as number
+  }
+
+  private seriesIdOf(seriesCode: string): number {
+    const rows = queryRows(this.db, 'SELECT id FROM product_series WHERE code = ?', [seriesCode.trim()])
+    if (!rows.length) throw new EquipmentDomainError('NOT_FOUND', `존재하지 않는 시리즈입니다: ${seriesCode}`)
+    return rows[0].id as number
+  }
+
+  private currentSpec(id: number): CurrentSpec {
+    const rows = queryRows(this.db, 'SELECT status, cooling_capacity_w, heating_capacity_w FROM products WHERE id = ?', [id])
+    if (!rows.length) throw new EquipmentDomainError('NOT_FOUND', `존재하지 않는 제품입니다: id=${id}`)
+    const r = rows[0]
+    return {
+      status: String(r.status) as PublishStatus,
+      coolingW: numOrNull(r.cooling_capacity_w),
+      heatingW: numOrNull(r.heating_capacity_w),
+    }
+  }
+
+  // 모델명은 전역 고유. 자기 자신(excludeId)은 중복으로 보지 않는다.
+  private assertModelCodeFree(modelCode: string, excludeId: number | null): void {
+    const rows = queryRows(this.db, 'SELECT id FROM products WHERE model_code = ?', [modelCode.trim()])
+    const clash = rows.some((r) => r.id !== excludeId)
+    if (clash) throw new EquipmentDomainError('DUPLICATE_MODEL_CODE', `이미 등록된 모델명입니다: ${modelCode}`)
+  }
+
+  // 패치를 현재 스펙에 병합한 결과가 '용량 전무'면 거부한다(도메인 불변식).
+  private assertMergedCapacity(cur: CurrentSpec, patch: ProductPatch): void {
+    const cooling = patch.coolingW !== undefined ? patch.coolingW : cur.coolingW
+    const heating = patch.heatingW !== undefined ? patch.heatingW : cur.heatingW
+    if (cooling === null && heating === null) {
+      throw new EquipmentDomainError('INVALID_FIELD', '냉방 또는 난방 용량 중 하나는 남겨야 합니다')
+    }
   }
 }

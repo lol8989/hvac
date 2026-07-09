@@ -1,6 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { EquipmentAdminRepository, ProductRow } from '../../application/equipment/adminPorts'
 import type { PublishStatus } from '../../domain/equipment/PublishStatus'
+import ProductFormModal from './ProductFormModal'
+import PriceModal from './PriceModal'
+import { useSubmitGuard } from './useSubmitGuard'
 
 // 게시 상태 라벨(무채색 뱃지). 관리 목록은 전 상태를 노출한다.
 const STATUS_LABEL: Record<PublishStatus, string> = { DRAFT: '작성중', PUBLISHED: '게시', ARCHIVED: '보관' }
@@ -10,13 +13,46 @@ const hp = (n: number | null) => (n == null ? '—' : String(n))
 
 const PAGE_SIZE = 12
 
-// 장비마스터 관리 페이지 (목록/필터/상태). 등록·수정·게시는 후속 슬라이스에서 추가.
-export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRepository }) {
-  const all = useMemo(() => admin.listProducts(), [admin])
+// 상태별 전이 액션(도메인 허용 전이와 1:1). DRAFT: 게시·폐기 / PUBLISHED: 보관 / ARCHIVED: 재게시.
+const ACTIONS: Record<PublishStatus, ReadonlyArray<{ to: PublishStatus; label: string }>> = {
+  DRAFT: [{ to: 'PUBLISHED', label: '게시' }, { to: 'ARCHIVED', label: '폐기' }],
+  PUBLISHED: [{ to: 'ARCHIVED', label: '보관' }],
+  ARCHIVED: [{ to: 'PUBLISHED', label: '재게시' }],
+}
+
+type Editing = { mode: 'create' } | { mode: 'edit'; row: ProductRow } | null
+
+// 장비마스터 관리 페이지 (목록/필터/등록·수정/게시전이/단가).
+export default function EquipmentAdminPage({ admin, today }: { admin: EquipmentAdminRepository; today?: string }) {
+  const [all, setAll] = useState<ProductRow[]>(() => admin.listProducts())
+  const series = useMemo(() => admin.listSeries(), [admin])
   const [cat, setCat] = useState<'ALL' | 'INDOOR' | 'OUTDOOR'>('ALL')
   const [status, setStatus] = useState<'ALL' | PublishStatus>('ALL')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
+  const [editing, setEditing] = useState<Editing>(null)
+  const [pricing, setPricing] = useState<ProductRow | null>(null)
+  const [toast, setToast] = useState('')
+  const rowGuard = useSubmitGuard() // 행 액션(게시/보관/재게시) 연타 방지
+
+  const refresh = useCallback(() => setAll(admin.listProducts()), [admin])
+
+  const notify = useCallback((msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3000)
+  }, [])
+
+  // 행 전이 액션: 도메인 예외는 토스트로 안내하고 목록 상태는 되돌리지 않는다(저장소가 롤백).
+  const changeStatus = (row: ProductRow, next: PublishStatus, label: string) =>
+    void rowGuard.run(() => {
+      try {
+        admin.setStatus(row.id, next)
+        refresh()
+        notify(`${row.modelCode} — ${label} 완료`)
+      } catch (e) {
+        notify(e instanceof Error ? e.message : `${label}에 실패했습니다`)
+      }
+    })
 
   const filtered = useMemo<ProductRow[]>(() => {
     const needle = q.trim().toLowerCase()
@@ -77,7 +113,7 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
         <input className="field" aria-label="모델명·장비번호 검색" placeholder="모델명·장비번호 검색" value={q} onChange={(e) => resetPage(setQ)(e.target.value)} />
         <div className="sp" />
         <span className="eq-count">{filtered.length}건</span>
-        <button className="btn sm primary" disabled title="다음 슬라이스에서 활성화">＋ 제품 등록</button>
+        <button className="btn sm primary" onClick={() => setEditing({ mode: 'create' })}>＋ 제품 등록</button>
       </div>
 
       <div className="eq-table-wrap">
@@ -86,11 +122,12 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
             <tr>
               <th>상태</th><th>분류</th><th>계열</th><th>시리즈</th><th>모델명</th><th>장비번호</th>
               <th className="num">HP</th><th className="num">냉방(kW)</th><th className="num">난방(kW)</th><th className="num">단가</th>
+              <th>관리</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={10} className="eq-empty">조건에 맞는 제품이 없습니다</td></tr>
+              <tr><td colSpan={11} className="eq-empty">조건에 맞는 제품이 없습니다</td></tr>
             ) : (
               rows.map((r) => (
                 <tr key={r.id}>
@@ -104,6 +141,29 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
                   <td className="num">{kw(r.coolingW)}</td>
                   <td className="num">{kw(r.heatingW)}</td>
                   <td className="num">{won(r.priceKrw)}</td>
+                  <td className="eq-actions">
+                    <button
+                      className="btn sm"
+                      onClick={() => setEditing({ mode: 'edit', row: r })}
+                      disabled={r.status !== 'DRAFT'}
+                      title={r.status === 'DRAFT' ? '스펙 수정' : '게시·보관본은 스펙을 수정할 수 없습니다'}
+                      aria-label={`${r.modelCode} 수정`}
+                    >
+                      수정
+                    </button>
+                    <button className="btn sm" onClick={() => setPricing(r)} aria-label={`${r.modelCode} 단가`}>단가</button>
+                    {ACTIONS[r.status].map((a) => (
+                      <button
+                        key={a.to}
+                        className="btn sm"
+                        onClick={() => changeStatus(r, a.to, a.label)}
+                        disabled={rowGuard.busy}
+                        aria-label={`${r.modelCode} ${a.label}`}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </td>
                 </tr>
               ))
             )}
@@ -116,6 +176,40 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
         <span>{cur + 1} / {pageCount}</span>
         <button className="btn sm" disabled={cur >= pageCount - 1} onClick={() => setPage(cur + 1)}>다음 →</button>
       </div>
+
+      {editing && (
+        <ProductFormModal
+          mode={editing.mode}
+          series={series}
+          initial={editing.mode === 'edit' ? editing.row : undefined}
+          onSave={(draft) => {
+            if (editing.mode === 'create') {
+              admin.createProduct(draft)
+              notify(`${draft.modelCode} 등록 완료 (작성중)`)
+            } else {
+              admin.updateProduct(editing.row.id, draft)
+              notify(`${draft.modelCode} 수정 완료`)
+            }
+            refresh()
+          }}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      {pricing && (
+        <PriceModal
+          product={pricing}
+          today={today ?? new Date().toISOString().slice(0, 10)}
+          onSave={(price) => {
+            admin.setPrice(pricing.id, price)
+            refresh()
+            notify(`${pricing.modelCode} 단가 변경 완료`)
+          }}
+          onClose={() => setPricing(null)}
+        />
+      )}
+
+      <div className={'toast' + (toast ? ' show' : '')} role="status">{toast}</div>
     </div>
   )
 }

@@ -227,3 +227,16 @@ button{font-family:inherit;cursor:pointer;}
 .eq-badge.draft{background:#fff;color:var(--ink2);}
 .eq-badge.archived{background:#EDEDED;color:var(--muted);}
 .eq-pager{display:flex;align-items:center;justify-content:center;gap:14px;padding:14px;font-size:12px;color:var(--ink2);}
+
+/* 장비마스터 관리 — 행 액션 · 등록/수정/단가 폼 모달 */
+.eq-actions{display:flex;gap:6px;}
+.eq-actions .btn{padding:4px 9px;font-size:11px;}
+.eq-actions .btn:disabled{opacity:.45;cursor:not-allowed;}
+.modal.eq-form{width:min(520px,94vw);height:auto;}
+.eq-form-body{padding:16px 18px;display:flex;flex-direction:column;gap:12px;max-height:60vh;overflow-y:auto;}
+.eq-f{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ink2);}
+.eq-f>span{font-weight:500;}
+.eq-f .field{width:100%;}
+.eq-form-err{background:var(--warnbg);border:1px solid var(--line);border-radius:6px;padding:9px 11px;font-size:12px;color:var(--ink);}
+.eq-form-foot{border-top:1px solid var(--line);padding:12px 18px;display:flex;justify-content:flex-end;gap:8px;}
+.eq-form-foot .btn:disabled{opacity:.55;cursor:not-allowed;}
