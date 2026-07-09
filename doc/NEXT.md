@@ -8,7 +8,13 @@
 
 ## 2026-07-09 신규 (2026-07-09 주인님 지시)
 
-- [ ] **장비마스터 관리 페이지 (SQLite 내장)** — 서버 구축 전이므로 내부 SQLite로 진행. 관리자용 장비마스터 CRUD 페이지(목록/상세·등록·수정/엑셀 업로드·동기화/게시·단가, DRAFT→PUBLISHED→ARCHIVED 게이트). 현재 `InMemoryEquipmentMaster`(SSOT·게시 게이트 계약)를 SQLite 리포지토리 구현으로 교체·확장. 4단 분류(대/중/시리즈/모델)+정규화 필드+JSONB 확장스펙(CLAUDE.md §4). ⚠️ 스택 선택 필요(Vite 프런트 단독 vs. 경량 백엔드+better-sqlite3, sql.js(WASM) 브라우저 내장 등) — 착수 전 확인.
+- **장비마스터(SQLite 내장) — 구현 계획서 작성 완료** → [`doc/장비마스터_구현계획.md`](장비마스터_구현계획.md) (2026-07-09). 스택 확정: 브라우저 내장 sql.js(WASM)+IndexedDB. 입력=LG 스펙시트, 출력=선정표/일람표(hot 필드), 구조=schema_v2.sql 서브셋(4단 분류+products 정규화+product_specs JSONB+게시게이트).
+  - [ ] **P1. 읽기 백엔드 교체** — sql.js+IndexedDB 저장소·SQLite 스키마(서브셋)·시드(현 16+7 정규화)·`SqliteEquipmentMaster`(PUBLISHED 스냅샷)로 생성단 무영향 교체·`main.tsx` 부트스트랩 주입. (이번 착수 대상)
+  - [ ] **P2. 쓰기 포트 + 관리 페이지** — `EquipmentMasterRepository`(CRUD·게시), 관리 화면(목록/상세/등록·수정/게시·단가).
+  - [ ] **P3. 스펙시트 업로드 ETL** — xlsx 파서(전치형·제품군별)·라벨 정규화(`spec_label_aliases`)·`import_jobs` 미리보기/커밋/거부로그.
+  - [ ] **P4. 실데이터 적재 + 산출물 확장** — 40종 스펙시트 적재, 선정표/일람표 실제 컬럼 연결.
+  - [ ] **조합비 정책 UI 설정** (주인님 결정 2026-07-09) — 100% vs 0.5~1.3 상충을 하드코딩 대신 관리 UI 설정으로 해소. 전역 기본(system_settings) + 제품군별 override, `ComboRange` VO로 운반, 생성단 경고선 즉시 전파(계획서 §3.5). P2(관리 페이지)에 포함.
+  - ⚠️ 남은 확인(계획서 §8): 조합비 전역 기본 초기값(1.0 vs 1.3), P1 시드 범위, 일람표 세부필드 우선순위, 4단 분류 코드 확정, 영속 정책.
 - [x] **조합 리포트 초기 상태 초기화** (2026-07-09, 미커밋) — `domainRooms`를 빈 상태로 시작 → '실 검출 실행'이 채우도록 변경(총부하가 검출 후에만 뜸). `INITIAL_GROUPS.items`/`INITIAL_POOL` 사전배정 제거. `ReportStrip` cover NaN 가드. 검출 전 전 지표 0/빈 확인 테스트 추가(`App.report.test.tsx`).
 - [x] **미배정 카운트 상수 1 제거** (2026-07-09, 미커밋) — `INITIAL_POOL=[]`. 배정은 파이프라인 결과로만: 실내기 배치(`aiPlace`) 시 전 실을 미배정 풀에 편입(`ensureRoomsInPool`) → 미배정 6, combine 진입 시 `DEFAULT_COMBINATION` 자동 조합 1회 적용(`autoCombine`) → 배정 6/미배정 0, 이후 매핑 팝업에서 사용자 조정. (combine UX 방향: 주인님 선택 "자동 조합 기본값")
 
