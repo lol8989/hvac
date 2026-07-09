@@ -16,13 +16,13 @@ const INDOOR_SEED: ReadonlyArray<[string, string, number, number, string]> = [
   ['23C', 'RNW0231C2S', 2300, 2600, CASSETTE],
   ['32C', 'RNW0321C2S', 3200, 3600, CASSETTE],
   ['40C', 'RNW0401C2S', 4000, 4500, CASSETTE],
-  ['52C', 'RNW0521C2S', 5200, 5800, CASSETTE],
-  ['60C', 'RNW0601C2S', 6000, 6700, CASSETTE],
-  ['72C', 'RNW0721C2S', 7200, 8100, CASSETTE],
+  ['52C', 'RNW0521C2S', 5200, 5900, CASSETTE],
+  ['60C', 'RNW0601C2S', 6000, 6800, CASSETTE],
+  ['72C', 'RNW0721C2S', 7200, 7200, CASSETTE],
   // T시리즈 (덕트)
   ['40T', 'RNW0401A2U', 4000, 4500, DUCT],
-  ['52T', 'RNW0521A2U', 5200, 5800, DUCT],
-  ['60T', 'RNW0601A2U', 6000, 6700, DUCT],
+  ['52T', 'RNW0521A2U', 5200, 5900, DUCT],
+  ['60T', 'RNW0601A2U', 6000, 6800, DUCT],
   ['72T', 'RNW0721A2U', 7200, 8100, DUCT],
   ['83T', 'RNW0831A2U', 8300, 9300, DUCT],
   ['100T', 'RNW1001A2U', 10000, 11200, DUCT],
@@ -38,15 +38,16 @@ export const INDOOR_RECORDS: readonly IndoorMasterRecord[] = [
 ]
 
 const D = '2026-04-20' // effectiveStartDate 공통(목업)
-// heatKw = 냉방 ×1.12 근사 목업(냉방전용은 null). comboMin/Max 전부 미지정(기본 0.5~1.3).
-// 실측 앵커: RPUW12BX9M/RPUW20BX9P/RPUQ141X9S, 나머지는 용량 스케일 보간.
+// 냉난방 용량·마력·최대연결수는 LG 스펙시트 실측값(2026-07-09 교정). 시트에 없는 모델
+// (RPUW08BX9E · GPUW450C2S · RPUW-ARCHIVED)만 목업 값이다. 단가·등급·COP는 여전히 목업.
+// comboMin/Max 전부 미지정(기본 0.5~1.3).
 export const OUTDOOR_RECORDS: readonly OutdoorMasterRecord[] = [
   { status: P, model: 'RPUW08BX9E', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, heatKw: 25.1, hp: 8, maxConn: 13, priceKrw: 2980000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 3278000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 2, copCooling: 5.1, copHeating: 4.3 },
-  { status: P, model: 'RPUW12BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, heatKw: 39.0, hp: 12, maxConn: 20, priceKrw: 4120000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 4532000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.2 },
-  { status: P, model: 'RPUW16BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 45.0, heatKw: 50.4, hp: 16, maxConn: 26, priceKrw: 5240000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 5764000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.8, copHeating: 4.05 },
-  { status: P, model: 'RPUW20BX9P', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0, heatKw: 63.8, hp: 20, maxConn: 33, priceKrw: 6350000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 6985000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.1 },
+  { status: P, model: 'RPUW12BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, heatKw: 39.2, hp: 12, maxConn: 20, priceKrw: 4120000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 4532000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.2 },
+  { status: P, model: 'RPUW16BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 46.4, heatKw: 52.2, hp: 16, maxConn: 26, priceKrw: 5240000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 5764000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.8, copHeating: 4.05 },
+  { status: P, model: 'RPUW20BX9P', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0, heatKw: 63.0, hp: 20, maxConn: 32, priceKrw: 6350000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 6985000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.1 },
   { status: P, model: 'RPUQ141X9S', cat: '냉방전용', sys: 'EHP', cool: 39.2, heatKw: null, hp: 14, maxConn: 23, priceKrw: 3760000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: null, copCooling: 4.0, copHeating: null },
-  { status: P, model: 'GPUW280C2S', cat: 'GHP', sys: 'GHP', cool: 28.0, heatKw: 31.4, hp: 10, maxConn: 16, priceKrw: 8900000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 9790000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.55, copHeating: 1.45 },
+  { status: P, model: 'GPUW280C2S', cat: 'GHP', sys: 'GHP', cool: 82.0, heatKw: 90.0, hp: 28, maxConn: 53, priceKrw: 8900000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 9790000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.55, copHeating: 1.45 },
   { status: P, model: 'GPUW450C2S', cat: 'GHP', sys: 'GHP', cool: 45.0, heatKw: 50.4, hp: 16, maxConn: 26, priceKrw: 12400000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.5, copHeating: 1.4 },
   // 게시 게이트 실증용: 단종(ARCHIVED) 모델은 생성/검도에 노출되지 않아야 한다.
   { status: PUBLISH_STATUS.ARCHIVED, model: 'RPUW-ARCHIVED', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, heatKw: 25.1, hp: 8, maxConn: 13, priceKrw: 2500000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: '2020-01-01', priority: 99, efficiencyGradeId: 5, copCooling: 3.9, copHeating: 3.5 },

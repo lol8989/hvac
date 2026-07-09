@@ -35,7 +35,7 @@ describe('SqliteEquipmentAdminRepository (관리 조회 — 전 상태)', () => 
     const g = rows.find((r) => r.modelCode === 'RPUW12BX9M')!
     expect(g).toMatchObject({
       categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형',
-      energySource: 'EHP', horsepower: 12, coolingW: 34800, heatingW: 39000, status: 'PUBLISHED',
+      energySource: 'EHP', horsepower: 12, coolingW: 34800, heatingW: 39200, status: 'PUBLISHED',
     })
   })
 

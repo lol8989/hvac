@@ -52,7 +52,7 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
     expect(odu).toBeInstanceOf(OutdoorUnit)
     expect(odu.model.value).toBe('GPUW280C2S')
     expect(odu.energySource.code).toBe('GHP')
-    expect(odu.capacity.kw).toBe(28.0)
+    expect(odu.capacity.kw).toBe(82.0)
     expect(odu.maxConnections).toBe(spec.maxConnections)
   })
 

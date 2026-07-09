@@ -39,10 +39,10 @@ describe('InMemoryEquipmentMaster (게시 SSOT + 게이트)', () => {
 
     it('난방용량(heatKw)·마력(hp)이 기재된다', () => {
       expect(byModel('RPUW08BX9E')).toMatchObject({ heatKw: 25.1, hp: 8 })
-      expect(byModel('RPUW12BX9M')).toMatchObject({ heatKw: 39.0, hp: 12 })
-      expect(byModel('RPUW16BX9M')).toMatchObject({ heatKw: 50.4, hp: 16 })
-      expect(byModel('RPUW20BX9P')).toMatchObject({ heatKw: 63.8, hp: 20 })
-      expect(byModel('GPUW280C2S')).toMatchObject({ heatKw: 31.4, hp: 10 })
+      expect(byModel('RPUW12BX9M')).toMatchObject({ heatKw: 39.2, hp: 12 })
+      expect(byModel('RPUW16BX9M')).toMatchObject({ heatKw: 52.2, hp: 16 })
+      expect(byModel('RPUW20BX9P')).toMatchObject({ heatKw: 63.0, hp: 20 })
+      expect(byModel('GPUW280C2S')).toMatchObject({ heatKw: 90.0, hp: 28 })
       expect(byModel('GPUW450C2S')).toMatchObject({ heatKw: 50.4, hp: 16 })
     })
 

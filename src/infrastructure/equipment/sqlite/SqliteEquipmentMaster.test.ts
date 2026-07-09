@@ -42,7 +42,7 @@ describe('SqliteEquipmentMaster (SQLite 백엔드)', () => {
   it('실외기 스펙 왕복 정확성(kW·단가·등급·COP·최대연결)', async () => {
     const sq = await createSqliteEquipmentMaster({ initSql: nodeInit })
     const g = sq.publishedOutdoor().find((m) => m.model === 'RPUW12BX9M')!
-    expect(g).toMatchObject({ cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, heatKw: 39.0, hp: 12, maxConn: 20, priceKrw: 4120000, priceTypeCode: 'CONSUMER', efficiencyGradeId: 3, copCooling: 4.99 })
+    expect(g).toMatchObject({ cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, heatKw: 39.2, hp: 12, maxConn: 20, priceKrw: 4120000, priceTypeCode: 'CONSUMER', efficiencyGradeId: 3, copCooling: 4.99 })
     const coolOnly = sq.publishedOutdoor().find((m) => m.model === 'RPUQ141X9S')!
     expect(coolOnly.heatKw).toBeNull()
     expect(coolOnly.efficiencyGradeId).toBeNull()

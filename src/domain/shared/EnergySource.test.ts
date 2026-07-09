@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { EnergySource } from './EnergySource'
 
 describe('EnergySource (계열 값객체)', () => {
-  it('허용 계열(EHP/GHP/AWHP/수냉식/Chiller)로 생성된다', () => {
-    for (const code of ['EHP', 'GHP', 'AWHP', '수냉식', 'Chiller']) {
+  it('허용 계열(EHP/GHP/AWHP/수냉식/Chiller/CDU/ERV)로 생성된다', () => {
+    for (const code of ['EHP', 'GHP', 'AWHP', '수냉식', 'Chiller', 'CDU', 'ERV']) {
       expect(new EnergySource(code).code).toBe(code)
     }
   })
