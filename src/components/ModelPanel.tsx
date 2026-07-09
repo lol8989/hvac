@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { groupOfRoom } from '../data'
 import type { Room, ModelCard } from '../data'
 import type { GroupView } from '../presentation/generation/planAdapter'
@@ -26,6 +26,17 @@ interface ModelPanelProps {
 const MIN_W = 260
 const MAX_W = 560
 
+// 장비마스터 게시본이 수백 종이라 목록은 검색·필터로 좁혀 쓴다.
+// 실내기는 유형(4WAY 카세트/덕트 …), 실외기는 계열(EHP/GHP/수냉식 …)로 나눈다.
+const facetOf = (tab: 'in' | 'out', m: ModelCard): string | undefined => (tab === 'in' ? m.kind : m.sys)
+const FACET_LABEL = { in: '유형 필터', out: '계열 필터' } as const
+const FACET_ALL = { in: '전체 유형', out: '전체 계열' } as const
+
+// 실외기 냉난방 구분: 난방용량이 없으면 냉방전용이다(마스터 heatKw = null).
+const HEAT_MODES = { ALL: '냉난방 전체', HEAT: '냉난방', COOL_ONLY: '냉방전용' } as const
+type HeatMode = keyof typeof HEAT_MODES
+const heatModeOf = (m: ModelCard): HeatMode => (m.heat ? 'HEAT' : 'COOL_ONLY')
+
 // 우측 패널 — 실내기/실외기 모델 선택 전용 (용량 요약은 상단 리포트로 이관).
 // 헤더 ◀ 버튼으로 접기/펼치기, 좌측 경계 드래그로 폭 조절.
 export default function ModelPanel({
@@ -37,6 +48,61 @@ export default function ModelPanel({
   const primary = selRooms[0] // 대표 실(상세 표시용)
   const sel = primary ? rooms[primary] : undefined
   const extra = selRooms.length - 1
+
+  // 검색은 '검색' 버튼/Enter로만 제출한다 — 목록이 서버 조회로 바뀌면 타이핑마다 쿼리가 나가므로.
+  // 계열·유형 필터는 선택지가 유한하고 결과를 좁히는 용도라 즉시 적용한다.
+  const [draft, setDraft] = useState('')
+  const [q, setQ] = useState('')
+  const [facet, setFacet] = useState('ALL')
+  const [seriesFilter, setSeriesFilter] = useState('ALL')
+  const [heatMode, setHeatMode] = useState<'ALL' | HeatMode>('ALL')
+
+  const cards = models[tab]
+
+  // 탭이 바뀌면 필터 값이 다른 축을 가리키므로 초기화한다.
+  const [prevTab, setPrevTab] = useState(tab)
+  if (prevTab !== tab) {
+    setPrevTab(tab)
+    setFacet('ALL')
+    setSeriesFilter('ALL')
+    setHeatMode('ALL')
+    setDraft('')
+    setQ('')
+  }
+
+  const facets = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of cards) {
+      const f = facetOf(tab, m)
+      if (f) set.add(f)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [cards, tab])
+
+  // 시리즈 선택지는 앞선 필터(유형/계열·냉난방)를 반영해 좁힌다 — 결과 0건인 시리즈를 고르지 않도록.
+  const seriesOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of cards) {
+      if (facet !== 'ALL' && facetOf(tab, m) !== facet) continue
+      if (tab === 'out' && heatMode !== 'ALL' && heatModeOf(m) !== heatMode) continue
+      if (m.series) set.add(m.series)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [cards, tab, facet, heatMode])
+
+  // 필터링해도 선택 인덱스는 원본 배열 기준을 유지한다(적용 로직이 인덱스를 쓴다).
+  const visible = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    return cards
+      .map((m, i) => ({ m, i }))
+      .filter(
+        ({ m }) =>
+          (facet === 'ALL' || facetOf(tab, m) === facet) &&
+          (tab === 'in' || heatMode === 'ALL' || heatModeOf(m) === heatMode) &&
+          (seriesFilter === 'ALL' || m.series === seriesFilter) &&
+          (!needle || m.mn.toLowerCase().includes(needle) || m.ms.toLowerCase().includes(needle)),
+      )
+  }, [cards, tab, q, facet, seriesFilter, heatMode])
 
   // 드래그 리사이즈: 패널 좌측 경계를 잡고 좌우로 움직여 폭 조절.
   const drag = useRef<{ startX: number; startW: number } | null>(null)
@@ -97,9 +163,62 @@ export default function ModelPanel({
         <button className={tab === 'in' ? 'on' : ''} onClick={() => setTab('in')}>실내기</button>
         <button className={tab === 'out' ? 'on' : ''} onClick={() => setTab('out')}>실외기</button>
       </div>
+      <div className="rp-filter">
+        <form
+          className="rp-search"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setQ(draft)
+          }}
+          role="search"
+        >
+          <input
+            className="field"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="모델명·사양 검색"
+            aria-label="모델 검색"
+          />
+          <button className="btn sm" type="submit" aria-label="검색">검색</button>
+        </form>
+        <div className="rp-facets">
+          <select className="field" value={facet} onChange={(e) => setFacet(e.target.value)} aria-label={FACET_LABEL[tab]}>
+            <option value="ALL">{FACET_ALL[tab]}</option>
+            {facets.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+          {tab === 'out' && (
+            <select
+              className="field"
+              value={heatMode}
+              onChange={(e) => setHeatMode(e.target.value as 'ALL' | HeatMode)}
+              aria-label="냉난방 구분 필터"
+            >
+              <option value="ALL">{HEAT_MODES.ALL}</option>
+              <option value="HEAT">{HEAT_MODES.HEAT}</option>
+              <option value="COOL_ONLY">{HEAT_MODES.COOL_ONLY}</option>
+            </select>
+          )}
+        </div>
+        <select
+          className="field"
+          value={seriesFilter}
+          onChange={(e) => setSeriesFilter(e.target.value)}
+          aria-label="시리즈 필터"
+        >
+          <option value="ALL">전체 시리즈</option>
+          {seriesOptions.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+      </div>
       <div className="rp-body">
-        <div className="subttl">장비 리스트</div>
-        {models[tab].map((m, i) => {
+        <div className="subttl">
+          장비 리스트 <span className="rp-count">{visible.length} / {cards.length}건</span>
+        </div>
+        {visible.length === 0 && <div className="rp-empty">조건에 맞는 모델이 없습니다</div>}
+        {visible.map(({ m, i }) => {
           const on = i === selModelIdx
           return (
           <div
@@ -110,9 +229,12 @@ export default function ModelPanel({
             tabIndex={0}
           >
             {on && <span className="selbadge">선택됨</span>}
-            <div className="mn">{m.mn}</div>
+            <div className="mn">
+              {m.mn}
+              {m.series && <span className="mn-series">· {m.series}</span>}
+            </div>
             <div className="ms">{m.ms}</div>
-            <div className="md">{m.md}</div>
+            {m.md && <div className="md">{m.md}</div>}
           </div>
           )
         })}

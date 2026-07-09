@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ROOMS, MODELS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, outdoorIdxByModel, DEFAULT_COMBINATION } from './data'
+import { ROOMS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, outdoorIdxByModel, DEFAULT_COMBINATION } from './data'
 import type { ModelCard, Room } from './data'
 import ReportStrip from './components/ReportStrip'
 import Viewer, { LAYER_OPTIONS, type LayerFilter, type ViewerHandle, type TileManifest } from './components/Viewer'
@@ -71,13 +71,32 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
     () =>
       indoorModels.map((m) => ({
         mn: m.model,
-        ms: `${m.type} · 냉방 ${(m.coolW / 1000).toFixed(1)}kW · 난방 ${(m.heatW / 1000).toFixed(1)}kW · [${m.code}]`,
-        md: '적용 2026.04.20',
+        // 2행에는 모델·장비번호를 반복하지 않는다(1행 모델명 + 시리즈로 식별). 실데이터는 code=model이라 중복 표기였다.
+        ms: `${m.type} · 냉방 ${(m.coolW / 1000).toFixed(1)}kW · 난방 ${(m.heatW / 1000).toFixed(1)}kW`,
+        md: '',
         on: false,
         cool: m.coolW / 1000,
         kind: m.type,
+        series: m.series,
       })),
     [indoorModels],
+  )
+
+  // 우측 패널 실외기 카드 — 장비마스터의 PUBLISHED 실외기 카탈로그에서 파생(더 이상 목업 MODELS.out 아님).
+  const outdoorCards = useMemo<ModelCard[]>(
+    () =>
+      catalog.list().map((s) => ({
+        mn: s.model,
+        ms: `${s.category} · 냉방 ${s.capacityKw.toFixed(1)}kW${s.heatKw ? ` · 난방 ${s.heatKw.toFixed(1)}kW` : ''} · ${s.hp}HP`,
+        md: `최대 연결 ${s.maxConnections}대`, // 시리즈는 1행(모델명 옆)에서 표기 — 중복 금지
+        on: false,
+        cool: s.capacityKw,
+        kind: s.category,
+        sys: s.energySource,
+        heat: s.heatKw,
+        series: s.series,
+      })),
+    [catalog],
   )
 
   // ── placements 파생값들 (실내기 선정 SSOT → 레거시 컴포넌트 뷰) ──
@@ -201,11 +220,11 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
   )
   const sync = () => setPlan(repo.load())
 
-  // combine 진입 시 '자동 조합' 기본 매핑을 1회 적용(사용자가 이후 매핑 팝업에서 조정).
-  // 이미 배정이 있으면(사용자 조정 후 재진입) 덮어쓰지 않는다. ref로 세션당 1회 보장.
+  // 실외기 배치(outdoor) 진입 시 '자동 조합' 기본 매핑을 1회 적용 — 배치할 실외기 그룹이 이때 정해진다.
+  // (combine 직행 등 예외 경로도 커버) 이미 배정이 있으면 덮어쓰지 않는다. ref로 세션당 1회 보장.
   const autoCombinedRef = useRef(false)
   useEffect(() => {
-    if (step !== 'combine' || autoCombinedRef.current) return
+    if ((step !== 'outdoor' && step !== 'combine') || autoCombinedRef.current) return
     const placedIds = Object.keys(placements)
     if (!placedIds.length) return // 실내기 배치 전이면 조합할 대상이 없다
     autoCombinedRef.current = true
@@ -231,7 +250,7 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
   // 카드 선택 인덱스 파생: 실외기=그룹 실제 모델, 실내기=배정값 우선·없으면 부하 근사 추천.
   // pick(수동 클릭)이 있으면 그 값으로 덮어쓴다.
   const grpOfPrimary = primary ? groupOfRoom(groups, primary) : null
-  const derivedOutIdx = grpOfPrimary ? outdoorIdxByModel(grpOfPrimary.model) : -1
+  const derivedOutIdx = grpOfPrimary ? outdoorIdxByModel(grpOfPrimary.model, outdoorCards) : -1
   const appliedCode = primary ? placements[primary]?.effectiveSelection.modelCode : undefined
   const derivedInIdx = appliedCode
     ? Math.max(0, indoorModels.findIndex((m) => m.code === appliedCode))
@@ -318,7 +337,7 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
       setConfirmMsg(`실내기 ${m.mn}을(를) 선택한 ${scope}에 일괄 적용합니다. 계속하시겠습니까?`)
       return
     }
-    const m = MODELS.out[effOut]
+    const m = outdoorCards[effOut]
     if (!m) return
     const g = primary ? groupOfRoom(groups, primary) : null
     if (!g) { flash('선택한 실이 실외기 그룹에 배정되어 있지 않습니다'); return }
@@ -349,7 +368,7 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
       return
     }
     // 실외기 탭: 대표 실이 속한 그룹의 실외기 모델을 교체.
-    const m = MODELS.out[effOut]
+    const m = outdoorCards[effOut]
     if (!m) return
     const g = primary ? groupOfRoom(groups, primary) : null
     if (!g) { flash('선택한 실이 실외기 그룹에 배정되어 있지 않습니다'); return }
@@ -487,8 +506,8 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
     setStep('place')
     flash(`AI가 도면에서 실 ${Object.keys(detected).length}곳을 검출했습니다`)
   }
-  const doPlace = () => { aiPlace() } // 배치만(단계 유지) → 결과 확인 후 '미세조정 →'으로 진행
-  const doAdjustDone = () => setStep('combine')
+  const doPlace = () => { aiPlace() } // 배치만(단계 유지) → 이동·회전으로 조정 후 '실외기 배치 →'로 진행
+  const doOutdoorDone = () => setStep('combine')
   const doCombineNext = () => {
     if (pool.length > 0) { flash(`미배정 실내기 ${pool.length}개가 남아 있습니다 — 조합 매핑에서 배정하세요`); return }
     setStep('output')
@@ -496,8 +515,8 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
   const doGenerate = () => { setGenerated(true); flash('장비선정표(Excel)·도면 산출물을 생성했습니다') }
 
   // 단계별 화면 구성.
-  const showViewer = step === 'detect' || step === 'place' || step === 'adjust' || step === 'combine'
-  const showPanel = step === 'place' || step === 'adjust' || step === 'combine'
+  const showViewer = step === 'detect' || step === 'place' || step === 'outdoor' || step === 'combine'
+  const showPanel = step === 'place' || step === 'outdoor' || step === 'combine'
 
   return (
     <div className="app">
@@ -536,8 +555,8 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
             <button className="btn sm" disabled={isFirstStep(step)} onClick={() => setStep(prevStep(step))}>← 이전</button>
             {step === 'detect' && <button className="btn sm primary" onClick={doDetect}>실 검출 실행 →</button>}
             {step === 'place' && <button className="btn sm primary" onClick={doPlace}>{placed ? '재배치' : '✦ AI 실내기 배치'}</button>}
-            {step === 'place' && placed && <button className="btn sm primary" onClick={() => setStep('adjust')}>미세조정 →</button>}
-            {step === 'adjust' && <button className="btn sm primary" onClick={doAdjustDone}>미세조정 완료 →</button>}
+            {step === 'place' && placed && <button className="btn sm primary" onClick={() => setStep('outdoor')}>실외기 배치 →</button>}
+            {step === 'outdoor' && <button className="btn sm primary" onClick={doOutdoorDone}>실외기 조합 →</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => setMapOpen(true)}>실외기 조합 매핑</button>}
             {/* 선정표는 스텝이 아니라 새 창 — 도면을 가리지 않고 확인·조정(실시간 연동). */}
             {step === 'combine' && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
@@ -596,7 +615,7 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
               tileBase="/tiles"
               layerFilter={layerFilter}
               canAddUnit={step === 'place' && placed}
-              canPlaceOutdoors={step === 'combine'}
+              canPlaceOutdoors={step === 'outdoor'}
               outdoorGroups={groups.filter((g) => g.items.length).map((g) => ({ key: g.key, label: g.label, model: g.model }))}
             />
           </div>
@@ -607,7 +626,7 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
               selRooms={selRooms}
               tab={tab}
               setTab={setTab}
-              models={{ in: indoorCards, out: MODELS.out }}
+              models={{ in: indoorCards, out: outdoorCards }}
               open={panelOpen}
               width={panelW}
               onToggle={() => setPanelOpen((v) => !v)}

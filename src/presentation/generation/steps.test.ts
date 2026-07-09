@@ -3,13 +3,13 @@ import { STEPS, stepIndex, nextStep, prevStep, isFirstStep, isLastStep } from '.
 
 describe('generation steps', () => {
   it('5단계가 정의된 순서대로다 (선정표 검토는 스텝이 아니라 새 창)', () => {
-    expect(STEPS.map((s) => s.id)).toEqual(['detect', 'place', 'adjust', 'combine', 'output'])
+    expect(STEPS.map((s) => s.id)).toEqual(['detect', 'place', 'outdoor', 'combine', 'output'])
     expect(STEPS.map((s) => s.no)).toEqual([1, 2, 3, 4, 5])
   })
 
-  it('미세조정(adjust)이 배치(place)와 조합(combine) 사이 독립 단계다', () => {
-    expect(stepIndex('adjust')).toBe(stepIndex('place') + 1)
-    expect(stepIndex('combine')).toBe(stepIndex('adjust') + 1)
+  it('실외기 배치(outdoor)가 실내기 배치(place)와 조합(combine) 사이 독립 단계다', () => {
+    expect(stepIndex('outdoor')).toBe(stepIndex('place') + 1)
+    expect(stepIndex('combine')).toBe(stepIndex('outdoor') + 1)
   })
 
   it('nextStep/prevStep은 양 끝에서 클램프된다', () => {

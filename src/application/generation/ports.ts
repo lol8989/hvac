@@ -23,6 +23,7 @@ export interface PlanRepository {
 export interface OutdoorModelSpec {
   model: string
   category: string
+  series?: string // 시리즈명 — 표시·필터용 메타데이터. 마스터가 항상 제공한다.
   energySource: EnergySourceCode
   capacityKw: number
   heatKw: number | null // 난방용량(kW). 냉방전용 모델은 null

@@ -78,7 +78,7 @@ interface ViewerProps {
   mmPerUnit?: number // 정규화 1단위 = 실 mm (격자 실치수 표기 + DXF 왕복)
   layerFilter?: LayerFilter // 표시 레이어 필터(기본 all)
   canAddUnit?: boolean // ＋실내기 수동 추가 허용 — 실검출·AI 배치 완료 전에는 비활성
-  canPlaceOutdoors?: boolean // ＋실외기 배치 허용 — 실외기 조합 단계에서만 활성
+  canPlaceOutdoors?: boolean // ＋실외기 배치 허용 — '실외기 배치' 단계에서만 활성
 }
 
 // App 버튼에서 호출하는 명령형 핸들.
@@ -501,7 +501,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       <div className="vtools">
         <label className="vtoggle"><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> 격자{gridLabel ? ` (${gridLabel})` : ''}</label>
       </div>
-      {/* 도면 영역 상단 가운데: 배치 액션 — ＋실내기(실내기 배치 단계), ＋실외기 배치(실외기 조합 단계) */}
+      {/* 도면 영역 상단 가운데: 배치 액션 — ＋실내기(실내기 배치 단계), ＋실외기 배치(실외기 배치 단계) */}
       <div className="vtools vtools-center">
         <button
           className="btn sm"
@@ -520,7 +520,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
           className="btn sm"
           onClick={placeOutdoorsFn}
           disabled={!canPlaceOutdoors}
-          title={canPlaceOutdoors ? '조합 그룹별 실외기를 도면 하단(건물 외부)에 배치' : '실외기 조합 단계에서 배치할 수 있습니다'}
+          title={canPlaceOutdoors ? '조합 그룹별 실외기를 도면 하단(건물 외부)에 배치' : "'실외기 배치' 단계에서 배치할 수 있습니다"}
         >＋ 실외기 배치</button>
       </div>
 

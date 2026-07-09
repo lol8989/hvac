@@ -16,6 +16,7 @@ export interface IndoorModelProps {
   coolW: number // 냉방용량(W)
   heatW: number // 난방용량(W)
   type: string // 실내기 유형 (예: '4WAY 카세트', '덕트')
+  series?: string // 시리즈명 — 표시·필터용 메타데이터(도메인 규칙 미사용). 마스터가 항상 제공한다.
   energySource: EnergySourceCode
 }
 
@@ -46,12 +47,14 @@ export class IndoorModel {
   readonly coolW: number
   readonly heatW: number
   readonly type: string
+  readonly series: string
   readonly energySource: EnergySourceCode
 
   constructor(props: IndoorModelProps) {
     this.code = requireNonBlank(props.code, 'code')
     this.model = requireNonBlank(props.model, 'model')
     this.type = requireNonBlank(props.type, 'type')
+    this.series = props.series ?? ''
     this.coolW = requirePositiveFinite(props.coolW, 'coolW')
     this.heatW = requirePositiveFinite(props.heatW, 'heatW')
     this.energySource = props.energySource

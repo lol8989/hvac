@@ -15,6 +15,7 @@ import { defaultEquipmentMaster } from '../equipment/InMemoryEquipmentMaster'
 export const toOutdoorModelSpec = (e: OutdoorSpecFields): OutdoorModelSpec => ({
   model: e.model,
   category: e.cat,
+  series: e.series,
   energySource: e.sys,
   capacityKw: e.cool,
   heatKw: e.heatKw,

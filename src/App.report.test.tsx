@@ -40,9 +40,9 @@ describe('App — 조합 리포트 초기 상태 (NEXT #2·#3)', () => {
     expect(reportText(container)).toContain('미배정 6')
     expect(reportText(container)).toContain('실내기 배정 0/6')
 
-    // 조합 진입: 자동 조합 기본값 적용 → 전 실 배정(미배정 0), 실외기 2대.
-    fireEvent.click(screen.getByRole('button', { name: '미세조정 →' }))
-    fireEvent.click(screen.getByRole('button', { name: '미세조정 완료 →' }))
+    // 실외기 배치 진입 시 자동 조합 기본값 적용 → 전 실 배정(미배정 0), 실외기 2대.
+    fireEvent.click(screen.getByRole('button', { name: '실외기 배치 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '실외기 조합 →' }))
     expect(reportText(container)).toContain('실내기 배정 6/6')
     expect(reportText(container)).toContain('미배정 0')
     expect(reportText(container)).toContain('실외기 2대')

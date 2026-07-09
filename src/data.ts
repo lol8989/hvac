@@ -83,7 +83,10 @@ export interface ModelCard {
   md: string
   on: boolean
   cool?: number // 실내기 냉방용량(kW) — 실 부하 근사 매칭에 사용. 실외기 카드는 미사용.
-  kind?: string // 실내기 유형(벽걸이형 / 4WAY 등) — 도면 심볼 태그 표시용.
+  kind?: string // 실내기 유형(벽걸이형 / 4WAY 등) · 실외기 제품군(냉난방 절환형 등) — 필터·심볼 태그용.
+  sys?: string // 계열(EHP / GHP / 수냉식 …) — 실외기 카드 필터용.
+  heat?: number | null // 난방용량(kW). null = 냉방전용 — 실외기 냉난방 구분 필터용.
+  series?: string // 시리즈명 — 카드 표기 + 시리즈 필터용.
 }
 
 export const MODELS: { in: ModelCard[]; out: ModelCard[] } = {

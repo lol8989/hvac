@@ -13,7 +13,7 @@ export class InMemoryIndoorModelCatalog implements IndoorModelCatalog {
   constructor(master: EquipmentMaster = defaultEquipmentMaster) {
     this.models = Object.freeze(
       master.publishedIndoor().map(
-        (m) => new IndoorModel({ code: m.code, model: m.model, coolW: m.coolW, heatW: m.heatW, type: m.type, energySource: m.energySource }),
+        (m) => new IndoorModel({ code: m.code, model: m.model, coolW: m.coolW, heatW: m.heatW, type: m.type, series: m.series, energySource: m.energySource }),
       ),
     )
   }
