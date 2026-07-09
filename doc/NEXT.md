@@ -9,7 +9,7 @@
 ## 2026-07-09 신규 (2026-07-09 주인님 지시)
 
 - **장비마스터(SQLite 내장) — 구현 계획서 작성 완료** → [`doc/장비마스터_구현계획.md`](장비마스터_구현계획.md) (2026-07-09). 스택 확정: 브라우저 내장 sql.js(WASM)+IndexedDB. 입력=LG 스펙시트, 출력=선정표/일람표(hot 필드), 구조=schema_v2.sql 서브셋(4단 분류+products 정규화+product_specs JSONB+게시게이트).
-  - [ ] **P1. 읽기 백엔드 교체** — sql.js+IndexedDB 저장소·SQLite 스키마(서브셋)·시드(현 16+7 정규화)·`SqliteEquipmentMaster`(PUBLISHED 스냅샷)로 생성단 무영향 교체·`main.tsx` 부트스트랩 주입. (이번 착수 대상)
+  - [x] **P1. 읽기 백엔드 교체** (2026-07-09, 미커밋) — sql.js(WASM)+IndexedDB 저장소·SQLite 스키마(4단 서브셋+뷰)·정규화 시드(공유 seedData 16+7)·`SqliteEquipmentMaster`(PUBLISHED 스냅샷 materialize)로 생성단 무영향 교체. `main.tsx` 부트스트랩 주입(App `master` 옵셔널 prop, 기본 인메모리→테스트/폴백). **동치 테스트로 SQLite≡InMemory 고정**. 브라우저 실구동 검증(IndexedDB 생성·16 실내기 UI 흐름·콘솔 에러 0). 테스트 396개. 적대적 리뷰(26 에이전트) 확정 3결함 반영: ①캐시 무효화 SEED_HASH(시드 내용 해시) 키 ②부트스트랩 타임아웃 레이스+로딩 표시 ③순서/시드드리프트 테스트. 후속(P2): 옛 IndexedDB 키 고아 청소.
   - [ ] **P2. 쓰기 포트 + 관리 페이지** — `EquipmentMasterRepository`(CRUD·게시), 관리 화면(목록/상세/등록·수정/게시·단가).
   - [ ] **P3. 스펙시트 업로드 ETL** — xlsx 파서(전치형·제품군별)·라벨 정규화(`spec_label_aliases`)·`import_jobs` 미리보기/커밋/거부로그.
   - [ ] **P4. 실데이터 적재 + 산출물 확장** — 40종 스펙시트 적재, 선정표/일람표 실제 컬럼 연결.

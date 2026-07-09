@@ -27,7 +27,8 @@ import { applyAiPlacement, placementTotalsW } from './domain/generation/recalc'
 import { recommendIndoor } from './domain/generation/recommendIndoor'
 import { UnitLoad } from './domain/shared/UnitLoad'
 import { InMemoryIndoorModelCatalog } from './infrastructure/generation/InMemoryIndoorModelCatalog'
-import { InMemoryEquipmentMaster } from './infrastructure/equipment/InMemoryEquipmentMaster'
+import { defaultEquipmentMaster } from './infrastructure/equipment/InMemoryEquipmentMaster'
+import type { EquipmentMaster } from './domain/equipment/EquipmentMaster'
 import { buildSelectionTable } from './domain/generation/SelectionTable'
 import { buildSelectionCsv } from './presentation/generation/selectionCsv'
 import { SELECTION_CHANNEL } from './presentation/generation/selectionSync'
@@ -42,11 +43,11 @@ function loadPanelW(): number {
   return Number.isFinite(v) && v > 0 ? Math.max(260, Math.min(560, v)) : 322
 }
 
-export default function App() {
-  // 컴포지션 루트: 장비마스터(SSOT)를 1개 만들고, 실내기·실외기 카탈로그가 이를 참조(PUBLISHED만)한다.
+export default function App({ master = defaultEquipmentMaster }: { master?: EquipmentMaster } = {}) {
+  // 컴포지션 루트: 장비마스터(SSOT)를 주입받고, 실내기·실외기 카탈로그가 이를 참조(PUBLISHED만)한다.
+  // 프로덕션은 main.tsx가 SQLite 백엔드 마스터를 주입, 미주입 시 인메모리 기본(테스트·폴백).
   // 배정 상태는 도메인 AssignmentPlan이 소유하고, 리포지토리 포트로 유즈케이스가 로드/저장한다.
   // 모두 세션 1개로 고정(useState lazy).
-  const [master] = useState(() => new InMemoryEquipmentMaster())
   const [catalog] = useState(() => new InMemoryOutdoorModelCatalog(master))
   const [repo] = useState(() => new InMemoryPlanRepository(bootstrapPlan(catalog)))
   // 실내기 모델 카탈로그(장비마스터 PUBLISHED 참조, 장비번호 코드 기반).

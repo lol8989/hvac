@@ -9,7 +9,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- 초기 로딩 표시: 장비마스터(sql.js WASM) 부팅 동안 노출되고, React 렌더 시 교체된다(백지 방지). -->
+    <div id="root">
+      <div style="height:100vh;display:flex;align-items:center;justify-content:center;font-family:'Noto Sans KR',sans-serif;color:#666;font-size:14px;">
+        불러오는 중…
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
