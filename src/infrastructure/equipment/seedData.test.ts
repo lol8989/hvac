@@ -10,7 +10,7 @@ describe('SEED_HASH (시드 내용 해시 → 캐시 무효화)', () => {
   })
 
   it('단가 1건만 바뀌어도 해시가 달라진다(→ 키 변경 → 옛 캐시 무효화)', () => {
-    const mutated = OUTDOOR_RECORDS.map((r, i) => (i === 0 ? { ...r, priceKrw: r.priceKrw + 1 } : r))
+    const mutated = OUTDOOR_RECORDS.map((r, i) => (i === 0 ? { ...r, priceKrw: (r.priceKrw ?? 0) + 1 } : r))
     expect(fnv1a(JSON.stringify([INDOOR_RECORDS, mutated]))).not.toBe(SEED_HASH)
   })
 

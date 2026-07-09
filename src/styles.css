@@ -265,3 +265,12 @@ button{font-family:inherit;cursor:pointer;}
 .up-summary b{display:block;margin-top:3px;font-size:17px;color:var(--ink);}
 .up-note{margin:8px 0 0;font-size:11px;color:var(--muted);}
 .up-reasons{margin:8px 0 0;padding-left:16px;font-size:11px;color:var(--ink2);line-height:1.8;}
+
+/* 장비마스터 — 일괄 선택/게시 */
+.eq-table th.chk,.eq-table td.chk{width:34px;padding-left:14px;padding-right:0;}
+.eq-table tbody tr.sel{background:#F0F0F0;}
+.eq-bulk{display:flex;align-items:center;gap:8px;padding:9px 18px;background:#EDEDED;border-bottom:1px solid var(--line);}
+.eq-bulk .sp{flex:1;}
+.eq-bulk-count{font-size:12px;color:var(--ink);}
+.eq-bulk-count b{font-size:13px;}
+.eq-bulk-note{font-size:11px;color:var(--muted);}

@@ -4,9 +4,10 @@
 //       성공 시에만 onChange()로 영속(IndexedDB 저장)을 트리거한다.
 
 import type { Database } from 'sql.js'
-import type { EquipmentAdminRepository, ProductRow, SeriesOption } from '../../../application/equipment/adminPorts'
+import type { BulkStatusResult, EquipmentAdminRepository, ProductRow, SeriesOption } from '../../../application/equipment/adminPorts'
 import type { PublishStatus } from '../../../domain/equipment/PublishStatus'
-import { assertTransition, assertSpecEditable, PUBLISH_STATUS } from '../../../domain/equipment/PublishStatus'
+import { assertTransition, assertSpecEditable, canTransition, PUBLISH_STATUS } from '../../../domain/equipment/PublishStatus'
+import { publishBlockReason, type PublishCandidate } from '../../../domain/equipment/Publishability'
 import { EquipmentDomainError } from '../../../domain/equipment/errors'
 import { assertValidDraft, assertValidPatch, type ProductDraft, type ProductPatch } from '../../../domain/equipment/ProductDraft'
 import type { ImportRow } from '../../../domain/equipment/SpecImport'
@@ -155,6 +156,12 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
     const cur = this.currentSpec(id)
     assertTransition(cur.status, next) // 선형 + 재게시만 허용
 
+    // 게시하는 순간 생성·검도가 소비한다 → 소비측 불변식을 만족하지 못하면 막는다.
+    if (next === PUBLISH_STATUS.PUBLISHED) {
+      const reason = publishBlockReason(this.candidateOf(id)!)
+      if (reason) throw new EquipmentDomainError('INVALID_FIELD', reason)
+    }
+
     const ts = this.now()
     // 게시 시각은 게시할 때 기록하고, 보관 해제(재게시) 시 단종일을 해제한다.
     const publishedAt = next === PUBLISH_STATUS.PUBLISHED ? ts : null
@@ -171,6 +178,52 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
         [next, publishedAt, publishedAt, discontinuedAt, ts, id],
       )
     })
+  }
+
+  setStatusMany(ids: readonly number[], next: PublishStatus): BulkStatusResult {
+    const skipped: Array<{ id: number; modelCode: string; reason: string }> = []
+    const targets: number[] = []
+
+    for (const id of ids) {
+      const cur = this.candidateOf(id)
+      if (!cur) {
+        skipped.push({ id, modelCode: `id=${id}`, reason: '존재하지 않는 제품입니다' })
+        continue
+      }
+      if (!canTransition(cur.status, next)) {
+        skipped.push({ id, modelCode: cur.modelCode, reason: `${cur.status} → ${next} 전이는 허용되지 않습니다` })
+        continue
+      }
+      if (next === PUBLISH_STATUS.PUBLISHED) {
+        const reason = publishBlockReason(cur)
+        if (reason) {
+          skipped.push({ id, modelCode: cur.modelCode, reason })
+          continue
+        }
+      }
+      targets.push(id)
+    }
+
+    if (!targets.length) return { applied: 0, skipped }
+
+    const ts = this.now()
+    const publishedAt = next === PUBLISH_STATUS.PUBLISHED ? ts : null
+    const discontinuedAt = next === PUBLISH_STATUS.ARCHIVED ? ts : null
+
+    this.inTransaction(() => {
+      for (const id of targets) {
+        this.db.run(
+          `UPDATE products
+              SET status = ?,
+                  published_at    = CASE WHEN ? IS NOT NULL THEN ? ELSE published_at END,
+                  discontinued_at = ?,
+                  updated_at = ?
+            WHERE id = ?`,
+          [next, publishedAt, publishedAt, discontinuedAt, ts, id],
+        )
+      }
+    })
+    return { applied: targets.length, skipped }
   }
 
   importProducts(seriesCode: string, rows: readonly ImportRow[]): number {
@@ -233,6 +286,32 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
     const rows = queryRows(this.db, 'SELECT id FROM product_series WHERE code = ?', [seriesCode.trim()])
     if (!rows.length) throw new EquipmentDomainError('NOT_FOUND', `존재하지 않는 시리즈입니다: ${seriesCode}`)
     return rows[0].id as number
+  }
+
+  // 게시 전제조건 판정에 필요한 최소 정보(대분류 포함).
+  private candidateOf(id: number): (PublishCandidate & { status: PublishStatus }) | null {
+    const rows = queryRows(
+      this.db,
+      `SELECT p.status, p.model_code, p.cooling_capacity_w, p.heating_capacity_w, p.horsepower, p.max_connections,
+              c.code AS category_code
+         FROM products p
+         JOIN product_series s         ON p.series_id = s.id
+         JOIN product_subcategories sc ON s.subcategory_id = sc.id
+         JOIN product_categories c     ON sc.category_id = c.id
+        WHERE p.id = ?`,
+      [id],
+    )
+    if (!rows.length) return null
+    const r = rows[0]
+    return {
+      status: String(r.status) as PublishStatus,
+      categoryCode: String(r.category_code),
+      modelCode: String(r.model_code),
+      coolingW: numOrNull(r.cooling_capacity_w),
+      heatingW: numOrNull(r.heating_capacity_w),
+      horsepower: numOrNull(r.horsepower),
+      maxConnections: numOrNull(r.max_connections),
+    }
   }
 
   private currentSpec(id: number): CurrentSpec {

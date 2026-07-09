@@ -34,6 +34,12 @@ export interface SeriesOption {
   energySource: string | null
 }
 
+// 일괄 전이 결과 — 적용 건수 + 건너뛴 행의 사유(미리보기/토스트 표시용).
+export interface BulkStatusResult {
+  applied: number
+  skipped: ReadonlyArray<{ id: number; modelCode: string; reason: string }>
+}
+
 export interface EquipmentAdminRepository {
   // 전 상태(DRAFT/PUBLISHED/ARCHIVED) 제품 목록. 분류 정렬 순.
   listProducts(): ProductRow[]
@@ -50,6 +56,10 @@ export interface EquipmentAdminRepository {
 
   // 게시 상태 전이 — 허용 전이만(선형 + 재게시). throws INVALID_TRANSITION / NOT_FOUND
   setStatus(id: number, next: PublishStatus): void
+
+  // 일괄 상태 전이. 전이 불가·게시 전제조건 미달 행은 사유와 함께 건너뛰고 나머지만 적용한다
+  // (한 건 때문에 수백 건이 실패하지 않도록). 적용분은 단일 트랜잭션.
+  setStatusMany(ids: readonly number[], next: PublishStatus): BulkStatusResult
 
   // 스펙시트 업로드 일괄 등록. verdict==='OK' 행만 DRAFT로 적재하고 롱테일 스펙을 product_specs에 저장한다.
   // 오류·중복 행은 조용히 건너뛴다(사유는 미리보기에서 이미 제시됨). 반환값: 실제 적재 건수.

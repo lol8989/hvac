@@ -33,11 +33,12 @@ export interface OutdoorSpecFields {
   maxConn: number // 최대 연결 실내기 수
   comboMin?: number // 제품군별 조합비 하한(미지정 시 기본 0.5)
   comboMax?: number // 제품군별 조합비 상한(미지정 시 기본 1.3)
-  priceKrw: number // VAT별도 소비자가(정수 원)
-  priceTypeCode: string
-  priceWithVatKrw: number | null // 미상은 null
-  effectiveStartDate: string // yyyy-mm-dd
-  priority: number
+  // 단가는 선택 항목이다 — 스펙시트에 단가가 없어 실데이터 모델 대부분은 현행가가 없다.
+  priceKrw?: number // VAT별도 소비자가(정수 원)
+  priceTypeCode?: string
+  priceWithVatKrw?: number | null // 미상은 null
+  effectiveStartDate?: string // yyyy-mm-dd
+  priority?: number
   efficiencyGradeId: number | null // 에너지소비효율등급(1~5). 미부여 시 null
   copCooling: number | null // 냉방 효율비
   copHeating: number | null // 난방 효율비

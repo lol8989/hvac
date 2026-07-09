@@ -32,7 +32,8 @@ function readPublishedIndoor(db: Database): IndoorSpecFields[] {
      FROM v_published_products WHERE category_code = 'INDOOR' ORDER BY id`,
   )
   return rows.map((r) => ({
-    code: String(r.equipment_code),
+    // 장비번호는 큐레이션 게시본만 갖는다. 없으면 모델명으로 대체 표기한다(빈값 금지 — IndoorModel 불변식).
+    code: r.equipment_code == null ? String(r.model_code) : String(r.equipment_code),
     model: String(r.model_code),
     coolW: num(r.cooling_capacity_w),
     heatW: num(r.heating_capacity_w),
@@ -53,23 +54,30 @@ function readPublishedOutdoor(db: Database): OutdoorSpecFields[] {
      WHERE vp.category_code = 'OUTDOOR' ORDER BY vp.id`,
   )
   // comboMin/Max는 P1에서 미저장(정책 UI = P2) → 키를 넣지 않아 기본(0.5~1.3) 적용. 인메모리 시드와 동치.
-  return rows.map((r) => ({
-    model: String(r.model_code),
-    cat: String(r.subcategory_name),
-    sys: r.energy_source as EnergySourceCode,
-    cool: wToKw(num(r.cooling_capacity_w)),
-    heatKw: r.heating_capacity_w == null ? null : wToKw(num(r.heating_capacity_w)),
-    hp: num(r.horsepower),
-    maxConn: num(r.max_connections),
-    priceKrw: num(r.price_krw),
-    priceTypeCode: String(r.price_type_code),
-    priceWithVatKrw: numOrNull(r.price_with_vat_krw),
-    effectiveStartDate: String(r.effective_start_date),
-    priority: num(r.price_priority),
-    efficiencyGradeId: numOrNull(r.efficiency_grade_id),
-    copCooling: numOrNull(r.cop_cooling),
-    copHeating: numOrNull(r.cop_heating),
-  }))
+  // 현행가가 없는 모델은 단가 키를 넣지 않는다(선택 항목) → 소비측이 '단가 미상'으로 처리.
+  return rows.map((r) => {
+    const base = {
+      model: String(r.model_code),
+      cat: String(r.subcategory_name),
+      sys: r.energy_source as EnergySourceCode,
+      cool: wToKw(num(r.cooling_capacity_w)),
+      heatKw: r.heating_capacity_w == null ? null : wToKw(num(r.heating_capacity_w)),
+      hp: num(r.horsepower),
+      maxConn: num(r.max_connections),
+      efficiencyGradeId: numOrNull(r.efficiency_grade_id),
+      copCooling: numOrNull(r.cop_cooling),
+      copHeating: numOrNull(r.cop_heating),
+    }
+    if (r.price_krw == null) return base
+    return {
+      ...base,
+      priceKrw: num(r.price_krw),
+      priceTypeCode: String(r.price_type_code),
+      priceWithVatKrw: numOrNull(r.price_with_vat_krw),
+      effectiveStartDate: String(r.effective_start_date),
+      priority: num(r.price_priority),
+    }
+  })
 }
 
 // 신규 DB 생성 + 스키마 + 시드. (기존 바이트가 없을 때)

@@ -30,6 +30,7 @@ const makeAdmin = (over: Partial<EquipmentAdminRepository> = {}): EquipmentAdmin
   createProduct: vi.fn(() => 1),
   updateProduct: vi.fn(),
   setStatus: vi.fn(),
+  setStatusMany: vi.fn(() => ({ applied: 0, skipped: [] })),
   importProducts: vi.fn(() => 0),
   ...over,
 })
@@ -47,12 +48,10 @@ describe('EquipmentAdminPage (관리 목록)', () => {
     expect(screen.getAllByText('게시').length).toBeGreaterThan(0)
   })
 
-  it('첫 페이지에 12행, 페이지네이션으로 다음 페이지 이동', () => {
+  it('한 페이지에 최대 20행을 보여준다(15행이면 1페이지)', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
-    expect(bodyRows()).toHaveLength(12)
-    expect(screen.getByText('1 / 2')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '다음 →' }))
-    expect(bodyRows()).toHaveLength(3) // 15 - 12
+    expect(bodyRows()).toHaveLength(15)
+    expect(screen.getByText('1 / 1')).toBeInTheDocument()
   })
 
   it('상태 필터(작성중)로 DRAFT만 남는다', () => {
@@ -120,6 +119,98 @@ describe('행 액션 (게시 전이 · 게시본 잠금)', () => {
     render(<EquipmentAdminPage admin={admin} />)
     fireEvent.click(screen.getByRole('button', { name: 'PUB0 보관' }))
     expect(screen.getByRole('status')).toHaveTextContent('허용되지 않은 상태 전이입니다')
+  })
+})
+
+describe('일괄 선택 · 일괄 게시', () => {
+  const bulkBar = () => screen.queryByRole('region', { name: '일괄 작업' })
+
+  it('선택이 없으면 일괄 작업 바가 없다', () => {
+    render(<EquipmentAdminPage admin={makeAdmin()} />)
+    expect(bulkBar()).not.toBeInTheDocument()
+  })
+
+  it('행을 선택하면 선택 건수와 일괄 액션이 나타난다', () => {
+    render(<EquipmentAdminPage admin={makeAdmin()} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'PUB0 선택' }))
+    expect(bulkBar()).toHaveTextContent('1건 선택')
+    expect(screen.getByRole('button', { name: '일괄 게시' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '일괄 보관' })).toBeInTheDocument()
+  })
+
+  it('페이지 전체 선택 체크박스로 보이는 행을 모두 선택한다', () => {
+    render(<EquipmentAdminPage admin={makeAdmin()} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: '이 페이지 전체 선택' }))
+    expect(bulkBar()).toHaveTextContent('15건 선택')
+  })
+
+  it('선택 해제하면 바가 사라진다', () => {
+    render(<EquipmentAdminPage admin={makeAdmin()} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: '이 페이지 전체 선택' }))
+    fireEvent.click(screen.getByRole('button', { name: '선택 해제' }))
+    expect(bulkBar()).not.toBeInTheDocument()
+  })
+
+  it('일괄 게시는 선택한 id만 setStatusMany로 넘긴다', () => {
+    const admin = makeAdmin()
+    render(<EquipmentAdminPage admin={admin} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'PUB0 선택' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'DRAFTX 선택' }))
+    fireEvent.click(screen.getByRole('button', { name: '일괄 게시' }))
+    expect(admin.setStatusMany).toHaveBeenCalledWith([1, 100], 'PUBLISHED')
+  })
+
+  it('필터를 걸면 선택은 필터 결과 안에서만 유효하다', () => {
+    const admin = makeAdmin()
+    render(<EquipmentAdminPage admin={admin} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: '이 페이지 전체 선택' })) // 15건
+    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'DRAFT' } })
+    expect(bulkBar()).toHaveTextContent('1건 선택')
+    fireEvent.click(screen.getByRole('button', { name: '일괄 게시' }))
+    expect(admin.setStatusMany).toHaveBeenCalledWith([100], 'PUBLISHED')
+  })
+
+  it('적용/제외 건수를 토스트로 요약하고 사유 예시를 보여준다', () => {
+    const admin = makeAdmin({
+      setStatusMany: vi.fn(() => ({
+        applied: 1,
+        skipped: [{ id: 101, modelCode: 'ARCHX', reason: '마력(HP)이 없어 게시할 수 없습니다' }],
+      })),
+    })
+    render(<EquipmentAdminPage admin={admin} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: '이 페이지 전체 선택' }))
+    fireEvent.click(screen.getByRole('button', { name: '일괄 게시' }))
+    const toast = screen.getByRole('status')
+    expect(toast).toHaveTextContent('1건 적용')
+    expect(toast).toHaveTextContent('1건 제외')
+    expect(toast).toHaveTextContent('마력(HP)이 없어')
+  })
+
+  it('일괄 게시 후 선택이 초기화된다', () => {
+    render(<EquipmentAdminPage admin={makeAdmin()} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'PUB0 선택' }))
+    fireEvent.click(screen.getByRole('button', { name: '일괄 게시' }))
+    expect(bulkBar()).not.toBeInTheDocument()
+  })
+
+  it('일괄 게시 연타에도 setStatusMany는 1회만 호출된다(더블클릭 방지)', () => {
+    const admin = makeAdmin()
+    render(<EquipmentAdminPage admin={admin} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'PUB0 선택' }))
+    const btn = screen.getByRole('button', { name: '일괄 게시' })
+    fireEvent.click(btn)
+    fireEvent.click(btn)
+    expect(admin.setStatusMany).toHaveBeenCalledTimes(1)
+  })
+
+  it('시리즈 필터로 좁힌 뒤 전체 선택하면 그 시리즈만 게시 대상이 된다', () => {
+    const admin = makeAdmin()
+    render(<EquipmentAdminPage admin={admin} />)
+    fireEvent.change(screen.getByRole('combobox', { name: '시리즈 필터' }), { target: { value: 'S_IN_4WAY' } })
+    expect(bodyRows()).toHaveLength(1) // DRAFTX만 S_IN_4WAY
+    fireEvent.click(screen.getByRole('checkbox', { name: '이 페이지 전체 선택' }))
+    fireEvent.click(screen.getByRole('button', { name: '일괄 게시' }))
+    expect(admin.setStatusMany).toHaveBeenCalledWith([100], 'PUBLISHED')
   })
 })
 

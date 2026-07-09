@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { EquipmentAdminRepository, ProductRow } from '../../application/equipment/adminPorts'
+import type { BulkStatusResult, EquipmentAdminRepository, ProductRow } from '../../application/equipment/adminPorts'
 import type { PublishStatus } from '../../domain/equipment/PublishStatus'
 import ProductFormModal from './ProductFormModal'
 import SpecSheetUploadModal from './SpecSheetUploadModal'
+import BulkActionBar from './BulkActionBar'
 import { useSubmitGuard } from './useSubmitGuard'
 
 // 게시 상태 라벨(무채색 뱃지). 관리 목록은 전 상태를 노출한다.
@@ -10,7 +11,7 @@ const STATUS_LABEL: Record<PublishStatus, string> = { DRAFT: '작성중', PUBLIS
 const kw = (w: number | null) => (w == null ? '—' : (Math.round(w / 100) / 10).toFixed(1))
 const hp = (n: number | null) => (n == null ? '—' : String(n))
 
-const PAGE_SIZE = 12
+const PAGE_SIZE = 20
 
 // 상태별 전이 액션(도메인 허용 전이와 1:1). DRAFT: 게시·폐기 / PUBLISHED: 보관 / ARCHIVED: 재게시.
 const ACTIONS: Record<PublishStatus, ReadonlyArray<{ to: PublishStatus; label: string }>> = {
@@ -25,10 +26,12 @@ type Editing = { mode: 'create' } | { mode: 'edit'; row: ProductRow } | null
 export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRepository }) {
   const [all, setAll] = useState<ProductRow[]>(() => admin.listProducts())
   const series = useMemo(() => admin.listSeries(), [admin])
-  const [cat, setCat] = useState<'ALL' | 'INDOOR' | 'OUTDOOR'>('ALL')
+  const [cat, setCat] = useState<'ALL' | 'INDOOR' | 'OUTDOOR' | 'VENT'>('ALL')
   const [status, setStatus] = useState<'ALL' | PublishStatus>('ALL')
+  const [seriesCode, setSeriesCode] = useState('ALL')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
+  const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
   const [editing, setEditing] = useState<Editing>(null)
   const [uploading, setUploading] = useState(false)
   const [toast, setToast] = useState('')
@@ -59,14 +62,47 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
       (r) =>
         (cat === 'ALL' || r.categoryCode === cat) &&
         (status === 'ALL' || r.status === status) &&
+        (seriesCode === 'ALL' || r.seriesCode === seriesCode) &&
         (!needle || r.modelCode.toLowerCase().includes(needle) || (r.equipmentCode ?? '').toLowerCase().includes(needle)),
     )
-  }, [all, cat, status, q])
+  }, [all, cat, status, seriesCode, q])
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const cur = Math.min(page, pageCount - 1)
   const rows = filtered.slice(cur * PAGE_SIZE, cur * PAGE_SIZE + PAGE_SIZE)
   const resetPage = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(0) }
+
+  // 선택은 필터 결과 안에서만 유효하다(필터를 바꾸면 보이지 않는 선택이 남지 않도록 정리).
+  const visibleSelected = useMemo(() => filtered.filter((r) => selected.has(r.id)).map((r) => r.id), [filtered, selected])
+  const pageAllSelected = rows.length > 0 && rows.every((r) => selected.has(r.id))
+  const allFilteredSelected = filtered.length > 0 && visibleSelected.length === filtered.length
+
+  const toggleOne = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const togglePage = () =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (pageAllSelected) rows.forEach((r) => next.delete(r.id))
+      else rows.forEach((r) => next.add(r.id))
+      return next
+    })
+
+  const applyBulk = (next: PublishStatus): BulkStatusResult => admin.setStatusMany(visibleSelected, next)
+
+  const reportBulk = (res: BulkStatusResult, label: string) => {
+    refresh()
+    setSelected(new Set())
+    const head = `${label} — ${res.applied}건 적용`
+    if (!res.skipped.length) return notify(head)
+    const sample = res.skipped[0]
+    notify(`${head}, ${res.skipped.length}건 제외 (예: ${sample.modelCode} — ${sample.reason})`)
+  }
 
   const counts = useMemo(() => {
     const c = { PUBLISHED: 0, DRAFT: 0, ARCHIVED: 0 } as Record<PublishStatus, number>
@@ -102,6 +138,17 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
           <option value="ALL">전체 분류</option>
           <option value="INDOOR">실내기</option>
           <option value="OUTDOOR">실외기</option>
+          <option value="VENT">환기</option>
+        </select>
+        <select className="field" aria-label="시리즈 필터" value={seriesCode} onChange={(e) => resetPage(setSeriesCode)(e.target.value)}>
+          <option value="ALL">전체 시리즈</option>
+          {series
+            .filter((s) => cat === 'ALL' || s.categoryCode === cat)
+            .map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.subcategoryName} — {s.nameKo}
+              </option>
+            ))}
         </select>
         <select className="field" aria-label="상태 필터" value={status} onChange={(e) => resetPage(setStatus)(e.target.value as typeof status)}>
           <option value="ALL">전체 상태</option>
@@ -116,10 +163,23 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
         <button className="btn sm primary" onClick={() => setEditing({ mode: 'create' })}>＋ 제품 등록</button>
       </div>
 
+      <BulkActionBar
+        selectedCount={visibleSelected.length}
+        filteredCount={filtered.length}
+        allFilteredSelected={allFilteredSelected}
+        onSelectAllFiltered={() => setSelected(new Set(filtered.map((r) => r.id)))}
+        onClear={() => setSelected(new Set())}
+        onApply={applyBulk}
+        onResult={reportBulk}
+      />
+
       <div className="eq-table-wrap">
         <table className="eq-table">
           <thead>
             <tr>
+              <th className="chk">
+                <input type="checkbox" checked={pageAllSelected} onChange={togglePage} aria-label="이 페이지 전체 선택" />
+              </th>
               <th>상태</th><th>분류</th><th>계열</th><th>시리즈</th><th>모델명</th><th>장비번호</th>
               <th className="num">HP</th><th className="num">냉방(kW)</th><th className="num">난방(kW)</th>
               <th>관리</th>
@@ -127,10 +187,18 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={10} className="eq-empty">조건에 맞는 제품이 없습니다</td></tr>
+              <tr><td colSpan={11} className="eq-empty">조건에 맞는 제품이 없습니다</td></tr>
             ) : (
               rows.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} className={selected.has(r.id) ? 'sel' : undefined}>
+                  <td className="chk">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(r.id)}
+                      onChange={() => toggleOne(r.id)}
+                      aria-label={`${r.modelCode} 선택`}
+                    />
+                  </td>
                   <td><span className={'eq-badge ' + r.status.toLowerCase()}>{STATUS_LABEL[r.status]}</span></td>
                   <td>{r.categoryName}</td>
                   <td>{r.subcategoryName}{r.energySource ? ` · ${r.energySource}` : ''}</td>
