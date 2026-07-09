@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { ratioOf, ROOMS } from '../data'
 import type { GroupView } from '../presentation/generation/planAdapter'
 import type { OutdoorModelSpec } from '../application/generation/ports'
+import { judgeCombo } from '../domain/generation/SelectionTable'
+import { ComboRange } from '../domain/shared/ComboRange'
 
 interface ChipProps {
   id: string
@@ -84,8 +86,8 @@ export default function MappingModal({ catalog, groups, pool, capByRoom, onMove,
           <button className="x" onClick={onClose}>×</button>
         </div>
         <div className="m-note">
-          미배정 실내기를 실외기 카드로 <b>드래그</b>해 조합을 구성합니다. 조합비가 실시간 계산되고,
-          호환 불가(GHP ↔ EHP)는 경고로 차단됩니다. 호환 판단은 <b>장비마스터의 제품군·계열 정보</b> 기준입니다.
+          미배정 실내기를 실외기 카드로 <b>드래그</b>해 조합을 구성합니다. 카드마다 조합비가 실시간 계산되며,
+          <b>허용 범위는 제품군별 정책값</b>을 따릅니다(선정표와 동일 판정). 호환 불가(GHP ↔ EHP)는 경고로 차단됩니다.
         </div>
 
         <div className="m-toolbar">
@@ -102,8 +104,11 @@ export default function MappingModal({ catalog, groups, pool, capByRoom, onMove,
           <div className="odus">
             {groups.map((g) => {
               const r = ratioOf(g, capByRoom)
-              const pct = Math.min(100, Math.round(r * 100))
-              const warn = g.items.length && (r > 1.3 || r < 0.5)
+              const pct = Math.round(r * 100) // 표시용(실제값)
+              const barPct = Math.min(100, pct) // 게이지 바 폭은 100%에서 멈춘다
+              // 판정 규칙·임계는 선정표와 동일(도메인 judgeCombo + 제품군별 ComboRange).
+              const judgement = g.items.length ? judgeCombo(r, new ComboRange(g.comboMin, g.comboMax)) : 'OK'
+              const warn = judgement !== 'OK'
               return (
                 <div key={g.key} className="odu">
                   <div className="oh">
@@ -115,8 +120,16 @@ export default function MappingModal({ catalog, groups, pool, capByRoom, onMove,
                     <div style={{ marginTop: 2 }}>
                       등급 {g.gradeText ?? '—'}{g.effText ? ` · ${g.effText}` : ''}
                     </div>
-                    <div className={'g' + (warn ? ' warn' : '')}><i style={{ width: pct + '%' }} /></div>
-                    조합비 {r.toFixed(2)} {warn ? <span>· <b>범위(0.5~1.3) 벗어남</b></span> : null}
+                    <div className={'g' + (warn ? ' warn' : '')}><i style={{ width: barPct + '%' }} /></div>
+                    <span>
+                      조합비 <b>{r.toFixed(2)}</b> ({pct}%)
+                      {g.items.length ? ` · 허용 ${g.comboMin.toFixed(2)}~${g.comboMax.toFixed(2)}` : null}
+                      {warn && (
+                        <span className="badge warn" style={{ marginLeft: 6 }}>
+                          {judgement === 'OVERLOADED' ? '과부하' : '저부하'}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <div
                     className={'drop' + (overKey === g.key ? ' dragover' : '')}

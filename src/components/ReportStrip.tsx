@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { ratioOf, groupOfRoom } from '../data'
 import type { Room } from '../data'
 import type { GroupView } from '../presentation/generation/planAdapter'
+import { judgeCombo } from '../domain/generation/SelectionTable'
+import { ComboRange } from '../domain/shared/ComboRange'
 
 interface ReportStripProps {
   rooms: Record<string, Room>
@@ -22,7 +24,10 @@ export default function ReportStrip({ rooms, groups, pool, capByRoom, actions }:
   const cover = total ? Math.round((assigned / total) * 100) : 0 // 검출 전(실 0)엔 NaN 방지
   const activeRatios = groups.filter((g) => g.items.length).map((g) => ratioOf(g, capByRoom))
   const avg = activeRatios.length ? activeRatios.reduce((a, b) => a + b, 0) / activeRatios.length : 0
-  const over = groups.filter((g) => g.items.length && ratioOf(g, capByRoom) > 1.3).length
+  // 과부하 판정은 제품군별 허용 상한(ComboRange) 기준 — 매핑 팝업·선정표와 동일 규칙.
+  const over = groups.filter(
+    (g) => g.items.length && judgeCombo(ratioOf(g, capByRoom), new ComboRange(g.comboMin, g.comboMax)) === 'OVERLOADED',
+  ).length
   const pct = Math.min(100, Math.round(avg * 100))
 
   return (

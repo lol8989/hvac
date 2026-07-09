@@ -130,22 +130,25 @@ button{font-family:inherit;cursor:pointer;}
 .m-h .x{border:none;background:transparent;color:#fff;font-size:18px;}
 .m-note{background:#F5F5F5;border-bottom:1px solid var(--line);padding:8px 18px;font-size:11px;color:#666;}
 .m-body{flex:1;display:flex;gap:14px;padding:14px 18px;overflow:hidden;}
-.odus{flex:2;min-width:0;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start;overflow-y:auto;padding-right:4px;}
+/* grid-auto-rows:max-content — auto 트랙은 컨테이너 높이에 맞춰 균등 분배되어 카드가 다음 행을 덮는다 */
+.odus{flex:2;min-width:0;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:max-content;gap:12px;align-content:start;overflow-y:auto;padding-right:4px;}
 .pool{flex:1;min-width:230px;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
 .pool .ph,.odu .oh{background:var(--dark);color:#fff;font-size:12px;font-weight:700;padding:9px 12px;}
 .pool .pbody{flex:1;overflow-y:auto;padding:10px;}
-.odu{border:1px solid var(--line);border-radius:8px;overflow:hidden;height:fit-content;}
+.odu{border:1px solid var(--line);border-radius:8px;overflow:hidden;align-self:start;}
 .odu .oh{display:flex;justify-content:space-between;align-items:center;}
 .odu .ometa{padding:8px 12px;font-size:11px;color:#666;border-bottom:1px solid var(--line2);}
 .g{height:8px;background:#EEE;border-radius:5px;overflow:hidden;margin:6px 0 3px;}
 .g>i{display:block;height:100%;background:#555;}
 .g.warn>i{background:repeating-linear-gradient(45deg,#333,#333 4px,#888 4px,#888 8px);}
-.drop{padding:10px 12px;min-height:92px;}
+.drop{padding:10px 12px;min-height:92px;max-height:210px;overflow-y:auto;}
 .drop.dragover{background:#EDEDED;outline:2px dashed #888;outline-offset:-6px;}
 .chip{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:6px;padding:6px 9px;margin-bottom:7px;background:#fff;font-size:12px;cursor:grab;}
 .chip .cap{color:#888;font-size:11px;}
 .chip .x{border:none;background:transparent;color:#999;font-size:13px;}
 .warnbar{background:var(--warnbg);border-top:1px solid var(--line);color:#111;font-size:11px;padding:7px 12px;}
+.odu .badge{display:inline-block;font-size:9.5px;line-height:1;padding:2px 5px;border-radius:2px;vertical-align:1px;}
+.odu .badge.warn{background:#555555;color:#fff;}
 .ofoot{display:flex;gap:6px;padding:9px 12px;border-top:1px solid var(--line2);}
 .m-f{border-top:1px solid var(--line);padding:11px 18px;display:flex;align-items:center;gap:10px;}
 .m-f .sp{flex:1;}

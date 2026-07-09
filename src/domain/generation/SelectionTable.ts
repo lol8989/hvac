@@ -26,13 +26,17 @@ export type {
   SelectionTableInput,
 } from './SelectionTable.types'
 
-// ── 내부 헬퍼 ────────────────────────────────────────────────
-
-const judge = (ratio: number, range: ComboRange): ComboJudgement => {
+// 조합비 판정 — 선정표와 실외기 조합 매핑 팝업이 같은 규칙을 쓰도록 공개한다.
+// 임계는 제품군별 ComboRange(정책값)이며, 하드코딩 0.5~1.3에 의존하지 않는다.
+export const judgeCombo = (ratio: number, range: ComboRange): ComboJudgement => {
   if (ratio < range.min) return 'UNDERLOADED'
   if (ratio > range.max) return 'OVERLOADED'
   return 'OK'
 }
+
+// ── 내부 헬퍼 ────────────────────────────────────────────────
+
+const judge = judgeCombo
 
 // 실 1개 → 기본 행 (실외기 정보는 이후 그룹 첫 행에 부착)
 const buildBaseRow = (

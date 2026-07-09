@@ -24,6 +24,8 @@ export interface GroupView {
   sys: EnergySourceCode
   cool: number
   items: string[]
+  comboMin: number // 제품군별 조합비 허용 하한 (정책 미지정 시 ComboRange.DEFAULT)
+  comboMax: number // 제품군별 조합비 허용 상한
   gradeText?: string // 예: '3등급'. 등급 미부여 시 undefined
   effText?: string // 계열별 효율 지표: EHP 'EERa 4.99' / GHP 'COPc 1.55'. 없으면 undefined
 }
@@ -114,6 +116,8 @@ export const toViewModel = (plan: AssignmentPlan): ViewModel => ({
       sys: odu.energySource.code,
       cool: odu.capacity.kw,
       items: g.indoorUnits.map((i) => i.id),
+      comboMin: odu.comboRange.min,
+      comboMax: odu.comboRange.max,
       gradeText: odu.grade?.label(),
       effText: efficiencyText(odu.energySource.code, odu.grade),
     }

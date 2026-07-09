@@ -11,7 +11,7 @@ const ROOMS_FX: Record<string, Room> = {
   AC_003: room('회의실', 9.0),
 }
 const grp = (key: string, label: string, model: string, items: string[]): GroupView => ({
-  key, label, model, cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, items,
+  key, label, model, cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, items, comboMin: 0.5, comboMax: 1.3,
 })
 const CARDS: ModelCard[] = [
   { mn: 'R-W0601A2U', ms: '4WAY 카세트 · 냉방 6.0kW', md: '적용 2026.04.20', on: false, cool: 6.0, kind: '4WAY' },
