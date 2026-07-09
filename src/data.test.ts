@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { recommendedIndoorIdx, outdoorIdxByModel, ratioOf, indoorCoolByModel, MODELS, ROOMS, ODU_CATALOG, INITIAL_GROUPS, INITIAL_POOL, DEFAULT_COMBINATION } from './data'
+import { recommendedIndoorIdx, outdoorIdxByModel, ratioOf, indoorCoolByModel, MODELS, ROOMS, INITIAL_GROUPS, INITIAL_POOL, DEFAULT_COMBINATION } from './data'
 import type { ModelCard } from './data'
 import { DEFAULT_UNIT_LOADS } from './domain/shared/UnitLoad'
+import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemoryOutdoorModelCatalog'
 
 // 부하 근사 매칭용 목업 카드(용량만 의미 있음)
 const cards: ModelCard[] = [
@@ -89,30 +90,8 @@ describe('ROOMS 부하 파생 (부하 = 면적 × 용도별 단위부하 × 1.16
   })
 })
 
-describe('ODU_CATALOG 확장 필드 (난방·HP·조합비범위)', () => {
-  const byModel = (m: string) => ODU_CATALOG.find((e) => e.model === m)!
-
-  it('난방용량(heatKw)과 마력(hp)이 기재된다', () => {
-    expect(byModel('RPUW08BX9E')).toMatchObject({ heatKw: 25.1, hp: 8 })
-    expect(byModel('RPUW12BX9M')).toMatchObject({ heatKw: 39.0, hp: 12 })
-    expect(byModel('RPUW16BX9M')).toMatchObject({ heatKw: 50.4, hp: 16 })
-    expect(byModel('RPUW20BX9P')).toMatchObject({ heatKw: 63.8, hp: 20 })
-    expect(byModel('GPUW280C2S')).toMatchObject({ heatKw: 31.4, hp: 10 })
-    expect(byModel('GPUW450C2S')).toMatchObject({ heatKw: 50.4, hp: 16 })
-  })
-
-  it('냉방전용 모델은 heatKw가 null이다', () => {
-    expect(byModel('RPUQ141X9S').heatKw).toBeNull()
-    expect(byModel('RPUQ141X9S').hp).toBe(14)
-  })
-
-  it('comboMin/Max는 정책 미확정으로 전부 미지정(기본 0.5~1.3 적용 대상)', () => {
-    for (const e of ODU_CATALOG) {
-      expect(e.comboMin).toBeUndefined()
-      expect(e.comboMax).toBeUndefined()
-    }
-  })
-})
+// 실외기 스펙(heatKw/hp/comboMin 등) 데이터 검증은 SSOT인 장비마스터로 이관됨:
+// → src/infrastructure/equipment/InMemoryEquipmentMaster.test.ts
 
 describe('초기 배정 시드 제거 (초기 상태는 빈/0 — NEXT #2·#3)', () => {
   it('INITIAL_GROUPS는 실외기 그룹만 제안하고 실내기를 사전배정하지 않는다(items 전부 빈 배열)', () => {
@@ -125,9 +104,11 @@ describe('초기 배정 시드 제거 (초기 상태는 빈/0 — NEXT #2·#3)',
 })
 
 describe('DEFAULT_COMBINATION (combine 진입 시 자동 조합 기본값)', () => {
+  // 실외기 스펙은 장비마스터 참조 카탈로그(PUBLISHED)로 조회한다.
+  const outdoor = new InMemoryOutdoorModelCatalog()
   const specOfGroup = (key: string) => {
     const model = INITIAL_GROUPS.find((g) => g.key === key)!.model
-    return ODU_CATALOG.find((e) => e.model === model)!
+    return outdoor.findByModel(model)!
   }
 
   it('전 실을 빠짐없이 배정한다(미배정 없음)', () => {
@@ -143,7 +124,7 @@ describe('DEFAULT_COMBINATION (combine 진입 시 자동 조합 기본값)', () 
   it('실의 계열이 배정 그룹 실외기 계열과 일치한다(계열 호환)', () => {
     for (const c of DEFAULT_COMBINATION) {
       const spec = specOfGroup(c.key)
-      for (const id of c.items) expect(ROOMS[id].sys).toBe(spec.sys)
+      for (const id of c.items) expect(ROOMS[id].sys).toBe(spec.energySource)
     }
   })
 
@@ -151,7 +132,7 @@ describe('DEFAULT_COMBINATION (combine 진입 시 자동 조합 기본값)', () 
     for (const c of DEFAULT_COMBINATION) {
       if (!c.items.length) continue
       const spec = specOfGroup(c.key)
-      const r = ratioOf({ items: c.items, cool: spec.cool })
+      const r = ratioOf({ items: c.items, cool: spec.capacityKw })
       expect(r).toBeGreaterThanOrEqual(0.5)
       expect(r).toBeLessThanOrEqual(1.3)
     }

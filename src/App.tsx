@@ -27,6 +27,7 @@ import { applyAiPlacement, placementTotalsW } from './domain/generation/recalc'
 import { recommendIndoor } from './domain/generation/recommendIndoor'
 import { UnitLoad } from './domain/shared/UnitLoad'
 import { InMemoryIndoorModelCatalog } from './infrastructure/generation/InMemoryIndoorModelCatalog'
+import { InMemoryEquipmentMaster } from './infrastructure/equipment/InMemoryEquipmentMaster'
 import { buildSelectionTable } from './domain/generation/SelectionTable'
 import { buildSelectionCsv } from './presentation/generation/selectionCsv'
 import { SELECTION_CHANNEL } from './presentation/generation/selectionSync'
@@ -42,12 +43,14 @@ function loadPanelW(): number {
 }
 
 export default function App() {
-  // 장비마스터 실외기 스펙 카탈로그(읽기 포트). 배정 상태는 도메인 AssignmentPlan이 소유하고,
-  // 인메모리 리포지토리 포트를 통해 유즈케이스가 로드/저장한다. 모두 세션 1개로 고정(useState lazy).
-  const [catalog] = useState(() => new InMemoryOutdoorModelCatalog())
+  // 컴포지션 루트: 장비마스터(SSOT)를 1개 만들고, 실내기·실외기 카탈로그가 이를 참조(PUBLISHED만)한다.
+  // 배정 상태는 도메인 AssignmentPlan이 소유하고, 리포지토리 포트로 유즈케이스가 로드/저장한다.
+  // 모두 세션 1개로 고정(useState lazy).
+  const [master] = useState(() => new InMemoryEquipmentMaster())
+  const [catalog] = useState(() => new InMemoryOutdoorModelCatalog(master))
   const [repo] = useState(() => new InMemoryPlanRepository(bootstrapPlan(catalog)))
-  // 실내기 모델 카탈로그(장비마스터 참조 데이터, 장비번호 코드 기반).
-  const [indoorCatalog] = useState(() => new InMemoryIndoorModelCatalog())
+  // 실내기 모델 카탈로그(장비마스터 PUBLISHED 참조, 장비번호 코드 기반).
+  const [indoorCatalog] = useState(() => new InMemoryIndoorModelCatalog(master))
   const indoorModels = useMemo(() => indoorCatalog.list(), [indoorCatalog])
 
   const [plan, setPlan] = useState(() => repo.load())
