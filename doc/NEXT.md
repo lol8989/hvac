@@ -12,10 +12,13 @@
   - [x] **P1. 읽기 백엔드 교체** (2026-07-09, 미커밋) — sql.js(WASM)+IndexedDB 저장소·SQLite 스키마(4단 서브셋+뷰)·정규화 시드(공유 seedData 16+7)·`SqliteEquipmentMaster`(PUBLISHED 스냅샷 materialize)로 생성단 무영향 교체. `main.tsx` 부트스트랩 주입(App `master` 옵셔널 prop, 기본 인메모리→테스트/폴백). **동치 테스트로 SQLite≡InMemory 고정**. 브라우저 실구동 검증(IndexedDB 생성·16 실내기 UI 흐름·콘솔 에러 0). 테스트 396개. 적대적 리뷰(26 에이전트) 확정 3결함 반영: ①캐시 무효화 SEED_HASH(시드 내용 해시) 키 ②부트스트랩 타임아웃 레이스+로딩 표시 ③순서/시드드리프트 테스트. 후속(P2): 옛 IndexedDB 키 고아 청소.
   - **P2. 쓰기 포트 + 관리 페이지** — 세로 슬라이스로 진행:
     - [x] **S1. 관리 목록(읽기)** (2026-07-09, 미커밋) — `EquipmentAdminRepository.listProducts`(전 상태) + SQLite 어댑터, 관리 페이지(목록/분류·상태 필터/검색/페이지네이션/상태뱃지, 무채색), `?view=equipment` 라우팅 + GNB 링크, `query.ts` 공용 헬퍼 추출. 브라우저 검증(25제품 전 상태). 적대적 리뷰(12에이전트)→접근성 aria-label 2건 반영. 테스트 405.
-    - [ ] **S2. 쓰기 포트 + 등록/수정/게시** — `EquipmentAdminRepository` 쓰기(create/update/setStatus/setPrice, 상태전이 불변식) + SQLite 쓰기(IndexedDB 영속) + 등록/수정 폼·게시/보관 액션.
-    - [ ] **S3. 조합비 정책 UI** — 전역+제품군별 min/max 설정(계획서 §3.5) → 생성단 전파.
-  - [ ] **P3. 스펙시트 업로드 ETL** — xlsx 파서(전치형·제품군별)·라벨 정규화(`spec_label_aliases`)·`import_jobs` 미리보기/커밋/거부로그.
-  - [ ] **P4. 실데이터 적재 + 산출물 확장** — 40종 스펙시트 적재, 선정표/일람표 실제 컬럼 연결.
+    - [x] **S2. 쓰기 포트 + 등록/수정/게시** (2026-07-09, `15fc1e0`) — 상태전이 불변식(선형+재게시, PUBLISHED→DRAFT 금지)·게시본 스펙 잠금(DRAFT만 수정)·`ProductDraft` VO 자기검증·`EquipmentDomainError(code)`. SQLite 쓰기(create/update/setStatus, BEGIN/COMMIT/ROLLBACK) + 성공 커밋 후 IndexedDB 영속. 등록/수정 폼·행별 전이 액션. `useSubmitGuard`로 더블클릭 방지(주인님 지시) — StrictMode 이중 마운트에서 busy가 영구 true로 굳던 결함을 브라우저 검증에서 발견·회귀 고정. 테스트 476.
+    - [x] **단가 제거** (2026-07-09, `35c7d38`, 주인님 지시) — 스펙시트에 단가가 없어 관리 UI 단가 모달·setPrice·단가 컬럼, 생성 카드 `mp`·매핑팝업 단가·일람표 CSV 단가 컬럼 제거. 스키마 `product_prices`·도메인 `Price` VO는 존치.
+    - [ ] **S3. 조합비 정책 UI** — 전역+제품군별 min/max 설정(계획서 §3.5) → 생성단 전파. ⚠️ 착수 전 전역 기본 상한(1.0 vs 1.3) 확정 필요.
+  - [x] **P3. 스펙시트 업로드 등록** (2026-07-09, `2ab7a12`) — LG 원본 xlsx 직파싱(전치형, 헤더행 자동탐지). 정규화(냉·난방 정격 kW→W, 최대연결수) + 롱테일 전량 `product_specs` JSONB 보존. **HP는 모델명에서 유도**(접두 뒤 첫 2자리; kW÷상수 변환식은 계열별로 성립하지 않음 — 493모델 전수 확인). `classifyImport` 정상/오류/중복 → 업로드 모달(Figma ADM-EQP-001 상세2 참고, 템플릿 다운로드 단계 제외) → OK 행만 DRAFT 일괄 적재(단일 트랜잭션). 브라우저 실검증(4모델 적재·영속·롱테일 저장). 테스트 519.
+  - [x] **운영정책서 작성** (2026-07-09, 주인님 지시) → [`doc/장비마스터_운영정책서.md`](장비마스터_운영정책서.md)
+  - [ ] **P3-후속. 라벨 정규화 사전 + import_jobs** — `spec_label_aliases`(제품군별 라벨 → 표준 키), 업로드 이력·거부로그 테이블. 현재는 라벨 원문을 그대로 JSONB 키로 사용.
+  - [ ] **P4. 실데이터 적재 + 산출물 확장** — 50종 스펙시트 적재(시리즈·중분류 코드 체계 확정 선행), `product_specs` 키 → 일람표 컬럼 매핑표 작성 후 선정표/일람표 실제 컬럼 연결.
   - [ ] **조합비 정책 UI 설정** (주인님 결정 2026-07-09) — 100% vs 0.5~1.3 상충을 하드코딩 대신 관리 UI 설정으로 해소. 전역 기본(system_settings) + 제품군별 override, `ComboRange` VO로 운반, 생성단 경고선 즉시 전파(계획서 §3.5). P2(관리 페이지)에 포함.
   - ⚠️ 남은 확인(계획서 §8): 조합비 전역 기본 초기값(1.0 vs 1.3), P1 시드 범위, 일람표 세부필드 우선순위, 4단 분류 코드 확정, 영속 정책.
 - [x] **조합 리포트 초기 상태 초기화** (2026-07-09, 미커밋) — `domainRooms`를 빈 상태로 시작 → '실 검출 실행'이 채우도록 변경(총부하가 검출 후에만 뜸). `INITIAL_GROUPS.items`/`INITIAL_POOL` 사전배정 제거. `ReportStrip` cover NaN 가드. 검출 전 전 지표 0/빈 확인 테스트 추가(`App.report.test.tsx`).
