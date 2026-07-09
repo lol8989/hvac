@@ -10,6 +10,7 @@ import type { IndoorSpecFields, OutdoorSpecFields } from '../../../domain/equipm
 import type { EnergySourceCode } from '../../../domain/shared/EnergySource'
 import { SCHEMA_SQL } from './schema'
 import { seedDatabase } from './seed'
+import { queryRows, num, numOrNull } from './query'
 
 // sql.js 초기화 함수(WASM 로딩 방식 주입: 브라우저=?url, 노드=fs wasmBinary).
 export type SqlInit = () => Promise<SqlJsStatic>
@@ -22,17 +23,6 @@ export interface BytesStore {
 
 // W(정수) → kW(소수 1자리). 저장 왕복 부동소수 오차 방지.
 const wToKw = (w: number): number => Math.round(w / 100) / 10
-
-// sql.js exec 결과를 {컬럼:값} 객체 배열로.
-function queryRows(db: Database, sql: string): Record<string, unknown>[] {
-  const res = db.exec(sql)
-  if (!res.length) return []
-  const { columns, values } = res[0]
-  return values.map((row) => Object.fromEntries(columns.map((c, i) => [c, row[i]])))
-}
-
-const num = (v: unknown): number => v as number
-const numOrNull = (v: unknown): number | null => (v == null ? null : (v as number))
 
 function readPublishedIndoor(db: Database): IndoorSpecFields[] {
   const rows = queryRows(

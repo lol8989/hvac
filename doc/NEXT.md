@@ -10,7 +10,10 @@
 
 - **장비마스터(SQLite 내장) — 구현 계획서 작성 완료** → [`doc/장비마스터_구현계획.md`](장비마스터_구현계획.md) (2026-07-09). 스택 확정: 브라우저 내장 sql.js(WASM)+IndexedDB. 입력=LG 스펙시트, 출력=선정표/일람표(hot 필드), 구조=schema_v2.sql 서브셋(4단 분류+products 정규화+product_specs JSONB+게시게이트).
   - [x] **P1. 읽기 백엔드 교체** (2026-07-09, 미커밋) — sql.js(WASM)+IndexedDB 저장소·SQLite 스키마(4단 서브셋+뷰)·정규화 시드(공유 seedData 16+7)·`SqliteEquipmentMaster`(PUBLISHED 스냅샷 materialize)로 생성단 무영향 교체. `main.tsx` 부트스트랩 주입(App `master` 옵셔널 prop, 기본 인메모리→테스트/폴백). **동치 테스트로 SQLite≡InMemory 고정**. 브라우저 실구동 검증(IndexedDB 생성·16 실내기 UI 흐름·콘솔 에러 0). 테스트 396개. 적대적 리뷰(26 에이전트) 확정 3결함 반영: ①캐시 무효화 SEED_HASH(시드 내용 해시) 키 ②부트스트랩 타임아웃 레이스+로딩 표시 ③순서/시드드리프트 테스트. 후속(P2): 옛 IndexedDB 키 고아 청소.
-  - [ ] **P2. 쓰기 포트 + 관리 페이지** — `EquipmentMasterRepository`(CRUD·게시), 관리 화면(목록/상세/등록·수정/게시·단가).
+  - **P2. 쓰기 포트 + 관리 페이지** — 세로 슬라이스로 진행:
+    - [x] **S1. 관리 목록(읽기)** (2026-07-09, 미커밋) — `EquipmentAdminRepository.listProducts`(전 상태) + SQLite 어댑터, 관리 페이지(목록/분류·상태 필터/검색/페이지네이션/상태뱃지, 무채색), `?view=equipment` 라우팅 + GNB 링크, `query.ts` 공용 헬퍼 추출. 브라우저 검증(25제품 전 상태). 적대적 리뷰(12에이전트)→접근성 aria-label 2건 반영. 테스트 405.
+    - [ ] **S2. 쓰기 포트 + 등록/수정/게시** — `EquipmentAdminRepository` 쓰기(create/update/setStatus/setPrice, 상태전이 불변식) + SQLite 쓰기(IndexedDB 영속) + 등록/수정 폼·게시/보관 액션.
+    - [ ] **S3. 조합비 정책 UI** — 전역+제품군별 min/max 설정(계획서 §3.5) → 생성단 전파.
   - [ ] **P3. 스펙시트 업로드 ETL** — xlsx 파서(전치형·제품군별)·라벨 정규화(`spec_label_aliases`)·`import_jobs` 미리보기/커밋/거부로그.
   - [ ] **P4. 실데이터 적재 + 산출물 확장** — 40종 스펙시트 적재, 선정표/일람표 실제 컬럼 연결.
   - [ ] **조합비 정책 UI 설정** (주인님 결정 2026-07-09) — 100% vs 0.5~1.3 상충을 하드코딩 대신 관리 UI 설정으로 해소. 전역 기본(system_settings) + 제품군별 override, `ComboRange` VO로 운반, 생성단 경고선 즉시 전파(계획서 §3.5). P2(관리 페이지)에 포함.

@@ -509,6 +509,7 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
             {GNB_MENUS.map((m) => (
               <a key={m} href="#" className={m === ACTIVE_MENU ? 'on' : undefined}>{m}</a>
             ))}
+            <a href="?view=equipment">장비마스터</a>
           </nav>
         </div>
         <div className="r">
