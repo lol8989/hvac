@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import type { EquipmentAdminRepository, ProductRow } from '../../application/equipment/adminPorts'
 import type { PublishStatus } from '../../domain/equipment/PublishStatus'
 import ProductFormModal from './ProductFormModal'
+import SpecSheetUploadModal from './SpecSheetUploadModal'
 import { useSubmitGuard } from './useSubmitGuard'
 
 // 게시 상태 라벨(무채색 뱃지). 관리 목록은 전 상태를 노출한다.
@@ -29,6 +30,7 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
   const [editing, setEditing] = useState<Editing>(null)
+  const [uploading, setUploading] = useState(false)
   const [toast, setToast] = useState('')
   const rowGuard = useSubmitGuard() // 행 액션(게시/보관/재게시) 연타 방지
 
@@ -110,6 +112,7 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
         <input className="field" aria-label="모델명·장비번호 검색" placeholder="모델명·장비번호 검색" value={q} onChange={(e) => resetPage(setQ)(e.target.value)} />
         <div className="sp" />
         <span className="eq-count">{filtered.length}건</span>
+        <button className="btn sm" onClick={() => setUploading(true)}>스펙시트 업로드</button>
         <button className="btn sm primary" onClick={() => setEditing({ mode: 'create' })}>＋ 제품 등록</button>
       </div>
 
@@ -191,6 +194,20 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
         />
       )}
 
+
+      {uploading && (
+        <SpecSheetUploadModal
+          series={series}
+          existingModelCodes={all.map((r) => r.modelCode)}
+          onImport={(seriesCode, rows) => {
+            const n = admin.importProducts(seriesCode, rows)
+            refresh()
+            notify(`${n}건을 작성중(DRAFT)으로 등록했습니다`)
+            return n
+          }}
+          onClose={() => setUploading(false)}
+        />
+      )}
 
       <div className={'toast' + (toast ? ' show' : '')} role="status">{toast}</div>
     </div>

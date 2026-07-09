@@ -4,6 +4,7 @@
 
 import type { PublishStatus } from '../../domain/equipment/PublishStatus'
 import type { ProductDraft, ProductPatch } from '../../domain/equipment/ProductDraft'
+import type { ImportRow } from '../../domain/equipment/SpecImport'
 
 // 관리 목록의 한 행(4단 분류 평탄화 + 현행가 + 게시 상태).
 export interface ProductRow {
@@ -49,4 +50,9 @@ export interface EquipmentAdminRepository {
 
   // 게시 상태 전이 — 허용 전이만(선형 + 재게시). throws INVALID_TRANSITION / NOT_FOUND
   setStatus(id: number, next: PublishStatus): void
+
+  // 스펙시트 업로드 일괄 등록. verdict==='OK' 행만 DRAFT로 적재하고 롱테일 스펙을 product_specs에 저장한다.
+  // 오류·중복 행은 조용히 건너뛴다(사유는 미리보기에서 이미 제시됨). 반환값: 실제 적재 건수.
+  // 전부 한 트랜잭션 — 하나라도 실패하면 아무것도 남지 않는다. throws NOT_FOUND(시리즈)
+  importProducts(seriesCode: string, rows: readonly ImportRow[]): number
 }

@@ -9,6 +9,7 @@ import type { PublishStatus } from '../../../domain/equipment/PublishStatus'
 import { assertTransition, assertSpecEditable, PUBLISH_STATUS } from '../../../domain/equipment/PublishStatus'
 import { EquipmentDomainError } from '../../../domain/equipment/errors'
 import { assertValidDraft, assertValidPatch, type ProductDraft, type ProductPatch } from '../../../domain/equipment/ProductDraft'
+import type { ImportRow } from '../../../domain/equipment/SpecImport'
 import { queryRows, numOrNull, strOrNull } from './query'
 
 const LIST_SQL = `
@@ -169,6 +170,41 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
           WHERE id = ?`,
         [next, publishedAt, publishedAt, discontinuedAt, ts, id],
       )
+    })
+  }
+
+  importProducts(seriesCode: string, rows: readonly ImportRow[]): number {
+    const seriesId = this.seriesIdOf(seriesCode)
+    const targets = rows.filter((r) => r.verdict === 'OK')
+    if (!targets.length) return 0
+
+    const ts = this.now()
+    return this.inTransaction(() => {
+      for (const { product, horsepower } of targets) {
+        this.db.run(
+          `INSERT INTO products
+             (series_id, model_code, horsepower, cooling_capacity_w, heating_capacity_w,
+              max_connections, status, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?)`,
+          [
+            seriesId,
+            product.modelCode.trim(),
+            horsepower,
+            product.coolingW,
+            product.heatingW,
+            product.maxConnections,
+            PUBLISH_STATUS.DRAFT, // 업로드본은 항상 DRAFT — 관리자가 확인 후 게시
+            ts,
+            ts,
+          ],
+        )
+        // 롱테일 스펙(전원·배관경·전선·차단기·냉매…)은 JSON으로 통째 보존 → 일람표 확장에서 조인.
+        this.db.run(`INSERT INTO product_specs (product_id, spec_data) VALUES (?,?)`, [
+          this.lastInsertId(),
+          JSON.stringify(product.specData),
+        ])
+      }
+      return targets.length
     })
   }
 

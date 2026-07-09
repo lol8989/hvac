@@ -30,6 +30,7 @@ const makeAdmin = (over: Partial<EquipmentAdminRepository> = {}): EquipmentAdmin
   createProduct: vi.fn(() => 1),
   updateProduct: vi.fn(),
   setStatus: vi.fn(),
+  importProducts: vi.fn(() => 0),
   ...over,
 })
 
