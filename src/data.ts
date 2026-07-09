@@ -77,14 +77,31 @@ export interface InitialGroup {
   items: string[]
 }
 
-// 재튜닝: 부하 파생값화(현실화)로 하락 → 설계부하 기준 조합비 ODU1 ≈ 0.63, ODU2 ≈ 0.58
+// 초기 상태는 "빈/0" — 실외기 그룹(모델)만 제안하고 실내기는 사전배정하지 않는다.
+// 배정은 파이프라인 진행(검출→배치→조합)의 결과로만 생긴다(NEXT #2·#3, CLAUDE.md §1).
 export const INITIAL_GROUPS: InitialGroup[] = [
-  { key: 'ODU1', label: '실외기-1', model: 'RPUW08BX9E', items: ['AC_001', 'AC_003', 'AC_006'] },
-  { key: 'ODU2', label: '실외기-2', model: 'RPUW12BX9M', items: ['AC_004', 'AC_005'] },
+  { key: 'ODU1', label: '실외기-1', model: 'RPUW08BX9E', items: [] },
+  { key: 'ODU2', label: '실외기-2', model: 'RPUW12BX9M', items: [] },
   { key: 'ODU3', label: '실외기-3', model: 'GPUW280C2S', items: [] },
 ]
 
-export const INITIAL_POOL: string[] = ['AC_002']
+// 초기 미배정 풀도 비어 있다(하드코딩 상수 제거). 실은 실내기 배치 후 풀에 편입된다.
+export const INITIAL_POOL: string[] = []
+
+// combine 단계 진입 시 적용하는 '자동 조합' 기본 매핑(실→실외기 그룹).
+// 사용자가 이후 매핑 팝업에서 조정한다. 전 실을 계열 호환 그룹에 배정(미배정 0).
+//  · ODU1(RPUW08BX9E, EHP 22.4kW): 거실·회의실·탕비실 (설계부하 합 ≈14.0 → 조합비 ≈0.63)
+//  · ODU2(RPUW12BX9M, EHP 34.8kW): 사무실·로비·침실1 (설계부하 합 ≈23.5 → 조합비 ≈0.68)
+//  · ODU3(GPUW280C2S, GHP): 빈 상태(EHP 실과 계열 불일치라 배정 없음)
+export interface Combination {
+  key: string
+  items: string[]
+}
+export const DEFAULT_COMBINATION: Combination[] = [
+  { key: 'ODU1', items: ['AC_001', 'AC_003', 'AC_006'] },
+  { key: 'ODU2', items: ['AC_004', 'AC_005', 'AC_002'] },
+  { key: 'ODU3', items: [] },
+]
 
 // 장비마스터 PUBLISHED 실외기 스펙 (SSOT). 단가/등급/COP는 POC 플레이스홀더(미확정).
 const D = '2026-04-20' // effectiveStartDate 공통(목업)

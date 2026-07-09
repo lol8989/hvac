@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { recommendedIndoorIdx, outdoorIdxByModel, ratioOf, indoorCoolByModel, MODELS, ROOMS, ODU_CATALOG, INITIAL_GROUPS } from './data'
+import { recommendedIndoorIdx, outdoorIdxByModel, ratioOf, indoorCoolByModel, MODELS, ROOMS, ODU_CATALOG, INITIAL_GROUPS, INITIAL_POOL, DEFAULT_COMBINATION } from './data'
 import type { ModelCard } from './data'
 import { DEFAULT_UNIT_LOADS } from './domain/shared/UnitLoad'
 
@@ -114,28 +114,47 @@ describe('ODU_CATALOG 확장 필드 (난방·HP·조합비범위)', () => {
   })
 })
 
-describe('INITIAL_GROUPS 재튜닝 (설계부하 기준 조합비 정상 범위)', () => {
-  const groupRatio = (key: string): number => {
-    const g = INITIAL_GROUPS.find((x) => x.key === key)!
-    const spec = ODU_CATALOG.find((e) => e.model === g.model)!
-    return ratioOf({ items: g.items, cool: spec.cool })
-  }
-
-  it('ODU1은 RPUW08BX9E로 조합비가 0.5~1.3 범위 안이다 (≈0.63)', () => {
-    const g1 = INITIAL_GROUPS.find((x) => x.key === 'ODU1')!
-    expect(g1.model).toBe('RPUW08BX9E')
-    const r = groupRatio('ODU1')
-    expect(r).toBeGreaterThanOrEqual(0.5)
-    expect(r).toBeLessThanOrEqual(1.3)
-    expect(r).toBeCloseTo(0.63, 1)
+describe('초기 배정 시드 제거 (초기 상태는 빈/0 — NEXT #2·#3)', () => {
+  it('INITIAL_GROUPS는 실외기 그룹만 제안하고 실내기를 사전배정하지 않는다(items 전부 빈 배열)', () => {
+    for (const g of INITIAL_GROUPS) expect(g.items).toEqual([])
   })
 
-  it('ODU2는 RPUW12BX9M으로 조합비가 0.5~1.3 범위 안이다', () => {
-    const g2 = INITIAL_GROUPS.find((x) => x.key === 'ODU2')!
-    expect(g2.model).toBe('RPUW12BX9M')
-    const r = groupRatio('ODU2')
-    expect(r).toBeGreaterThanOrEqual(0.5)
-    expect(r).toBeLessThanOrEqual(1.3)
+  it('INITIAL_POOL은 비어 있다 (미배정 상수 1 제거)', () => {
+    expect(INITIAL_POOL).toEqual([])
+  })
+})
+
+describe('DEFAULT_COMBINATION (combine 진입 시 자동 조합 기본값)', () => {
+  const specOfGroup = (key: string) => {
+    const model = INITIAL_GROUPS.find((g) => g.key === key)!.model
+    return ODU_CATALOG.find((e) => e.model === model)!
+  }
+
+  it('전 실을 빠짐없이 배정한다(미배정 없음)', () => {
+    const assigned = DEFAULT_COMBINATION.flatMap((c) => c.items).sort()
+    expect(assigned).toEqual(Object.keys(ROOMS).sort())
+  })
+
+  it('실은 정확히 한 그룹에만 배정된다(중복 금지)', () => {
+    const assigned = DEFAULT_COMBINATION.flatMap((c) => c.items)
+    expect(new Set(assigned).size).toBe(assigned.length)
+  })
+
+  it('실의 계열이 배정 그룹 실외기 계열과 일치한다(계열 호환)', () => {
+    for (const c of DEFAULT_COMBINATION) {
+      const spec = specOfGroup(c.key)
+      for (const id of c.items) expect(ROOMS[id].sys).toBe(spec.sys)
+    }
+  })
+
+  it('각 그룹의 설계부하 기준 조합비가 0.5~1.3 범위 안이다', () => {
+    for (const c of DEFAULT_COMBINATION) {
+      if (!c.items.length) continue
+      const spec = specOfGroup(c.key)
+      const r = ratioOf({ items: c.items, cool: spec.cool })
+      expect(r).toBeGreaterThanOrEqual(0.5)
+      expect(r).toBeLessThanOrEqual(1.3)
+    }
   })
 })
 

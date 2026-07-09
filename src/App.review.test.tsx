@@ -35,11 +35,15 @@ const progressToCombine = (container: HTMLElement) => {
 
 describe('App — 선정표 새 창 플로우', () => {
   it('미배정이 남은 채 산출물로 가려 하면 토스트로 안내하고 이동하지 않는다', () => {
-    render(<App />)
+    const { container } = render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '실 검출 실행 →' }))
     fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
     fireEvent.click(screen.getByRole('button', { name: '미세조정 →' }))
     fireEvent.click(screen.getByRole('button', { name: '미세조정 완료 →' }))
+    // 자동 조합으로 전 실이 배정된 상태 → 매핑 팝업에서 한 실을 미배정 풀로 되돌려 미배정을 만든다.
+    fireEvent.click(screen.getByRole('button', { name: '실외기 조합 매핑' }))
+    fireEvent.drop(container.querySelector('.pool .pbody')!, dropPayload('AC_002', 'ODU2'))
+    fireEvent.click(screen.getByRole('button', { name: '조합 적용' }))
     fireEvent.click(screen.getByRole('button', { name: '산출물로 →' }))
     expect(screen.getByText(/미배정 실내기 1개가 남아 있습니다/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /장비선정표·도면 생성/ })).not.toBeInTheDocument()

@@ -19,7 +19,7 @@ export default function ReportStrip({ rooms, groups, pool, capByRoom, actions }:
   const odus = groups.filter((g) => g.items.length).length
   const totLoad = roomIds.reduce((a, id) => a + rooms[id].cool, 0) // 총 냉방부하(설계)
   const totCap = roomIds.reduce((a, id) => a + (capByRoom[id] ?? 0), 0) // 총 설치 용량(선택 실내기 정격)
-  const cover = Math.round((assigned / total) * 100)
+  const cover = total ? Math.round((assigned / total) * 100) : 0 // 검출 전(실 0)엔 NaN 방지
   const activeRatios = groups.filter((g) => g.items.length).map((g) => ratioOf(g, capByRoom))
   const avg = activeRatios.length ? activeRatios.reduce((a, b) => a + b, 0) / activeRatios.length : 0
   const over = groups.filter((g) => g.items.length && ratioOf(g, capByRoom) > 1.3).length

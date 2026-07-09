@@ -1,22 +1,25 @@
 import { describe, it, expect } from 'vitest'
-import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, specPriceText, specGradeText } from './planAdapter'
+import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, specPriceText, specGradeText, ensureRoomsInPool, autoCombine } from './planAdapter'
 import { AssignmentPlan } from '../../domain/generation/AssignmentPlan'
 import { OutdoorUnit } from '../../domain/generation/OutdoorUnit'
 import { OutdoorGroup } from '../../domain/generation/OutdoorGroup'
 import { IndoorUnit } from '../../domain/generation/IndoorUnit'
 import type { OutdoorModelSpec } from '../../application/generation/ports'
 import { InMemoryOutdoorModelCatalog } from '../../infrastructure/generation/InMemoryOutdoorModelCatalog'
-import { MODELS } from '../../data'
+import { MODELS, ROOMS, DEFAULT_COMBINATION } from '../../data'
 import { ComboRange } from '../../domain/shared/ComboRange'
 
 describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터 스펙 주입)', () => {
   const catalog = new InMemoryOutdoorModelCatalog()
 
-  it('bootstrapPlan은 초기 배치를 AssignmentPlan으로 만든다', () => {
+  it('bootstrapPlan은 실외기 그룹만 제안하고 실내기는 사전배정하지 않는다(초기 빈 상태)', () => {
     const plan = bootstrapPlan()
     expect(plan).toBeInstanceOf(AssignmentPlan)
-    expect(plan.groupByKey('ODU1')!.indoorUnits.map((i) => i.id).sort()).toEqual(['AC_001', 'AC_003', 'AC_006'])
-    expect(plan.locationOf('AC_002')).toBe('pool')
+    // 그룹(실외기 제안)은 존재하되 연결된 실내기는 없다.
+    expect(plan.groups.map((g) => g.key).sort()).toEqual(['ODU1', 'ODU2', 'ODU3'])
+    for (const g of plan.groups) expect(g.indoorUnits).toEqual([])
+    // 미배정 풀도 비어 있다(검출/배치 전에는 실내기가 없다).
+    expect(plan.pool).toEqual([])
   })
 
   it('bootstrapPlan은 실외기 maxConnections를 장비마스터 카탈로그 스펙에서 주입한다', () => {
@@ -28,7 +31,7 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
     expect(odu.maxConnections).not.toBe(16)
   })
 
-  it('toViewModel은 컴포넌트가 기대하는 레거시 뷰 형태를 반환한다', () => {
+  it('toViewModel은 컴포넌트가 기대하는 레거시 뷰 형태를 반환한다(초기 items·pool 비어 있음)', () => {
     const vm = toViewModel(bootstrapPlan())
     const g1 = vm.groups.find((g) => g.key === 'ODU1')
     expect(g1).toMatchObject({
@@ -39,8 +42,8 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
       sys: 'EHP',
       cool: 22.4,
     })
-    expect(g1!.items.sort()).toEqual(['AC_001', 'AC_003', 'AC_006'])
-    expect(vm.pool).toEqual(['AC_002'])
+    expect(g1!.items).toEqual([])
+    expect(vm.pool).toEqual([])
   })
 
   it('outdoorUnitFromSpec은 마스터 스펙을 OutdoorUnit VO로 변환하고 maxConnections를 주입한다', () => {
@@ -105,5 +108,46 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
   it('nextGroupMeta는 기존 키 다음 번호의 그룹 메타를 만든다', () => {
     const plan = bootstrapPlan() // ODU1, ODU2, ODU3
     expect(nextGroupMeta(plan)).toEqual({ key: 'ODU4', label: '실외기-4' })
+  })
+
+  describe('ensureRoomsInPool (실내기 배치 결과 → 미배정 풀 편입)', () => {
+    it('플랜에 없던 실을 미배정 풀에 IndoorUnit으로 추가한다', () => {
+      const plan = bootstrapPlan(catalog) // 빈 풀
+      const next = ensureRoomsInPool(plan, ['AC_001', 'AC_002'])
+      expect(next.pool.map((i) => i.id).sort()).toEqual(['AC_001', 'AC_002'])
+      // 그룹은 그대로(빈 상태) 보존
+      for (const g of next.groups) expect(g.indoorUnits).toEqual([])
+    })
+
+    it('이미 어딘가(그룹/풀)에 있는 실은 중복 추가하지 않는다', () => {
+      const seeded = ensureRoomsInPool(bootstrapPlan(catalog), ['AC_001'])
+      const again = ensureRoomsInPool(seeded, ['AC_001', 'AC_003'])
+      expect(again.pool.map((i) => i.id).sort()).toEqual(['AC_001', 'AC_003'])
+    })
+
+    it('추가할 실이 없으면 동일 플랜을 그대로 반환한다(불변)', () => {
+      const seeded = ensureRoomsInPool(bootstrapPlan(catalog), ['AC_001'])
+      expect(ensureRoomsInPool(seeded, ['AC_001'])).toBe(seeded)
+    })
+  })
+
+  describe('autoCombine (combine 진입 시 기본 조합 적용)', () => {
+    it('풀의 전 실을 DEFAULT_COMBINATION 매핑대로 그룹에 배정한다(미배정 0)', () => {
+      const detected = ensureRoomsInPool(bootstrapPlan(catalog), Object.keys(ROOMS))
+      const combined = autoCombine(detected, DEFAULT_COMBINATION)
+      expect(combined.pool).toEqual([])
+      for (const c of DEFAULT_COMBINATION) {
+        const g = combined.groupByKey(c.key)!
+        expect(g.indoorUnits.map((i) => i.id).sort()).toEqual([...c.items].sort())
+      }
+    })
+
+    it('풀에 없는 실은 건너뛴다(방어적 — 부분 검출 상황)', () => {
+      const detected = ensureRoomsInPool(bootstrapPlan(catalog), ['AC_001', 'AC_003'])
+      const combined = autoCombine(detected, DEFAULT_COMBINATION)
+      // AC_001·AC_003만 배정되고 나머지는 매핑에 있어도 풀에 없어 무시된다.
+      expect(combined.groupByKey('ODU1')!.indoorUnits.map((i) => i.id).sort()).toEqual(['AC_001', 'AC_003'])
+      expect(combined.pool).toEqual([])
+    })
   })
 })

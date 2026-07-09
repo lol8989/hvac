@@ -4,6 +4,7 @@
 // 목적은 "동작 보존" — 컴포넌트가 기대하는 레거시 뷰 형태를 그대로 만든다.
 
 import { ROOMS, INITIAL_GROUPS, INITIAL_POOL } from '../../data'
+import type { Combination } from '../../data'
 import { AssignmentPlan } from '../../domain/generation/AssignmentPlan'
 import { OutdoorGroup } from '../../domain/generation/OutdoorGroup'
 import type { GroupMeta } from '../../domain/generation/OutdoorGroup'
@@ -81,6 +82,26 @@ export const bootstrapPlan = (catalog: OutdoorModelCatalog = new InMemoryOutdoor
   })
   const pool = INITIAL_POOL.map(indoorFromRoom)
   return new AssignmentPlan({ groups, pool })
+}
+
+// 실내기 배치 결과를 플랜에 반영: 아직 플랜(그룹/풀 어디에도) 없는 실을 미배정 풀에 편입한다.
+// 배정은 이후 combine(자동 조합/수동 매핑)에서 생긴다. 변경이 없으면 동일 플랜을 그대로 반환(불변).
+export const ensureRoomsInPool = (plan: AssignmentPlan, roomIds: string[]): AssignmentPlan => {
+  const missing = roomIds.filter((id) => plan.locationOf(id) === null)
+  if (!missing.length) return plan
+  return new AssignmentPlan({ groups: plan.groups, pool: [...plan.pool, ...missing.map(indoorFromRoom)] })
+}
+
+// combine 진입 시 '자동 조합' 기본 매핑을 적용한다. 풀에 있는 실만 각 그룹으로 재배정하고,
+// 풀에 없는 실(부분 검출 등)은 건너뛴다. 계열/최대수 위반은 도메인 reassign이 예외로 차단한다.
+export const autoCombine = (plan: AssignmentPlan, combination: Combination[]): AssignmentPlan => {
+  let next = plan
+  for (const { key, items } of combination) {
+    for (const id of items) {
+      if (next.locationOf(id) === 'pool') next = next.reassign(id, key)
+    }
+  }
+  return next
 }
 
 // AssignmentPlan → 컴포넌트가 소비하는 레거시 뷰 형태

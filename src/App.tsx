@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ROOMS, MODELS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, outdoorIdxByModel } from './data'
+import { ROOMS, MODELS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, outdoorIdxByModel, DEFAULT_COMBINATION } from './data'
 import type { ModelCard, Room } from './data'
 import ReportStrip from './components/ReportStrip'
 import Viewer, { LAYER_OPTIONS, type LayerFilter, type ViewerHandle, type TileManifest } from './components/Viewer'
@@ -19,7 +19,7 @@ import type { OutdoorModelSpec } from './application/generation/ports'
 import { makeReassignIndoorUnit } from './application/generation/ReassignIndoorUnit'
 import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoorModel'
 import { makeAddGroup, makeRemoveGroup, makeSplitGroup } from './application/generation/GroupCommands'
-import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta } from './presentation/generation/planAdapter'
+import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, ensureRoomsInPool, autoCombine } from './presentation/generation/planAdapter'
 import { NotFoundError } from './domain/generation/errors'
 import { Room as DomainRoom } from './domain/generation/Room'
 import { Placement } from './domain/generation/Placement'
@@ -52,11 +52,8 @@ export default function App() {
 
   const [plan, setPlan] = useState(() => repo.load())
   // 도메인 Room(층·실명·면적·용도·단위부하 Adjustable) — 선정표 그리드에서 편집되는 SSOT.
-  const [domainRooms, setDomainRooms] = useState<Record<string, DomainRoom>>(() =>
-    Object.fromEntries(
-      Object.entries(ROOMS).map(([id, r]) => [id, DomainRoom.create({ id, floor: r.floor, name: r.name, areaM2: r.area, usage: r.usage })]),
-    ),
-  )
+  // 초기엔 비어 있다(검출 전). '실 검출 실행'이 도면에서 실을 찾아 채운다(파이프라인 의미론).
+  const [domainRooms, setDomainRooms] = useState<Record<string, DomainRoom>>({})
   // 실별 실내기 배치(모델+대수, AI 기본값+사용자 오버라이드) — 실내기 선정의 SSOT.
   const [placements, setPlacements] = useState<Record<string, Placement>>({})
   const [selRooms, setSelRooms] = useState<string[]>([]) // 초기엔 선택 없음(뱃지·하이라이트 없음)
@@ -114,11 +111,12 @@ export default function App() {
   }, [placements, domainRooms, indoorCatalog, indoorModels])
 
   // 뷰용 실 정보: 좌표·유형은 목업(ROOMS), 실명·부하(kW)는 도메인 Room에서 파생(그리드 편집 반영).
+  // 검출된 실(domainRooms)만 순회 — 검출 전에는 빈 객체라 뷰어·리포트가 0/빈 상태가 된다.
   const viewRooms = useMemo<Record<string, Room>>(
     () =>
       Object.fromEntries(
-        Object.entries(ROOMS).map(([id, r]) => {
-          const dr = domainRooms[id]
+        Object.entries(domainRooms).map(([id, dr]) => {
+          const r = ROOMS[id]
           return [id, { ...r, name: dr.name, cool: Math.round(dr.requiredLoadW.cool / 100) / 10 }]
         }),
       ),
@@ -199,6 +197,21 @@ export default function App() {
     [repo],
   )
   const sync = () => setPlan(repo.load())
+
+  // combine 진입 시 '자동 조합' 기본 매핑을 1회 적용(사용자가 이후 매핑 팝업에서 조정).
+  // 이미 배정이 있으면(사용자 조정 후 재진입) 덮어쓰지 않는다. ref로 세션당 1회 보장.
+  const autoCombinedRef = useRef(false)
+  useEffect(() => {
+    if (step !== 'combine' || autoCombinedRef.current) return
+    const placedIds = Object.keys(placements)
+    if (!placedIds.length) return // 실내기 배치 전이면 조합할 대상이 없다
+    autoCombinedRef.current = true
+    // 배치된 실을 빠짐없이 플랜에 편입(AI/수동 무관) 후, 아직 배정이 없으면 기본 조합을 적용.
+    let next = ensureRoomsInPool(plan, placedIds)
+    if (!next.groups.some((g) => g.indoorUnits.length)) next = autoCombine(next, DEFAULT_COMBINATION)
+    repo.save(next)
+    setPlan(next)
+  }, [step, plan, placements, repo])
 
   // 컴포넌트가 소비하는 레거시 뷰 형태로 변환(동작 보존).
   const { groups, pool } = toViewModel(plan)
@@ -346,6 +359,10 @@ export default function App() {
     viewerRef.current?.placeUnits() // 실제 배치 실행(빈 도면 → 방별 실내기 심볼)
     // 방마다 필요부하 기반으로 모델+대수 자동 선정. 사용자 수정 셀은 보존(AI값만 갱신).
     setPlacements((prev) => applyAiPlacement(Object.values(domainRooms), prev, indoorModels))
+    // 실내기 설치 결과 → 실외기 배정 대상(미배정 풀)으로 편입. 배정은 이후 combine에서 생긴다.
+    const withPool = ensureRoomsInPool(plan, Object.keys(domainRooms))
+    repo.save(withPool)
+    setPlan(withPool)
     flash('✦ AI가 실 ' + Object.keys(domainRooms).length + '곳에 실내기를 배치·선정했습니다 (수정 셀은 보존)')
   }
 
@@ -458,7 +475,15 @@ export default function App() {
 
   // 단계 전환 핸들러(파이프라인 진행). 목업 단계는 플래그만 세우고 다음으로.
   const placed = Object.keys(placements).length > 0
-  const doDetect = () => { setStep('place'); flash(`AI가 도면에서 실 ${Object.keys(domainRooms).length}곳을 검출했습니다`) }
+  // 검출: 도면에서 실을 찾아 도메인 Room으로 채운다(초기 빈 상태 → 6실). 이후 부하·선정표가 채워진다.
+  const doDetect = () => {
+    const detected = Object.fromEntries(
+      Object.entries(ROOMS).map(([id, r]) => [id, DomainRoom.create({ id, floor: r.floor, name: r.name, areaM2: r.area, usage: r.usage })]),
+    )
+    setDomainRooms(detected)
+    setStep('place')
+    flash(`AI가 도면에서 실 ${Object.keys(detected).length}곳을 검출했습니다`)
+  }
   const doPlace = () => { aiPlace() } // 배치만(단계 유지) → 결과 확인 후 '미세조정 →'으로 진행
   const doAdjustDone = () => setStep('combine')
   const doCombineNext = () => {
