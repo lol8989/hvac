@@ -8,13 +8,14 @@ import { EquipmentDomainError } from '../../domain/equipment/errors'
 const mk = (over: Partial<ProductRow>): ProductRow => ({
   id: 0, categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP',
   seriesCode: 'S_OUT_HR', seriesName: 'S', modelCode: 'M', equipmentCode: null, horsepower: 10, coolingW: 20000,
-  heatingW: 22000, maxConnections: 16, status: 'PUBLISHED', ...over,
+  heatingW: 22000, maxConnections: 16, status: 'PUBLISHED',
+  createdAt: null, updatedAt: null, publishedAt: null, ...over,
 })
 
 // 15개(게시 13 + 작성중 1 + 보관 1) → 페이지네이션(12/페이지) 2페이지.
 const rows: ProductRow[] = [
-  ...Array.from({ length: 13 }, (_, i) => mk({ id: i + 1, modelCode: `PUB${i}`, status: 'PUBLISHED' })),
-  mk({ id: 100, categoryCode: 'INDOOR', categoryName: '실내기', subcategoryName: '4WAY 카세트', seriesCode: 'S_IN_4WAY', modelCode: 'DRAFTX', equipmentCode: '40C', status: 'DRAFT', horsepower: null, maxConnections: null }),
+  ...Array.from({ length: 13 }, (_, i) => mk({ id: i + 1, modelCode: `PUB${i}`, status: 'PUBLISHED', publishedAt: '2026-07-01T12:00:00' })),
+  mk({ id: 100, categoryCode: 'INDOOR', categoryName: '실내기', subcategoryName: '4WAY 카세트', seriesCode: 'S_IN_4WAY', modelCode: 'DRAFTX', equipmentCode: '40C', status: 'DRAFT', horsepower: null, maxConnections: null, createdAt: '2026-07-08T09:05:03', updatedAt: '2026-07-09T10:11:12' }),
   mk({ id: 101, modelCode: 'ARCHX', status: 'ARCHIVED' }),
 ]
 
@@ -44,7 +45,7 @@ beforeEach(() => vi.clearAllMocks())
 describe('EquipmentAdminPage (관리 목록)', () => {
   it('전 상태 요약과 상태 뱃지를 렌더한다', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
-    expect(screen.getByText(/게시 13 · 작성중 1 · 보관 1/)).toBeInTheDocument()
+    expect(screen.getByText(/게시 13 · 작성중 1 · 단종 1/)).toBeInTheDocument()
     expect(screen.getAllByText('게시').length).toBeGreaterThan(0)
   })
 
@@ -70,6 +71,18 @@ describe('EquipmentAdminPage (관리 목록)', () => {
     expect(screen.getByText('DRAFTX')).toBeInTheDocument()
   })
 
+  it('등록일·수정일·게시일을 YYYY-MM-DD HH:mm:ss로 표기한다', () => {
+    render(<EquipmentAdminPage admin={makeAdmin()} />)
+    for (const h of ['등록일', '수정일', '게시일']) {
+      expect(screen.getByRole('columnheader', { name: h })).toBeInTheDocument()
+    }
+    const draftRow = bodyRows().find((r) => within(r).queryByText('DRAFTX'))!
+    expect(within(draftRow).getByText('2026-07-08 09:05:03')).toBeInTheDocument() // 등록일
+    expect(within(draftRow).getByText('2026-07-09 10:11:12')).toBeInTheDocument() // 수정일
+    const pubRow = bodyRows().find((r) => within(r).queryByText('PUB0'))!
+    expect(within(pubRow).getByText('2026-07-01 12:00:00')).toBeInTheDocument() // 게시일
+  })
+
   it('검색으로 모델명 필터, 0건이면 빈 상태 안내', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
     const search = screen.getByPlaceholderText('모델명·장비번호 검색')
@@ -83,11 +96,11 @@ describe('EquipmentAdminPage (관리 목록)', () => {
 describe('행 액션 (게시 전이 · 게시본 잠금)', () => {
   it('상태별로 허용된 전이 버튼만 노출한다', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
-    expect(screen.getByRole('button', { name: 'PUB0 보관' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PUB0 단종' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'PUB0 게시' })).not.toBeInTheDocument() // 이미 게시
     fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'DRAFT' } })
-    expect(screen.getByRole('button', { name: 'DRAFTX 게시' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'DRAFTX 폐기' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'DRAFTX 게시' })).not.toBeInTheDocument() // 게시는 일괄 게시로만
+    expect(screen.getByRole('button', { name: 'DRAFTX 등록 취소' })).toBeInTheDocument()
     fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'ARCHIVED' } })
     expect(screen.getByRole('button', { name: 'ARCHX 재게시' })).toBeInTheDocument()
   })
@@ -101,13 +114,13 @@ describe('행 액션 (게시 전이 · 게시본 잠금)', () => {
     expect(screen.getByRole('button', { name: 'DRAFTX 수정' })).toBeEnabled()
   })
 
-  it('게시 버튼 클릭 시 setStatus(PUBLISHED)를 호출하고 완료 토스트를 띄운다', () => {
+  it('재게시 버튼 클릭 시 setStatus(PUBLISHED)를 호출하고 완료 토스트를 띄운다', () => {
     const admin = makeAdmin()
     render(<EquipmentAdminPage admin={admin} />)
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'DRAFT' } })
-    fireEvent.click(screen.getByRole('button', { name: 'DRAFTX 게시' }))
-    expect(admin.setStatus).toHaveBeenCalledWith(100, 'PUBLISHED')
-    expect(screen.getByRole('status')).toHaveTextContent('DRAFTX — 게시 완료')
+    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'ARCHIVED' } })
+    fireEvent.click(screen.getByRole('button', { name: 'ARCHX 재게시' }))
+    expect(admin.setStatus).toHaveBeenCalledWith(101, 'PUBLISHED')
+    expect(screen.getByRole('status')).toHaveTextContent('ARCHX — 재게시 완료')
   })
 
   it('저장소가 도메인 예외를 던지면 토스트로 사유를 알린다', () => {
@@ -117,7 +130,7 @@ describe('행 액션 (게시 전이 · 게시본 잠금)', () => {
       }),
     })
     render(<EquipmentAdminPage admin={admin} />)
-    fireEvent.click(screen.getByRole('button', { name: 'PUB0 보관' }))
+    fireEvent.click(screen.getByRole('button', { name: 'PUB0 단종' }))
     expect(screen.getByRole('status')).toHaveTextContent('허용되지 않은 상태 전이입니다')
   })
 })
@@ -125,17 +138,20 @@ describe('행 액션 (게시 전이 · 게시본 잠금)', () => {
 describe('일괄 선택 · 일괄 게시', () => {
   const bulkBar = () => screen.queryByRole('region', { name: '일괄 작업' })
 
-  it('선택이 없으면 일괄 작업 바가 없다', () => {
+  it('선택이 없어도 일괄 작업 바는 보이고, 일괄 액션은 비활성이다', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
-    expect(bulkBar()).not.toBeInTheDocument()
+    expect(bulkBar()).toBeInTheDocument()
+    expect(bulkBar()).toHaveTextContent('0건 선택')
+    expect(screen.getByRole('button', { name: '일괄 게시' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '일괄 단종' })).toBeDisabled()
   })
 
-  it('행을 선택하면 선택 건수와 일괄 액션이 나타난다', () => {
+  it('행을 선택하면 선택 건수가 갱신되고 일괄 액션이 활성화된다', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
     fireEvent.click(screen.getByRole('checkbox', { name: 'PUB0 선택' }))
     expect(bulkBar()).toHaveTextContent('1건 선택')
-    expect(screen.getByRole('button', { name: '일괄 게시' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '일괄 보관' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '일괄 게시' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '일괄 단종' })).toBeEnabled()
   })
 
   it('페이지 전체 선택 체크박스로 보이는 행을 모두 선택한다', () => {
@@ -144,11 +160,12 @@ describe('일괄 선택 · 일괄 게시', () => {
     expect(bulkBar()).toHaveTextContent('15건 선택')
   })
 
-  it('선택 해제하면 바가 사라진다', () => {
+  it('선택 해제하면 0건 선택으로 돌아가고 액션이 비활성화된다', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
     fireEvent.click(screen.getByRole('checkbox', { name: '이 페이지 전체 선택' }))
     fireEvent.click(screen.getByRole('button', { name: '선택 해제' }))
-    expect(bulkBar()).not.toBeInTheDocument()
+    expect(bulkBar()).toHaveTextContent('0건 선택')
+    expect(screen.getByRole('button', { name: '일괄 게시' })).toBeDisabled()
   })
 
   it('일괄 게시는 선택한 id만 setStatusMany로 넘긴다', () => {
@@ -190,7 +207,7 @@ describe('일괄 선택 · 일괄 게시', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
     fireEvent.click(screen.getByRole('checkbox', { name: 'PUB0 선택' }))
     fireEvent.click(screen.getByRole('button', { name: '일괄 게시' }))
-    expect(bulkBar()).not.toBeInTheDocument()
+    expect(bulkBar()).toHaveTextContent('0건 선택')
   })
 
   it('일괄 게시 연타에도 setStatusMany는 1회만 호출된다(더블클릭 방지)', () => {
@@ -242,13 +259,13 @@ describe('등록/수정 폼 (더블클릭 방지 포함)', () => {
     expect(admin.createProduct).toHaveBeenCalledTimes(1)
   })
 
-  it('행 액션(게시)도 연타 시 setStatus가 1회만 호출된다', () => {
+  it('행 액션(재게시)도 연타 시 setStatus가 1회만 호출된다', () => {
     const admin = makeAdmin()
     render(<EquipmentAdminPage admin={admin} />)
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'DRAFT' } })
-    const publish = screen.getByRole('button', { name: 'DRAFTX 게시' })
-    fireEvent.click(publish)
-    fireEvent.click(publish)
+    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'ARCHIVED' } })
+    const republish = screen.getByRole('button', { name: 'ARCHX 재게시' })
+    fireEvent.click(republish)
+    fireEvent.click(republish)
     expect(admin.setStatus).toHaveBeenCalledTimes(1)
   })
 

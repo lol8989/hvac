@@ -110,6 +110,32 @@ describe('createProduct (등록)', () => {
   })
 })
 
+describe('타임스탬프 노출 (등록일·수정일·게시일)', () => {
+  it('신규 등록 행은 createdAt·updatedAt이 기록되고 publishedAt은 비어 있다', async () => {
+    const { repo } = await makeRepo()
+    repo.createProduct(draft())
+    expect(byModel(repo, 'RNW-NEW-001')).toMatchObject({ createdAt: FIXED_NOW, updatedAt: FIXED_NOW, publishedAt: null })
+  })
+
+  it('시드된 제품에도 등록·수정 시각이 있고, 게시본만 게시 시각을 갖는다', async () => {
+    const { repo } = await makeRepo()
+    const pub = byModel(repo, 'RPUW12BX9M')! // 시드 PUBLISHED
+    expect(pub.createdAt).toBeTruthy()
+    expect(pub.updatedAt).toBeTruthy()
+    expect(pub.publishedAt).toBeTruthy()
+    const draft = byModel(repo, 'RNW9999DRAFT')! // 시드 DRAFT — 미게시
+    expect(draft.createdAt).toBeTruthy()
+    expect(draft.publishedAt).toBeNull()
+  })
+
+  it('게시하면 publishedAt·updatedAt이 목록 행에 노출된다', async () => {
+    const { repo } = await makeRepo()
+    const id = idOf(repo, 'RNW9999DRAFT')
+    repo.setStatus(id, 'PUBLISHED')
+    expect(byModel(repo, 'RNW9999DRAFT')).toMatchObject({ publishedAt: FIXED_NOW, updatedAt: FIXED_NOW })
+  })
+})
+
 describe('updateProduct (수정 — 게시본 잠금)', () => {
   it('DRAFT 제품의 스펙을 수정한다', async () => {
     const { repo } = await makeRepo()
@@ -192,7 +218,7 @@ describe('setStatus (게시 전이 — 선형 + 재게시)', () => {
     expect(queryRows(db, `SELECT discontinued_at FROM products WHERE id = ${id}`)[0].discontinued_at).toBeNull()
   })
 
-  it('DRAFT→ARCHIVED 폐기를 허용한다', async () => {
+  it('DRAFT→ARCHIVED 등록 취소를 허용한다', async () => {
     const { repo } = await makeRepo()
     const id = idOf(repo, 'RNW9999DRAFT')
     expect(() => repo.setStatus(id, 'ARCHIVED')).not.toThrow()

@@ -5,18 +5,20 @@ import ProductFormModal from './ProductFormModal'
 import SpecSheetUploadModal from './SpecSheetUploadModal'
 import BulkActionBar from './BulkActionBar'
 import { useSubmitGuard } from './useSubmitGuard'
+import { formatDateTime } from '../../presentation/formatDateTime'
 
 // 게시 상태 라벨(무채색 뱃지). 관리 목록은 전 상태를 노출한다.
-const STATUS_LABEL: Record<PublishStatus, string> = { DRAFT: '작성중', PUBLISHED: '게시', ARCHIVED: '보관' }
+const STATUS_LABEL: Record<PublishStatus, string> = { DRAFT: '작성중', PUBLISHED: '게시', ARCHIVED: '단종' }
 const kw = (w: number | null) => (w == null ? '—' : (Math.round(w / 100) / 10).toFixed(1))
 const hp = (n: number | null) => (n == null ? '—' : String(n))
 
 const PAGE_SIZE = 20
 
-// 상태별 전이 액션(도메인 허용 전이와 1:1). DRAFT: 게시·폐기 / PUBLISHED: 보관 / ARCHIVED: 재게시.
+// 상태별 행 전이 액션. DRAFT: 등록 취소 / PUBLISHED: 단종 (둘 다 →ARCHIVED) / ARCHIVED: 재게시.
+// 게시(DRAFT→PUBLISHED)는 행 버튼 없이 일괄 게시 바에서만 수행한다(실수 게시 방지 + 전제조건 사유 일괄 안내).
 const ACTIONS: Record<PublishStatus, ReadonlyArray<{ to: PublishStatus; label: string }>> = {
-  DRAFT: [{ to: 'PUBLISHED', label: '게시' }, { to: 'ARCHIVED', label: '폐기' }],
-  PUBLISHED: [{ to: 'ARCHIVED', label: '보관' }],
+  DRAFT: [{ to: 'ARCHIVED', label: '등록 취소' }],
+  PUBLISHED: [{ to: 'ARCHIVED', label: '단종' }],
   ARCHIVED: [{ to: 'PUBLISHED', label: '재게시' }],
 }
 
@@ -129,7 +131,7 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
       <div className="sub">
         <div className="title">장비마스터 — 제품 목록</div>
         <span className="b">
-          게시 {counts.PUBLISHED} · 작성중 {counts.DRAFT} · 보관 {counts.ARCHIVED}
+          게시 {counts.PUBLISHED} · 작성중 {counts.DRAFT} · 단종 {counts.ARCHIVED}
         </span>
       </div>
 
@@ -154,7 +156,7 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
           <option value="ALL">전체 상태</option>
           <option value="PUBLISHED">게시</option>
           <option value="DRAFT">작성중</option>
-          <option value="ARCHIVED">보관</option>
+          <option value="ARCHIVED">단종</option>
         </select>
         <input className="field" aria-label="모델명·장비번호 검색" placeholder="모델명·장비번호 검색" value={q} onChange={(e) => resetPage(setQ)(e.target.value)} />
         <div className="sp" />
@@ -182,12 +184,13 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
               </th>
               <th>상태</th><th>분류</th><th>계열</th><th>시리즈</th><th>모델명</th><th>장비번호</th>
               <th className="num">HP</th><th className="num">냉방(kW)</th><th className="num">난방(kW)</th>
+              <th>등록일</th><th>수정일</th><th>게시일</th>
               <th>관리</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={11} className="eq-empty">조건에 맞는 제품이 없습니다</td></tr>
+              <tr><td colSpan={14} className="eq-empty">조건에 맞는 제품이 없습니다</td></tr>
             ) : (
               rows.map((r) => (
                 <tr key={r.id} className={selected.has(r.id) ? 'sel' : undefined}>
@@ -208,12 +211,15 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
                   <td className="num">{hp(r.horsepower)}</td>
                   <td className="num">{kw(r.coolingW)}</td>
                   <td className="num">{kw(r.heatingW)}</td>
+                  <td className="dt">{formatDateTime(r.createdAt)}</td>
+                  <td className="dt">{formatDateTime(r.updatedAt)}</td>
+                  <td className="dt">{formatDateTime(r.publishedAt)}</td>
                   <td className="eq-actions">
                     <button
                       className="btn sm"
                       onClick={() => setEditing({ mode: 'edit', row: r })}
                       disabled={r.status !== 'DRAFT'}
-                      title={r.status === 'DRAFT' ? '스펙 수정' : '게시·보관본은 스펙을 수정할 수 없습니다'}
+                      title={r.status === 'DRAFT' ? '스펙 수정' : '게시·단종본은 스펙을 수정할 수 없습니다'}
                       aria-label={`${r.modelCode} 수정`}
                     >
                       수정

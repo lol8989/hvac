@@ -8,7 +8,8 @@ import type { SeedData } from '../seed/seedTypes'
 // 단가 유형은 POC상 소비자가(CONSUMER=1) 하나만 쓴다.
 const CONSUMER_PRICE_TYPE_ID = 1
 
-export function seedDatabase(db: Database, data: SeedData): void {
+// now: 시드 적재 시각(등록/수정/게시일 표기용). 신규 DB를 만드는 그 시점이 곧 등록 시점이다.
+export function seedDatabase(db: Database, data: SeedData, now: string = new Date().toISOString()): void {
   const categoryId = new Map<string, number>()
   const subcategoryId = new Map<string, number>()
   const seriesId = new Map<string, number>()
@@ -49,8 +50,9 @@ export function seedDatabase(db: Database, data: SeedData): void {
 
   const insertProduct = `INSERT INTO products
     (id, series_id, model_code, equipment_code, horsepower, cooling_capacity_w, heating_capacity_w,
-     max_connections, efficiency_grade_id, cop_cooling, cop_heating, status, discontinued_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+     max_connections, efficiency_grade_id, cop_cooling, cop_heating, status, discontinued_at,
+     created_at, updated_at, published_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   const insertSpec = `INSERT INTO product_specs (product_id, spec_data) VALUES (?,?)`
 
   data.products.forEach((p, i) => {
@@ -70,6 +72,9 @@ export function seedDatabase(db: Database, data: SeedData): void {
       p.copHeating,
       p.status,
       p.status === 'ARCHIVED' ? '2024-01-01' : null,
+      now,
+      now,
+      p.status === 'PUBLISHED' ? now : null, // 게시본은 시드 시점이 곧 게시 시점
     ])
     // 롱테일 스펙이 없는 목업 모델은 빈 행을 만들지 않는다.
     if (Object.keys(p.specData).length) db.run(insertSpec, [id, JSON.stringify(p.specData)])

@@ -28,8 +28,11 @@ const wToKw = (w: number): number => Math.round(w / 100) / 10
 function readPublishedIndoor(db: Database): IndoorSpecFields[] {
   const rows = queryRows(
     db,
-    `SELECT equipment_code, model_code, cooling_capacity_w, heating_capacity_w, subcategory_name, energy_source
-     FROM v_published_products WHERE category_code = 'INDOOR' ORDER BY id`,
+    `SELECT vp.equipment_code, vp.model_code, vp.cooling_capacity_w, vp.heating_capacity_w,
+            vp.subcategory_name, vp.energy_source, s.name_ko AS series_name
+     FROM v_published_products vp
+     JOIN product_series s ON vp.series_id = s.id
+     WHERE vp.category_code = 'INDOOR' ORDER BY vp.id`,
   )
   return rows.map((r) => ({
     // 장비번호는 큐레이션 게시본만 갖는다. 없으면 모델명으로 대체 표기한다(빈값 금지 — IndoorModel 불변식).
@@ -38,6 +41,7 @@ function readPublishedIndoor(db: Database): IndoorSpecFields[] {
     coolW: num(r.cooling_capacity_w),
     heatW: num(r.heating_capacity_w),
     type: String(r.subcategory_name),
+    series: String(r.series_name),
     energySource: r.energy_source as EnergySourceCode,
   }))
 }
@@ -47,8 +51,10 @@ function readPublishedOutdoor(db: Database): OutdoorSpecFields[] {
     db,
     `SELECT vp.model_code, vp.subcategory_name, vp.energy_source, vp.cooling_capacity_w, vp.heating_capacity_w,
             vp.horsepower, vp.max_connections, vp.efficiency_grade_id, vp.cop_cooling, vp.cop_heating,
+            s.name_ko AS series_name,
             pp.price_krw, pt.code AS price_type_code, pp.price_with_vat_krw, pp.effective_start_date, pp.priority AS price_priority
      FROM v_published_products vp
+     JOIN product_series s ON vp.series_id = s.id
      LEFT JOIN product_prices pp ON pp.product_id = vp.id AND pp.effective_end_date IS NULL
      LEFT JOIN price_types pt ON pp.price_type_id = pt.id
      WHERE vp.category_code = 'OUTDOOR' ORDER BY vp.id`,
@@ -59,6 +65,7 @@ function readPublishedOutdoor(db: Database): OutdoorSpecFields[] {
     const base = {
       model: String(r.model_code),
       cat: String(r.subcategory_name),
+      series: String(r.series_name),
       sys: r.energy_source as EnergySourceCode,
       cool: wToKw(num(r.cooling_capacity_w)),
       heatKw: r.heating_capacity_w == null ? null : wToKw(num(r.heating_capacity_w)),

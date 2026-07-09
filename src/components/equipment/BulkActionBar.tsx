@@ -1,4 +1,5 @@
-// 선택된 제품에 대한 일괄 게시/보관 바. 선택이 없으면 렌더하지 않는다.
+// 선택된 제품에 대한 일괄 게시/보관 바. 항상 노출하되, 선택이 없으면 액션을 비활성화한다
+// (기능 발견성 — 선택해야 보이는 바는 처음 쓰는 관리자가 찾지 못한다).
 // 전이 불가·게시 전제조건 미달 행은 저장소가 스킵하고 사유를 돌려준다 → 여기서 요약해 보여준다.
 
 import type { BulkStatusResult } from '../../application/equipment/adminPorts'
@@ -17,7 +18,7 @@ export interface BulkActionBarProps {
 
 const ACTIONS: ReadonlyArray<{ to: PublishStatus; label: string; primary?: boolean }> = [
   { to: 'PUBLISHED', label: '일괄 게시', primary: true },
-  { to: 'ARCHIVED', label: '일괄 보관' },
+  { to: 'ARCHIVED', label: '일괄 단종' },
 ]
 
 export default function BulkActionBar({
@@ -30,7 +31,6 @@ export default function BulkActionBar({
   onResult,
 }: BulkActionBarProps) {
   const guard = useSubmitGuard()
-  if (selectedCount === 0) return null
 
   const apply = (to: PublishStatus, label: string) =>
     void guard.run(() => {
@@ -44,10 +44,10 @@ export default function BulkActionBar({
       </span>
       {!allFilteredSelected && filteredCount > selectedCount && (
         <button className="btn sm" onClick={onSelectAllFiltered}>
-          필터 결과 전체 선택 ({filteredCount}건)
+          전체 선택
         </button>
       )}
-      <button className="btn sm" onClick={onClear}>선택 해제</button>
+      <button className="btn sm" onClick={onClear} disabled={selectedCount === 0}>선택 해제</button>
       <div className="sp" />
       <span className="eq-bulk-note">전이 불가·요건 미달 행은 자동으로 제외됩니다</span>
       {ACTIONS.map((a) => (
@@ -55,7 +55,7 @@ export default function BulkActionBar({
           key={a.to}
           className={'btn sm' + (a.primary ? ' primary' : '')}
           onClick={() => apply(a.to, a.label)}
-          disabled={guard.busy}
+          disabled={guard.busy || selectedCount === 0}
           aria-label={a.label}
         >
           {guard.busy ? '처리 중…' : a.label}

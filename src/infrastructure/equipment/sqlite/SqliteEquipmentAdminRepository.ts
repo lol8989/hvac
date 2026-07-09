@@ -17,7 +17,8 @@ const LIST_SQL = `
   SELECT p.id, c.code AS category_code, c.name_ko AS category_name,
          sc.name_ko AS subcategory_name, sc.energy_source,
          s.code AS series_code, s.name_ko AS series_name, p.model_code, p.equipment_code,
-         p.horsepower, p.cooling_capacity_w, p.heating_capacity_w, p.max_connections, p.status
+         p.horsepower, p.cooling_capacity_w, p.heating_capacity_w, p.max_connections, p.status,
+         p.created_at, p.updated_at, p.published_at
   FROM products p
   JOIN product_series s        ON p.series_id = s.id
   JOIN product_subcategories sc ON s.subcategory_id = sc.id
@@ -76,6 +77,9 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
       heatingW: numOrNull(r.heating_capacity_w),
       maxConnections: numOrNull(r.max_connections),
       status: String(r.status) as PublishStatus,
+      createdAt: strOrNull(r.created_at),
+      updatedAt: strOrNull(r.updated_at),
+      publishedAt: strOrNull(r.published_at),
     }))
   }
 

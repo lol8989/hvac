@@ -31,10 +31,13 @@ const INDOOR_SEED: ReadonlyArray<[string, string, number, number, string]> = [
   ['145T', 'RNW1451A2U', 14500, 16300, DUCT],
 ]
 
+// 시리즈명은 SQLite 시드(public/equipment-seed.json)와 정확히 일치해야 한다 — 동치 테스트가 고정한다.
+const IN_SERIES = 'Multi V 실내기(큐레이션)'
+
 export const INDOOR_RECORDS: readonly IndoorMasterRecord[] = [
-  ...INDOOR_SEED.map(([code, model, coolW, heatW, type]): IndoorMasterRecord => ({ status: P, code, model, coolW, heatW, type, energySource: 'EHP' })),
+  ...INDOOR_SEED.map(([code, model, coolW, heatW, type]): IndoorMasterRecord => ({ status: P, code, model, coolW, heatW, type, series: IN_SERIES, energySource: 'EHP' })),
   // 게시 게이트 실증용: 아직 등록만 된 DRAFT 모델은 생성/검도에 노출되지 않아야 한다.
-  { status: PUBLISH_STATUS.DRAFT, code: 'DRAFT99', model: 'RNW9999DRAFT', coolW: 9000, heatW: 10000, type: CASSETTE, energySource: 'EHP' },
+  { status: PUBLISH_STATUS.DRAFT, code: 'DRAFT99', model: 'RNW9999DRAFT', coolW: 9000, heatW: 10000, type: CASSETTE, series: IN_SERIES, energySource: 'EHP' },
 ]
 
 const D = '2026-04-20' // effectiveStartDate 공통(목업)
@@ -42,15 +45,15 @@ const D = '2026-04-20' // effectiveStartDate 공통(목업)
 // (RPUW08BX9E · GPUW450C2S · RPUW-ARCHIVED)만 목업 값이다. 단가·등급·COP는 여전히 목업.
 // comboMin/Max 전부 미지정(기본 0.5~1.3).
 export const OUTDOOR_RECORDS: readonly OutdoorMasterRecord[] = [
-  { status: P, model: 'RPUW08BX9E', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, heatKw: 25.1, hp: 8, maxConn: 13, priceKrw: 2980000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 3278000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 2, copCooling: 5.1, copHeating: 4.3 },
-  { status: P, model: 'RPUW12BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, heatKw: 39.2, hp: 12, maxConn: 20, priceKrw: 4120000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 4532000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.2 },
-  { status: P, model: 'RPUW16BX9M', cat: '냉난방 절환형', sys: 'EHP', cool: 46.4, heatKw: 52.2, hp: 16, maxConn: 26, priceKrw: 5240000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 5764000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.8, copHeating: 4.05 },
-  { status: P, model: 'RPUW20BX9P', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0, heatKw: 63.0, hp: 20, maxConn: 32, priceKrw: 6350000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 6985000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.1 },
-  { status: P, model: 'RPUQ141X9S', cat: '냉방전용', sys: 'EHP', cool: 39.2, heatKw: null, hp: 14, maxConn: 23, priceKrw: 3760000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: null, copCooling: 4.0, copHeating: null },
-  { status: P, model: 'GPUW280C2S', cat: 'GHP', sys: 'GHP', cool: 82.0, heatKw: 90.0, hp: 28, maxConn: 53, priceKrw: 8900000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 9790000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.55, copHeating: 1.45 },
-  { status: P, model: 'GPUW450C2S', cat: 'GHP', sys: 'GHP', cool: 45.0, heatKw: 50.4, hp: 16, maxConn: 26, priceKrw: 12400000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.5, copHeating: 1.4 },
+  { status: P, model: 'RPUW08BX9E', series: 'Multi V 실외기(큐레이션)', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, heatKw: 25.1, hp: 8, maxConn: 13, priceKrw: 2980000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 3278000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 2, copCooling: 5.1, copHeating: 4.3 },
+  { status: P, model: 'RPUW12BX9M', series: 'TA Multi V Super 5(일반형)', cat: '냉난방 절환형', sys: 'EHP', cool: 34.8, heatKw: 39.2, hp: 12, maxConn: 20, priceKrw: 4120000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 4532000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.2 },
+  { status: P, model: 'RPUW16BX9M', series: 'TA Multi V Super 5(일반형)', cat: '냉난방 절환형', sys: 'EHP', cool: 46.4, heatKw: 52.2, hp: 16, maxConn: 26, priceKrw: 5240000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 5764000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.8, copHeating: 4.05 },
+  { status: P, model: 'RPUW20BX9P', series: 'TA Multi V Super 5(고급형)', cat: '냉난방 절환형', sys: 'EHP', cool: 57.0, heatKw: 63.0, hp: 20, maxConn: 32, priceKrw: 6350000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 6985000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 3, copCooling: 4.99, copHeating: 4.1 },
+  { status: P, model: 'RPUQ141X9S', series: 'Multi V Super 5(일반형_냉전)', cat: '냉방전용', sys: 'EHP', cool: 39.2, heatKw: null, hp: 14, maxConn: 23, priceKrw: 3760000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: null, copCooling: 4.0, copHeating: null },
+  { status: P, model: 'GPUW280C2S', series: 'GHP Super III', cat: 'GHP', sys: 'GHP', cool: 82.0, heatKw: 90.0, hp: 28, maxConn: 53, priceKrw: 8900000, priceTypeCode: 'CONSUMER', priceWithVatKrw: 9790000, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.55, copHeating: 1.45 },
+  { status: P, model: 'GPUW450C2S', series: 'Multi V 실외기(큐레이션)', cat: 'GHP', sys: 'GHP', cool: 45.0, heatKw: 50.4, hp: 16, maxConn: 26, priceKrw: 12400000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: D, priority: 10, efficiencyGradeId: 4, copCooling: 1.5, copHeating: 1.4 },
   // 게시 게이트 실증용: 단종(ARCHIVED) 모델은 생성/검도에 노출되지 않아야 한다.
-  { status: PUBLISH_STATUS.ARCHIVED, model: 'RPUW-ARCHIVED', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, heatKw: 25.1, hp: 8, maxConn: 13, priceKrw: 2500000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: '2020-01-01', priority: 99, efficiencyGradeId: 5, copCooling: 3.9, copHeating: 3.5 },
+  { status: PUBLISH_STATUS.ARCHIVED, model: 'RPUW-ARCHIVED', series: 'Multi V 실외기(큐레이션)', cat: '냉난방 절환형', sys: 'EHP', cool: 22.4, heatKw: 25.1, hp: 8, maxConn: 13, priceKrw: 2500000, priceTypeCode: 'CONSUMER', priceWithVatKrw: null, effectiveStartDate: '2020-01-01', priority: 99, efficiencyGradeId: 5, copCooling: 3.9, copHeating: 3.5 },
 ]
 
 // FNV-1a 32bit 문자열 해시(base36). 순수·결정적.

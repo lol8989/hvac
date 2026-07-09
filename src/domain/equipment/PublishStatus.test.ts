@@ -19,12 +19,12 @@ describe('PublishStatus (게시 게이트)', () => {
 // 허용 전이(주인님 결정 2026-07-09): 선형 + 재게시. PUBLISHED→DRAFT(게시 취소)는 금지 —
 // 생성/검도가 참조하던 데이터가 소리 없이 사라지는 것을 막는다.
 describe('canTransition (상태 전이 불변식)', () => {
-  it('DRAFT에서 게시(PUBLISHED)·폐기(ARCHIVED)로 전이한다', () => {
+  it('DRAFT에서 게시(PUBLISHED)·등록 취소(ARCHIVED)로 전이한다', () => {
     expect(canTransition(DRAFT, PUBLISHED)).toBe(true)
     expect(canTransition(DRAFT, ARCHIVED)).toBe(true)
   })
 
-  it('PUBLISHED에서 보관(ARCHIVED)으로만 전이한다', () => {
+  it('PUBLISHED에서 단종(ARCHIVED)으로만 전이한다', () => {
     expect(canTransition(PUBLISHED, ARCHIVED)).toBe(true)
   })
 

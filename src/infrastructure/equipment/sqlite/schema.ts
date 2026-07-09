@@ -2,9 +2,10 @@
 // 4단 분류(category→subcategory→series→products) + 정규화 hot 필드 + product_specs(JSON) + 단가 + 게시게이트.
 // PG→SQLite 이식: BIGSERIAL→INTEGER PK, TIMESTAMPTZ/DATE→TEXT, JSONB→TEXT, BOOLEAN→INTEGER, NUMERIC→REAL/INTEGER.
 //
-// 스키마 구조 버전 — IndexedDB 캐시 무효화 키의 일부(테이블/컬럼/뷰 등 DDL 구조 변경 시 증가).
+// 스키마 구조 버전 — IndexedDB 캐시 무효화 키의 일부(DDL 구조 또는 시드 '적재 규칙' 변경 시 증가).
 // 시드 '값' 변경은 별도로 seedData.ts의 SEED_HASH(내용 해시)가 자동 무효화하므로 여기 손댈 필요 없음.
-export const SCHEMA_VERSION = 1
+// v2: 시드 제품에 created_at/updated_at/published_at 스탬프 추가(등록·수정·게시일 컬럼 표기).
+export const SCHEMA_VERSION = 2
 
 export const SCHEMA_SQL = `
 PRAGMA foreign_keys = ON;

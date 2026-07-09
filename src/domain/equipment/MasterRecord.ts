@@ -13,6 +13,7 @@ export interface IndoorSpecFields {
   coolW: number // 냉방용량(W)
   heatW: number // 난방용량(W)
   type: string // 실내기 유형 (예: '4WAY 카세트', '덕트')
+  series: string // 시리즈명 (예: 'Multi V 실내기(민수전용)') — 목록 필터용
   energySource: EnergySourceCode
 }
 
@@ -26,6 +27,7 @@ export interface IndoorMasterRecord extends IndoorSpecFields {
 export interface OutdoorSpecFields {
   model: string
   cat: string
+  series: string // 시리즈명 (예: 'Multi V Super 5(고급형)') — 목록 필터용
   sys: EnergySourceCode
   cool: number // 냉방용량(kW)
   heatKw: number | null // 난방용량(kW). 냉방전용은 null

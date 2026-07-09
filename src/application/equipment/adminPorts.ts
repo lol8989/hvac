@@ -22,6 +22,9 @@ export interface ProductRow {
   heatingW: number | null
   maxConnections: number | null
   status: PublishStatus
+  createdAt: string | null // 등록일 (ISO)
+  updatedAt: string | null // 수정일 (ISO)
+  publishedAt: string | null // 게시일 (ISO) — 미게시는 null
 }
 
 // 등록·수정 폼의 시리즈 선택지(4단 분류 평탄화).
