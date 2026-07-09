@@ -80,7 +80,6 @@ export const DEFAULT_COMBINATION: Combination[] = [
 export interface ModelCard {
   mn: string
   ms: string
-  mp: string
   md: string
   on: boolean
   cool?: number // 실내기 냉방용량(kW) — 실 부하 근사 매칭에 사용. 실외기 카드는 미사용.
@@ -89,17 +88,17 @@ export interface ModelCard {
 
 export const MODELS: { in: ModelCard[]; out: ModelCard[] } = {
   in: [
-    { mn: 'LG AMNW09GTRA0', ms: '벽걸이형 · 냉방 2.64kW · 난방 3.30kW · 1등급', mp: '642,900원', md: '적용 2026.07.08', on: true, cool: 2.64, kind: '벽걸이형' },
-    { mn: 'R-W0401A2U', ms: '4WAY 카세트 · 냉방 4.0kW · 난방 4.5kW', mp: '660,000원', md: '적용 2026.04.20', on: false, cool: 4.0, kind: '4WAY' },
-    { mn: 'R-W0601A2U', ms: '4WAY 카세트 · 냉방 6.0kW · 난방 6.8kW', mp: '780,000원', md: '적용 2026.04.20', on: false, cool: 6.0, kind: '4WAY' },
-    { mn: 'R-W0901A2U', ms: '4WAY 카세트 · 냉방 9.0kW · 난방 10.0kW', mp: '980,000원', md: '적용 2026.04.20', on: false, cool: 9.0, kind: '4WAY' },
-    { mn: 'R-W1401A2U', ms: '4WAY 카세트 · 냉방 14.0kW · 난방 16.0kW', mp: '1,340,000원', md: '적용 2026.04.20', on: false, cool: 14.0, kind: '4WAY' },
-    { mn: 'R-W2201A2U', ms: '4WAY 카세트 · 냉방 22.4kW · 난방 25.0kW', mp: '1,920,000원', md: '적용 2026.04.20', on: false, cool: 22.4, kind: '4WAY' },
+    { mn: 'LG AMNW09GTRA0', ms: '벽걸이형 · 냉방 2.64kW · 난방 3.30kW · 1등급', md: '적용 2026.07.08', on: true, cool: 2.64, kind: '벽걸이형' },
+    { mn: 'R-W0401A2U', ms: '4WAY 카세트 · 냉방 4.0kW · 난방 4.5kW', md: '적용 2026.04.20', on: false, cool: 4.0, kind: '4WAY' },
+    { mn: 'R-W0601A2U', ms: '4WAY 카세트 · 냉방 6.0kW · 난방 6.8kW', md: '적용 2026.04.20', on: false, cool: 6.0, kind: '4WAY' },
+    { mn: 'R-W0901A2U', ms: '4WAY 카세트 · 냉방 9.0kW · 난방 10.0kW', md: '적용 2026.04.20', on: false, cool: 9.0, kind: '4WAY' },
+    { mn: 'R-W1401A2U', ms: '4WAY 카세트 · 냉방 14.0kW · 난방 16.0kW', md: '적용 2026.04.20', on: false, cool: 14.0, kind: '4WAY' },
+    { mn: 'R-W2201A2U', ms: '4WAY 카세트 · 냉방 22.4kW · 난방 25.0kW', md: '적용 2026.04.20', on: false, cool: 22.4, kind: '4WAY' },
   ],
   out: [
-    { mn: 'RPUW12BX9M', ms: '냉난방 절환형 · 냉방 34.8kW · EERa 4.99 · 3등급', mp: '4,120,000원', md: '적용 2026.04.20', on: true },
-    { mn: 'RPUW20BX9P', ms: '냉난방 절환형 · 냉방 57.0kW · EERa 4.99 · 3등급', mp: '6,350,000원', md: '적용 2026.04.20', on: false },
-    { mn: 'RPUQ141X9S', ms: '냉방전용 · 냉방 39.2kW · EER 4.00', mp: '3,760,000원', md: '적용 2026.02.20', on: false },
+    { mn: 'RPUW12BX9M', ms: '냉난방 절환형 · 냉방 34.8kW · EERa 4.99 · 3등급', md: '적용 2026.04.20', on: true },
+    { mn: 'RPUW20BX9P', ms: '냉난방 절환형 · 냉방 57.0kW · EERa 4.99 · 3등급', md: '적용 2026.04.20', on: false },
+    { mn: 'RPUQ141X9S', ms: '냉방전용 · 냉방 39.2kW · EER 4.00', md: '적용 2026.02.20', on: false },
   ],
 }
 

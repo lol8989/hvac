@@ -8,27 +8,18 @@ import type { EquipmentAdminRepository, ProductRow, SeriesOption } from '../../.
 import type { PublishStatus } from '../../../domain/equipment/PublishStatus'
 import { assertTransition, assertSpecEditable, PUBLISH_STATUS } from '../../../domain/equipment/PublishStatus'
 import { EquipmentDomainError } from '../../../domain/equipment/errors'
-import {
-  assertValidDraft,
-  assertValidPatch,
-  assertValidPrice,
-  type ProductDraft,
-  type ProductPatch,
-  type PriceInput,
-} from '../../../domain/equipment/ProductDraft'
+import { assertValidDraft, assertValidPatch, type ProductDraft, type ProductPatch } from '../../../domain/equipment/ProductDraft'
 import { queryRows, numOrNull, strOrNull } from './query'
 
 const LIST_SQL = `
   SELECT p.id, c.code AS category_code, c.name_ko AS category_name,
          sc.name_ko AS subcategory_name, sc.energy_source,
          s.code AS series_code, s.name_ko AS series_name, p.model_code, p.equipment_code,
-         p.horsepower, p.cooling_capacity_w, p.heating_capacity_w, p.max_connections, p.status,
-         pp.price_krw
+         p.horsepower, p.cooling_capacity_w, p.heating_capacity_w, p.max_connections, p.status
   FROM products p
   JOIN product_series s        ON p.series_id = s.id
   JOIN product_subcategories sc ON s.subcategory_id = sc.id
   JOIN product_categories c     ON sc.category_id = c.id
-  LEFT JOIN product_prices pp   ON pp.product_id = p.id AND pp.effective_end_date IS NULL
   ORDER BY c.sort_order, p.id
 `
 
@@ -40,9 +31,6 @@ const SERIES_SQL = `
   JOIN product_categories c     ON sc.category_id = c.id
   ORDER BY c.sort_order, s.id
 `
-
-// 현행가(effective_end_date IS NULL) 1건. 단가 유형은 POC상 소비자가(CONSUMER=1) 고정.
-const CONSUMER_PRICE_TYPE_ID = 1
 
 export interface AdminRepoDeps {
   onChange?: () => void // 쓰기 성공 후 영속 훅(db.export() → IndexedDB)
@@ -86,7 +74,6 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
       heatingW: numOrNull(r.heating_capacity_w),
       maxConnections: numOrNull(r.max_connections),
       status: String(r.status) as PublishStatus,
-      priceKrw: numOrNull(r.price_krw),
     }))
   }
 
@@ -181,26 +168,6 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
                 updated_at = ?
           WHERE id = ?`,
         [next, publishedAt, publishedAt, discontinuedAt, ts, id],
-      )
-    })
-  }
-
-  setPrice(id: number, price: PriceInput): void {
-    assertValidPrice(price)
-    this.currentSpec(id) // 존재 확인(NOT_FOUND)
-
-    this.inTransaction(() => {
-      // 기존 현행가를 새 단가 적용일로 마감 → 이력 보존.
-      this.db.run(
-        `UPDATE product_prices SET effective_end_date = ?
-          WHERE product_id = ? AND effective_end_date IS NULL`,
-        [price.effectiveStartDate, id],
-      )
-      this.db.run(
-        `INSERT INTO product_prices
-           (product_id, price_type_id, price_krw, price_with_vat_krw, effective_start_date, effective_end_date, source_reference, priority)
-         VALUES (?,?,?,?,?,NULL,?,?)`,
-        [id, CONSUMER_PRICE_TYPE_ID, price.priceKrw, price.priceWithVatKrw, price.effectiveStartDate, '관리 페이지 입력', 0],
       )
     })
   }

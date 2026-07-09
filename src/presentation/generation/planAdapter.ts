@@ -1,5 +1,5 @@
 // 프리젠테이션 어댑터: 목업 배치(data.ts) ↔ 도메인(AssignmentPlan) ↔ 컴포넌트 뷰모델.
-// 실외기 스펙(계열·용량·최대 연결 수·단가·등급)은 장비마스터 카탈로그 포트에서 조회해 주입한다.
+// 실외기 스펙(계열·용량·최대 연결 수·등급)은 장비마스터 카탈로그 포트에서 조회해 주입한다.
 // 도메인 VO(Price/EnergyGrade)는 여기서 표시 문자열로 변환해 컴포넌트에 넘긴다(presentation은 VO 미노출).
 // 목적은 "동작 보존" — 컴포넌트가 기대하는 레거시 뷰 형태를 그대로 만든다.
 
@@ -15,7 +15,7 @@ import type { EnergyGrade } from '../../domain/shared/EnergyGrade'
 import type { OutdoorModelCatalog, OutdoorModelSpec } from '../../application/generation/ports'
 import { InMemoryOutdoorModelCatalog } from '../../infrastructure/generation/InMemoryOutdoorModelCatalog'
 
-// 컴포넌트가 소비하는 레거시 뷰 형태(+ 표시용 단가·등급 문자열)
+// 컴포넌트가 소비하는 레거시 뷰 형태(+ 표시용 등급 문자열)
 export interface GroupView {
   key: string
   label: string
@@ -24,7 +24,6 @@ export interface GroupView {
   sys: EnergySourceCode
   cool: number
   items: string[]
-  priceText?: string // 예: '4,120,000원'. 단가 미상 시 undefined
   gradeText?: string // 예: '3등급'. 등급 미부여 시 undefined
   effText?: string // 계열별 효율 지표: EHP 'EERa 4.99' / GHP 'COPc 1.55'. 없으면 undefined
 }
@@ -40,7 +39,7 @@ const indoorFromRoom = (id: string): IndoorUnit => {
   return new IndoorUnit({ id, roomName: r.name, coolKw: r.cool, sys: r.sys })
 }
 
-// 장비마스터 스펙(OutdoorModelSpec) → OutdoorUnit VO. 단가·등급·효율을 주입한다.
+// 장비마스터 스펙(OutdoorModelSpec) → OutdoorUnit VO. 등급·효율을 주입한다.
 export const outdoorUnitFromSpec = (spec: OutdoorModelSpec): OutdoorUnit =>
   new OutdoorUnit({
     model: spec.model,
@@ -55,8 +54,7 @@ export const outdoorUnitFromSpec = (spec: OutdoorModelSpec): OutdoorUnit =>
     copHeating: spec.copHeating ?? null,
   })
 
-// 모달 드롭다운 등에서 스펙의 표시용 단가/등급 문자열이 필요할 때(컴포넌트에 VO 미노출).
-export const specPriceText = (spec: OutdoorModelSpec): string | undefined => outdoorUnitFromSpec(spec).defaultPrice?.format()
+// 모달 드롭다운 등에서 스펙의 표시용 등급 문자열이 필요할 때(컴포넌트에 VO 미노출).
 export const specGradeText = (spec: OutdoorModelSpec): string | undefined => outdoorUnitFromSpec(spec).grade?.label()
 
 // 계열별 효율 지표 라벨. 전기식(EHP/AWHP 등)은 EER, 가스식(GHP)은 냉방 COP로 표기해
@@ -116,7 +114,6 @@ export const toViewModel = (plan: AssignmentPlan): ViewModel => ({
       sys: odu.energySource.code,
       cool: odu.capacity.kw,
       items: g.indoorUnits.map((i) => i.id),
-      priceText: odu.defaultPrice?.format(),
       gradeText: odu.grade?.label(),
       effText: efficiencyText(odu.energySource.code, odu.grade),
     }

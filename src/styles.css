@@ -102,7 +102,6 @@ button{font-family:inherit;cursor:pointer;}
 .mcard.on{border-color:var(--dark);box-shadow:inset 0 0 0 1px var(--dark);background:#fff;}
 .mcard .mn{font-weight:700;font-size:12px;}
 .mcard .ms{font-size:11px;color:#666;margin:3px 0;}
-.mcard .mp{font-weight:700;font-size:13px;}
 .mcard .md{font-size:10px;color:#999;position:absolute;right:10px;bottom:9px;}
 .mcard .selbadge{position:absolute;right:10px;top:10px;font-size:10px;background:var(--dark);color:#fff;border-radius:10px;padding:2px 8px;}
 .selrow{display:flex;align-items:center;gap:8px;border:1px solid var(--line2);border-radius:7px;padding:7px 9px;margin-bottom:6px;font-size:12px;cursor:pointer;transition:.15s;}

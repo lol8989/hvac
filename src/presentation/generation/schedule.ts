@@ -10,7 +10,6 @@ export interface ScheduleRow {
   사양: string
   수량: number
   연결: string // 실외기: 그룹 라벨 목록 / 실내기: 설치 실 id 목록
-  단가: string
 }
 
 // 실외기(연결 있는 그룹만) + 실내기(적용 모델 있는 실만)를 모델별로 집계한다.
@@ -33,7 +32,6 @@ export const buildScheduleRows = (
       사양: `${gs[0].cat} · 냉방 ${gs[0].cool}kW · ${gs[0].sys}`,
       수량: gs.length,
       연결: gs.map((g) => g.label).join(', '),
-      단가: gs[0].priceText ?? '미상',
     })
   }
 
@@ -50,7 +48,6 @@ export const buildScheduleRows = (
       사양: card?.ms ?? '',
       수량: ids.length,
       연결: ids.join(', '),
-      단가: card?.mp ?? '미상',
     })
   }
   return rows
@@ -63,7 +60,7 @@ const csvField = (v: string | number): string => {
 }
 
 export const toCsv = (rows: ScheduleRow[]): string => {
-  const header = '구분,모델명,사양,수량,연결,단가'
-  const lines = rows.map((r) => [r.구분, r.모델명, r.사양, r.수량, r.연결, r.단가].map(csvField).join(','))
+  const header = '구분,모델명,사양,수량,연결'
+  const lines = rows.map((r) => [r.구분, r.모델명, r.사양, r.수량, r.연결].map(csvField).join(','))
   return [header, ...lines].join('\n')
 }

@@ -1,6 +1,6 @@
 // 등록/수정 입력의 자기검증. 적대적 입력(음수·NaN·Infinity·빈 문자열·잘못된 날짜)을 도메인에서 막는다.
 import { describe, it, expect } from 'vitest'
-import { assertValidDraft, assertValidPatch, assertValidPrice, type ProductDraft, type PriceInput } from './ProductDraft'
+import { assertValidDraft, assertValidPatch, type ProductDraft } from './ProductDraft'
 import { EquipmentDomainError } from './errors'
 
 const draft = (over: Partial<ProductDraft> = {}): ProductDraft => ({
@@ -14,12 +14,6 @@ const draft = (over: Partial<ProductDraft> = {}): ProductDraft => ({
   ...over,
 })
 
-const price = (over: Partial<PriceInput> = {}): PriceInput => ({
-  priceKrw: 4120000,
-  priceWithVatKrw: 4532000,
-  effectiveStartDate: '2026-04-20',
-  ...over,
-})
 
 const codeOf = (fn: () => void): string => {
   try {
@@ -88,24 +82,3 @@ describe('assertValidPatch (제품 수정 입력)', () => {
   })
 })
 
-describe('assertValidPrice (단가 입력)', () => {
-  it('정상 단가는 통과한다', () => {
-    expect(() => assertValidPrice(price())).not.toThrow()
-    expect(() => assertValidPrice(price({ priceWithVatKrw: null }))).not.toThrow()
-  })
-
-  it('음수·NaN 단가를 거부한다', () => {
-    expect(codeOf(() => assertValidPrice(price({ priceKrw: -1 })))).toBe('INVALID_FIELD')
-    expect(codeOf(() => assertValidPrice(price({ priceKrw: NaN })))).toBe('INVALID_FIELD')
-  })
-
-  it('정수가 아닌 원 단위를 거부한다', () => {
-    expect(codeOf(() => assertValidPrice(price({ priceKrw: 1000.5 })))).toBe('INVALID_FIELD')
-  })
-
-  it('yyyy-mm-dd 형식이 아닌 적용일을 거부한다', () => {
-    expect(codeOf(() => assertValidPrice(price({ effectiveStartDate: '2026/04/20' })))).toBe('INVALID_FIELD')
-    expect(codeOf(() => assertValidPrice(price({ effectiveStartDate: '' })))).toBe('INVALID_FIELD')
-    expect(codeOf(() => assertValidPrice(price({ effectiveStartDate: '2026-13-01' })))).toBe('INVALID_FIELD')
-  })
-})

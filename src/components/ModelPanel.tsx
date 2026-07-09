@@ -112,7 +112,6 @@ export default function ModelPanel({
             {on && <span className="selbadge">선택됨</span>}
             <div className="mn">{m.mn}</div>
             <div className="ms">{m.ms}</div>
-            <div className="mp">{m.mp}</div>
             <div className="md">{m.md}</div>
           </div>
           )

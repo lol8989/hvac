@@ -1,4 +1,4 @@
-// 제품 등록/수정/단가 입력 값객체 — 불변·자기검증(DDD §5.2).
+// 제품 등록/수정 입력 값객체 — 불변·자기검증(DDD §5.2).
 // 저장소(SQLite)나 UI가 아니라 도메인이 유효성을 강제한다. 순수 도메인 — 프레임워크 무지.
 
 import { EquipmentDomainError } from './errors'
@@ -17,15 +17,7 @@ export interface ProductDraft {
 // 수정 입력. 지정한 필드만 덮어쓴다(미지정 = 유지).
 export type ProductPatch = Partial<ProductDraft>
 
-// 단가 입력. 원 단위 정수(부동소수 금액 금지).
-export interface PriceInput {
-  priceKrw: number // VAT별도 소비자가
-  priceWithVatKrw: number | null // VAT포함가. 미상은 null
-  effectiveStartDate: string // yyyy-mm-dd
-}
-
 const MODEL_CODE_MAX = 60
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 const fail = (message: string): never => {
   throw new EquipmentDomainError('INVALID_FIELD', message)
@@ -85,13 +77,3 @@ export function assertValidPatch(p: ProductPatch): void {
   if (p.coolingW === null && p.heatingW === null) assertHasCapacity(null, null)
 }
 
-export function assertValidPrice(p: PriceInput): void {
-  if (!Number.isInteger(p.priceKrw) || p.priceKrw < 0) fail('단가는 0 이상의 정수(원)여야 합니다')
-  if (p.priceWithVatKrw !== null && (!Number.isInteger(p.priceWithVatKrw) || p.priceWithVatKrw < 0)) {
-    fail('VAT포함가는 0 이상의 정수(원)여야 합니다')
-  }
-  if (!ISO_DATE.test(p.effectiveStartDate)) fail('적용일은 yyyy-mm-dd 형식이어야 합니다')
-  const [y, m, d] = p.effectiveStartDate.split('-').map(Number)
-  const dt = new Date(Date.UTC(y, m - 1, d))
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) fail('존재하지 않는 날짜입니다')
-}

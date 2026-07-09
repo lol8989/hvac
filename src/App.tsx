@@ -66,13 +66,12 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
   // 사용자가 카드를 직접 클릭하면 pick으로 그 파생을 덮어쓰고, 실 선택이 바뀌면 초기화한다.
   const [pick, setPick] = useState<{ in: number | null; out: number | null }>({ in: null, out: null })
   const [prevPrimary, setPrevPrimary] = useState<string | undefined>(undefined)
-  // 우측 패널 실내기 카드 — 실내기 카탈로그(장비번호 코드)에서 파생. 단가는 마스터 미게시(플레이스홀더).
+  // 우측 패널 실내기 카드 — 실내기 카탈로그(장비번호 코드)에서 파생.
   const indoorCards = useMemo<ModelCard[]>(
     () =>
       indoorModels.map((m) => ({
         mn: m.model,
         ms: `${m.type} · 냉방 ${(m.coolW / 1000).toFixed(1)}kW · 난방 ${(m.heatW / 1000).toFixed(1)}kW · [${m.code}]`,
-        mp: '단가 미정',
         md: '적용 2026.04.20',
         on: false,
         cool: m.coolW / 1000,

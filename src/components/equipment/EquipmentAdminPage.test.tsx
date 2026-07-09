@@ -8,13 +8,13 @@ import { EquipmentDomainError } from '../../domain/equipment/errors'
 const mk = (over: Partial<ProductRow>): ProductRow => ({
   id: 0, categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP',
   seriesCode: 'S_OUT_HR', seriesName: 'S', modelCode: 'M', equipmentCode: null, horsepower: 10, coolingW: 20000,
-  heatingW: 22000, maxConnections: 16, status: 'PUBLISHED', priceKrw: 1000000, ...over,
+  heatingW: 22000, maxConnections: 16, status: 'PUBLISHED', ...over,
 })
 
 // 15개(게시 13 + 작성중 1 + 보관 1) → 페이지네이션(12/페이지) 2페이지.
 const rows: ProductRow[] = [
   ...Array.from({ length: 13 }, (_, i) => mk({ id: i + 1, modelCode: `PUB${i}`, status: 'PUBLISHED' })),
-  mk({ id: 100, categoryCode: 'INDOOR', categoryName: '실내기', subcategoryName: '4WAY 카세트', seriesCode: 'S_IN_4WAY', modelCode: 'DRAFTX', equipmentCode: '40C', status: 'DRAFT', priceKrw: null, horsepower: null, maxConnections: null }),
+  mk({ id: 100, categoryCode: 'INDOOR', categoryName: '실내기', subcategoryName: '4WAY 카세트', seriesCode: 'S_IN_4WAY', modelCode: 'DRAFTX', equipmentCode: '40C', status: 'DRAFT', horsepower: null, maxConnections: null }),
   mk({ id: 101, modelCode: 'ARCHX', status: 'ARCHIVED' }),
 ]
 
@@ -30,7 +30,6 @@ const makeAdmin = (over: Partial<EquipmentAdminRepository> = {}): EquipmentAdmin
   createProduct: vi.fn(() => 1),
   updateProduct: vi.fn(),
   setStatus: vi.fn(),
-  setPrice: vi.fn(),
   ...over,
 })
 
@@ -214,24 +213,3 @@ describe('등록/수정 폼 (더블클릭 방지 포함)', () => {
   })
 })
 
-describe('단가 모달', () => {
-  it('게시본도 단가는 변경할 수 있고 setPrice를 호출한다', () => {
-    const admin = makeAdmin()
-    render(<EquipmentAdminPage admin={admin} today="2026-07-09" />)
-    fireEvent.click(screen.getByRole('button', { name: 'PUB0 단가' }))
-    fill('소비자가(VAT별도)', '4500000')
-    fireEvent.click(screen.getByRole('button', { name: '저장' }))
-    expect(admin.setPrice).toHaveBeenCalledWith(1, { priceKrw: 4500000, priceWithVatKrw: null, effectiveStartDate: '2026-07-09' })
-  })
-
-  it('단가 저장 연타 시 setPrice는 1회만 호출된다(더블클릭 방지)', () => {
-    const admin = makeAdmin()
-    render(<EquipmentAdminPage admin={admin} today="2026-07-09" />)
-    fireEvent.click(screen.getByRole('button', { name: 'PUB0 단가' }))
-    fill('소비자가(VAT별도)', '4500000')
-    const save = screen.getByRole('button', { name: '저장' })
-    fireEvent.click(save)
-    fireEvent.click(save)
-    expect(admin.setPrice).toHaveBeenCalledTimes(1)
-  })
-})

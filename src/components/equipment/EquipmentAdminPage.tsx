@@ -2,12 +2,10 @@ import { useCallback, useMemo, useState } from 'react'
 import type { EquipmentAdminRepository, ProductRow } from '../../application/equipment/adminPorts'
 import type { PublishStatus } from '../../domain/equipment/PublishStatus'
 import ProductFormModal from './ProductFormModal'
-import PriceModal from './PriceModal'
 import { useSubmitGuard } from './useSubmitGuard'
 
 // 게시 상태 라벨(무채색 뱃지). 관리 목록은 전 상태를 노출한다.
 const STATUS_LABEL: Record<PublishStatus, string> = { DRAFT: '작성중', PUBLISHED: '게시', ARCHIVED: '보관' }
-const won = (n: number | null) => (n == null ? '—' : n.toLocaleString('ko-KR') + '원')
 const kw = (w: number | null) => (w == null ? '—' : (Math.round(w / 100) / 10).toFixed(1))
 const hp = (n: number | null) => (n == null ? '—' : String(n))
 
@@ -22,8 +20,8 @@ const ACTIONS: Record<PublishStatus, ReadonlyArray<{ to: PublishStatus; label: s
 
 type Editing = { mode: 'create' } | { mode: 'edit'; row: ProductRow } | null
 
-// 장비마스터 관리 페이지 (목록/필터/등록·수정/게시전이/단가).
-export default function EquipmentAdminPage({ admin, today }: { admin: EquipmentAdminRepository; today?: string }) {
+// 장비마스터 관리 페이지 (목록/필터/등록·수정/게시전이).
+export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRepository }) {
   const [all, setAll] = useState<ProductRow[]>(() => admin.listProducts())
   const series = useMemo(() => admin.listSeries(), [admin])
   const [cat, setCat] = useState<'ALL' | 'INDOOR' | 'OUTDOOR'>('ALL')
@@ -31,7 +29,6 @@ export default function EquipmentAdminPage({ admin, today }: { admin: EquipmentA
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
   const [editing, setEditing] = useState<Editing>(null)
-  const [pricing, setPricing] = useState<ProductRow | null>(null)
   const [toast, setToast] = useState('')
   const rowGuard = useSubmitGuard() // 행 액션(게시/보관/재게시) 연타 방지
 
@@ -121,13 +118,13 @@ export default function EquipmentAdminPage({ admin, today }: { admin: EquipmentA
           <thead>
             <tr>
               <th>상태</th><th>분류</th><th>계열</th><th>시리즈</th><th>모델명</th><th>장비번호</th>
-              <th className="num">HP</th><th className="num">냉방(kW)</th><th className="num">난방(kW)</th><th className="num">단가</th>
+              <th className="num">HP</th><th className="num">냉방(kW)</th><th className="num">난방(kW)</th>
               <th>관리</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={11} className="eq-empty">조건에 맞는 제품이 없습니다</td></tr>
+              <tr><td colSpan={10} className="eq-empty">조건에 맞는 제품이 없습니다</td></tr>
             ) : (
               rows.map((r) => (
                 <tr key={r.id}>
@@ -140,7 +137,6 @@ export default function EquipmentAdminPage({ admin, today }: { admin: EquipmentA
                   <td className="num">{hp(r.horsepower)}</td>
                   <td className="num">{kw(r.coolingW)}</td>
                   <td className="num">{kw(r.heatingW)}</td>
-                  <td className="num">{won(r.priceKrw)}</td>
                   <td className="eq-actions">
                     <button
                       className="btn sm"
@@ -151,7 +147,6 @@ export default function EquipmentAdminPage({ admin, today }: { admin: EquipmentA
                     >
                       수정
                     </button>
-                    <button className="btn sm" onClick={() => setPricing(r)} aria-label={`${r.modelCode} 단가`}>단가</button>
                     {ACTIONS[r.status].map((a) => (
                       <button
                         key={a.to}
@@ -196,18 +191,6 @@ export default function EquipmentAdminPage({ admin, today }: { admin: EquipmentA
         />
       )}
 
-      {pricing && (
-        <PriceModal
-          product={pricing}
-          today={today ?? new Date().toISOString().slice(0, 10)}
-          onSave={(price) => {
-            admin.setPrice(pricing.id, price)
-            refresh()
-            notify(`${pricing.modelCode} 단가 변경 완료`)
-          }}
-          onClose={() => setPricing(null)}
-        />
-      )}
 
       <div className={'toast' + (toast ? ' show' : '')} role="status">{toast}</div>
     </div>

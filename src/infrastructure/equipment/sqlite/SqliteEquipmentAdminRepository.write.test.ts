@@ -1,5 +1,5 @@
-// 관리 리포지토리 쓰기(P2-S2): 등록/수정/게시전이/단가.
-// 도메인 불변식(게시본 잠금·허용 전이)이 저장소를 통과해 강제되는지, 단가 이력이 보존되는지 고정한다.
+// 관리 리포지토리 쓰기(P2-S2): 등록/수정/게시전이.
+// 도메인 불변식(게시본 잠금·허용 전이)이 저장소를 통과해 강제되는지 고정한다.
 import { describe, it, expect, vi } from 'vitest'
 import initSqlJs from 'sql.js'
 import type { Database } from 'sql.js'
@@ -213,47 +213,6 @@ describe('setStatus (게시 전이 — 선형 + 재게시)', () => {
   it('없는 제품의 전이는 NOT_FOUND', async () => {
     const { repo } = await makeRepo()
     expect(codeOf(() => repo.setStatus(99999, 'PUBLISHED'))).toBe('NOT_FOUND')
-  })
-})
-
-describe('setPrice (단가 — 이력 보존)', () => {
-  it('현행가를 교체하면 옛 행은 마감되고 새 행이 현행가가 된다', async () => {
-    const { repo, db } = await makeRepo()
-    const id = idOf(repo, 'RPUW12BX9M')
-    repo.setPrice(id, { priceKrw: 4500000, priceWithVatKrw: 4950000, effectiveStartDate: '2026-08-01' })
-
-    expect(byModel(repo, 'RPUW12BX9M')!.priceKrw).toBe(4500000)
-    const rows = queryRows(db, `SELECT price_krw, effective_end_date FROM product_prices WHERE product_id = ${id} ORDER BY id`)
-    expect(rows).toHaveLength(2) // 이력 보존
-    expect(rows[0]).toMatchObject({ price_krw: 4120000, effective_end_date: '2026-08-01' }) // 옛 현행가 마감
-    expect(rows[1]).toMatchObject({ price_krw: 4500000, effective_end_date: null })
-  })
-
-  it('단가가 없던 실내기에 첫 단가를 등록한다', async () => {
-    const { repo } = await makeRepo()
-    const id = idOf(repo, 'RNW0401C2S')
-    expect(byModel(repo, 'RNW0401C2S')!.priceKrw).toBeNull()
-    repo.setPrice(id, { priceKrw: 900000, priceWithVatKrw: null, effectiveStartDate: '2026-08-01' })
-    expect(byModel(repo, 'RNW0401C2S')!.priceKrw).toBe(900000)
-  })
-
-  it('게시(PUBLISHED) 제품도 단가는 변경할 수 있다(게시본 잠금은 스펙에만 적용)', async () => {
-    const { repo } = await makeRepo()
-    const id = idOf(repo, 'RPUW12BX9M')
-    expect(() => repo.setPrice(id, { priceKrw: 1, priceWithVatKrw: null, effectiveStartDate: '2026-08-01' })).not.toThrow()
-  })
-
-  it('음수 단가는 INVALID_FIELD로 거부하고 기존 현행가를 보존한다', async () => {
-    const { repo, db } = await makeRepo()
-    const id = idOf(repo, 'RPUW12BX9M')
-    expect(codeOf(() => repo.setPrice(id, { priceKrw: -1, priceWithVatKrw: null, effectiveStartDate: '2026-08-01' }))).toBe('INVALID_FIELD')
-    expect(byModel(repo, 'RPUW12BX9M')!.priceKrw).toBe(4120000)
-    expect(queryRows(db, `SELECT id FROM product_prices WHERE product_id = ${id}`)).toHaveLength(1)
-  })
-
-  it('없는 제품의 단가 변경은 NOT_FOUND', async () => {
-    const { repo } = await makeRepo()
-    expect(codeOf(() => repo.setPrice(99999, { priceKrw: 1, priceWithVatKrw: null, effectiveStartDate: '2026-08-01' }))).toBe('NOT_FOUND')
   })
 })
 

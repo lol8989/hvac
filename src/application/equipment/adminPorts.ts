@@ -3,7 +3,7 @@
 // 구현: infrastructure/equipment/sqlite/SqliteEquipmentAdminRepository (POC), 추후 마스터 API로 교체.
 
 import type { PublishStatus } from '../../domain/equipment/PublishStatus'
-import type { ProductDraft, ProductPatch, PriceInput } from '../../domain/equipment/ProductDraft'
+import type { ProductDraft, ProductPatch } from '../../domain/equipment/ProductDraft'
 
 // 관리 목록의 한 행(4단 분류 평탄화 + 현행가 + 게시 상태).
 export interface ProductRow {
@@ -21,7 +21,6 @@ export interface ProductRow {
   heatingW: number | null
   maxConnections: number | null
   status: PublishStatus
-  priceKrw: number | null // 현행 소비자가(없으면 null)
 }
 
 // 등록·수정 폼의 시리즈 선택지(4단 분류 평탄화).
@@ -50,8 +49,4 @@ export interface EquipmentAdminRepository {
 
   // 게시 상태 전이 — 허용 전이만(선형 + 재게시). throws INVALID_TRANSITION / NOT_FOUND
   setStatus(id: number, next: PublishStatus): void
-
-  // 현행가 교체(이력 보존: 기존 현행가를 마감하고 새 행 추가). 게시 상태와 무관하게 허용.
-  // throws NOT_FOUND / INVALID_FIELD
-  setPrice(id: number, price: PriceInput): void
 }

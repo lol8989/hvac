@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, specPriceText, specGradeText, ensureRoomsInPool, autoCombine } from './planAdapter'
+import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, specGradeText, ensureRoomsInPool, autoCombine } from './planAdapter'
 import { AssignmentPlan } from '../../domain/generation/AssignmentPlan'
 import { OutdoorUnit } from '../../domain/generation/OutdoorUnit'
 import { OutdoorGroup } from '../../domain/generation/OutdoorGroup'
 import { IndoorUnit } from '../../domain/generation/IndoorUnit'
 import type { OutdoorModelSpec } from '../../application/generation/ports'
 import { InMemoryOutdoorModelCatalog } from '../../infrastructure/generation/InMemoryOutdoorModelCatalog'
-import { MODELS, ROOMS, DEFAULT_COMBINATION } from '../../data'
+import { ROOMS, DEFAULT_COMBINATION } from '../../data'
 import { ComboRange } from '../../domain/shared/ComboRange'
 
 describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터 스펙 주입)', () => {
@@ -56,10 +56,9 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
     expect(odu.maxConnections).toBe(spec.maxConnections)
   })
 
-  it('toViewModel은 그룹별 단가/등급 표시 문자열을 채운다(모달 카드용)', () => {
+  it('toViewModel은 그룹별 등급 표시 문자열을 채운다(모달 카드용)', () => {
     const vm = toViewModel(bootstrapPlan())
     const g1 = vm.groups.find((g) => g.key === 'ODU1')! // RPUW08BX9E
-    expect(g1.priceText).toBe('2,980,000원')
     expect(g1.gradeText).toBe('2등급')
     expect(g1.effText).toBe('EERa 5.10') // EHP는 전기식 EER
   })
@@ -72,19 +71,11 @@ describe('planAdapter (목업 ↔ 도메인/뷰모델 어댑터, 장비마스터
     expect(g3.effText?.startsWith('EERa')).toBe(false)
   })
 
-  it('specPriceText/specGradeText는 스펙에서 표시 문자열을 만든다', () => {
+  it('specGradeText는 스펙에서 표시 문자열을 만든다', () => {
     const spec = catalog.findByModel('RPUW20BX9P')!
-    expect(specPriceText(spec)).toBe('6,350,000원')
     expect(specGradeText(spec)).toBe('3등급')
   })
 
-  it('[정합] MODELS.out 실외기 단가 문자열이 ODU_CATALOG 파생 단가와 일치한다(드리프트 방지)', () => {
-    for (const m of MODELS.out) {
-      const spec = catalog.findByModel(m.mn)
-      if (!spec) continue // MODELS.out은 카탈로그의 부분집합
-      expect(specPriceText(spec)).toBe(m.mp)
-    }
-  })
 
   it('outdoorUnitFromSpec은 스펙의 comboRange를 OutdoorUnit에 전달한다', () => {
     const range = new ComboRange(0.32, 1.0) // 예: DOAS 하한 완화 정책

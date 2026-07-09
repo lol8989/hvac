@@ -6,9 +6,9 @@ import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemor
 
 // 부하 근사 매칭용 목업 카드(용량만 의미 있음)
 const cards: ModelCard[] = [
-  { mn: 'A', ms: '', mp: '', md: '', on: false, cool: 2.64 },
-  { mn: 'B', ms: '', mp: '', md: '', on: false, cool: 4.0 },
-  { mn: 'C', ms: '', mp: '', md: '', on: false, cool: 6.0 },
+  { mn: 'A', ms: '', md: '', on: false, cool: 2.64 },
+  { mn: 'B', ms: '', md: '', on: false, cool: 4.0 },
+  { mn: 'C', ms: '', md: '', on: false, cool: 6.0 },
 ]
 
 describe('recommendedIndoorIdx (냉방부하 근사 매칭)', () => {

@@ -30,18 +30,18 @@ describe('SqliteEquipmentAdminRepository (관리 조회 — 전 상태)', () => 
     expect(count('ARCHIVED')).toBe(1)
   })
 
-  it('실외기 행에 분류·계열·HP·용량·현행가가 채워진다', async () => {
+  it('실외기 행에 분류·계열·HP·용량이 채워진다', async () => {
     const rows = (await makeAdmin()).listProducts()
     const g = rows.find((r) => r.modelCode === 'RPUW12BX9M')!
     expect(g).toMatchObject({
       categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형',
-      energySource: 'EHP', horsepower: 12, coolingW: 34800, heatingW: 39000, status: 'PUBLISHED', priceKrw: 4120000,
+      energySource: 'EHP', horsepower: 12, coolingW: 34800, heatingW: 39000, status: 'PUBLISHED',
     })
   })
 
-  it('실내기 행은 현행가가 없어 priceKrw=null, 장비번호(equipmentCode)가 있다', async () => {
+  it('실내기 행은 장비번호(equipmentCode)가 있다', async () => {
     const rows = (await makeAdmin()).listProducts()
     const idu = rows.find((r) => r.modelCode === 'RNW0401C2S')!
-    expect(idu).toMatchObject({ categoryCode: 'INDOOR', subcategoryName: '4WAY 카세트', equipmentCode: '40C', priceKrw: null })
+    expect(idu).toMatchObject({ categoryCode: 'INDOOR', subcategoryName: '4WAY 카세트', equipmentCode: '40C' })
   })
 })

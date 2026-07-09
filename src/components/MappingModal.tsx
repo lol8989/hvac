@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { ratioOf, ROOMS } from '../data'
 import type { GroupView } from '../presentation/generation/planAdapter'
-import { specPriceText } from '../presentation/generation/planAdapter'
 import type { OutdoorModelSpec } from '../application/generation/ports'
 
 interface ChipProps {
@@ -92,12 +91,9 @@ export default function MappingModal({ catalog, groups, pool, capByRoom, onMove,
         <div className="m-toolbar">
           <span>실외기 추가:</span>
           <select className="field" value={addModel} onChange={(e) => setAddModel(e.target.value)}>
-            {catalog.map((c) => {
-              const pt = specPriceText(c)
-              return (
-                <option key={c.model} value={c.model}>{c.model} · {c.capacityKw}kW · {c.energySource}{pt ? ` · ${pt}` : ''}</option>
-              )
-            })}
+            {catalog.map((c) => (
+              <option key={c.model} value={c.model}>{c.model} · {c.capacityKw}kW · {c.energySource}</option>
+            ))}
           </select>
           <button className="btn sm" onClick={() => { const c = catOf(addModel); if (c) onAddGroup(c) }}>+ 추가</button>
         </div>
@@ -117,7 +113,7 @@ export default function MappingModal({ catalog, groups, pool, capByRoom, onMove,
                   <div className="ometa">
                     용량 {g.cool}kW · 계열 {g.sys} · 연결 {g.items.length}
                     <div style={{ marginTop: 2 }}>
-                      단가 <b>{g.priceText ?? '미상'}</b> · 등급 {g.gradeText ?? '—'}{g.effText ? ` · ${g.effText}` : ''}
+                      등급 {g.gradeText ?? '—'}{g.effText ? ` · ${g.effText}` : ''}
                     </div>
                     <div className={'g' + (warn ? ' warn' : '')}><i style={{ width: pct + '%' }} /></div>
                     조합비 {r.toFixed(2)} {warn ? <span>· <b>범위(0.5~1.3) 벗어남</b></span> : null}
@@ -149,12 +145,9 @@ export default function MappingModal({ catalog, groups, pool, capByRoom, onMove,
                         if (c) onReplace(g.key, c)
                       }}
                     >
-                      {catalog.map((c) => {
-                        const pt = specPriceText(c)
-                        return (
-                          <option key={c.model} value={c.model}>{c.model} · {c.capacityKw}kW · {c.energySource}{pt ? ` · ${pt}` : ''}</option>
-                        )
-                      })}
+                      {catalog.map((c) => (
+                        <option key={c.model} value={c.model}>{c.model} · {c.capacityKw}kW · {c.energySource}</option>
+                      ))}
                     </select>
                     <button className="btn sm" onClick={() => onSplit(g.key)} disabled={g.items.length < 2}>분할</button>
                     <button className="btn sm" onClick={() => onRemove(g.key)}>삭제</button>
