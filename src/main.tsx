@@ -9,8 +9,9 @@ import { SqliteEquipmentAdminRepository } from './infrastructure/equipment/sqlit
 import { browserSqlInit } from './infrastructure/equipment/sqlite/browserSqlInit'
 import { createIdbBytesStore } from './infrastructure/equipment/sqlite/idbStore'
 import { SCHEMA_VERSION } from './infrastructure/equipment/sqlite/schema'
+import { SEED_HASH } from './infrastructure/equipment/seed/seedMeta'
+import type { SeedData } from './infrastructure/equipment/seed/seedTypes'
 import { defaultEquipmentMaster } from './infrastructure/equipment/InMemoryEquipmentMaster'
-import { SEED_HASH } from './infrastructure/equipment/seedData'
 
 const rootEl = document.getElementById('root')
 if (!rootEl) throw new Error('#root 엘리먼트를 찾을 수 없습니다')
@@ -26,11 +27,18 @@ const withTimeout = <T,>(p: Promise<T>, ms: number, label: string): Promise<T> =
 // 초기화 실패/지연(WASM 스톨 등) 시 null → 호출측이 폴백 처리.
 const bytesStore = createIdbBytesStore(`db.v${SCHEMA_VERSION}.${SEED_HASH}`)
 
+// 시드(LG 스펙시트 1,206모델, 약 4MB)는 캐시 미스일 때만 받는다.
+const loadSeed = async (): Promise<SeedData> => {
+  const res = await fetch(`${import.meta.env.BASE_URL}equipment-seed.json`)
+  if (!res.ok) throw new Error(`시드 로드 실패: ${res.status}`)
+  return (await res.json()) as SeedData
+}
+
 async function resolveSqliteHandle(): Promise<SqliteEquipmentMasterHandle | null> {
   try {
     return await withTimeout(
-      createSqliteEquipmentMaster({ initSql: browserSqlInit, store: bytesStore }),
-      8000,
+      createSqliteEquipmentMaster({ initSql: browserSqlInit, store: bytesStore, loadSeed }),
+      20000, // 신규 시드(4MB JSON 파싱 + 1,206모델 적재)는 8초를 넘을 수 있다
       'SQLite init',
     )
   } catch (e) {

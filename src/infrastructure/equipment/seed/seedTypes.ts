@@ -32,6 +32,9 @@ export interface SeedProduct {
   coolingW: number | null
   heatingW: number | null
   maxConnections: number | null
+  efficiencyGradeId: number | null // 에너지소비효율등급(1~5). 스펙시트 모델은 미추출(null)
+  copCooling: number | null
+  copHeating: number | null
   status: PublishStatus
   specData: Record<string, SpecCell> // 롱테일 스펙(전원·배관경·전선·차단기·냉매 …)
   source: string | null // 원본 파일명 · 시트명

@@ -3,6 +3,8 @@ import { describe, it, expect } from 'vitest'
 import initSqlJs from 'sql.js'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { loadNodeSeed } from '../../../test/seedFixture'
+import { SEED_COUNTS } from '../seed/seedMeta'
 import { createSqliteEquipmentMaster } from './SqliteEquipmentMaster'
 import { SqliteEquipmentAdminRepository } from './SqliteEquipmentAdminRepository'
 
@@ -10,24 +12,31 @@ const nodeInit = () => {
   const bytes = new Uint8Array(readFileSync(resolve('node_modules/sql.js/dist/sql-wasm.wasm')))
   return initSqlJs({ wasmBinary: bytes.buffer })
 }
-const makeAdmin = async () => new SqliteEquipmentAdminRepository((await createSqliteEquipmentMaster({ initSql: nodeInit })).db)
+const makeAdmin = async () => new SqliteEquipmentAdminRepository((await createSqliteEquipmentMaster({ initSql: nodeInit, loadSeed: loadNodeSeed })).db)
 
 describe('SqliteEquipmentAdminRepository (관리 조회 — 전 상태)', () => {
-  it('DRAFT/PUBLISHED/ARCHIVED를 모두 포함해 25제품(실내기17+실외기8)을 반환한다', async () => {
+  it('LG 스펙시트 실데이터 전량(SEED_COUNTS.products)을 전 상태로 반환한다', async () => {
     const rows = (await makeAdmin()).listProducts()
-    expect(rows).toHaveLength(25) // 16 게시 실내기 + DRAFT99 + 7 게시 실외기 + ARCHIVED
+    expect(rows).toHaveLength(SEED_COUNTS.products)
     const draft = rows.find((r) => r.modelCode === 'RNW9999DRAFT')
     const archived = rows.find((r) => r.modelCode === 'RPUW-ARCHIVED')
     expect(draft?.status).toBe('DRAFT')
     expect(archived?.status).toBe('ARCHIVED')
   })
 
-  it('상태 분포: PUBLISHED 23 · DRAFT 1 · ARCHIVED 1', async () => {
+  it('상태 분포: 게시본은 큐레이션 23종뿐이고 나머지 스펙시트 모델은 DRAFT다', async () => {
     const rows = (await makeAdmin()).listProducts()
     const count = (s: string) => rows.filter((r) => r.status === s).length
     expect(count('PUBLISHED')).toBe(23)
-    expect(count('DRAFT')).toBe(1)
     expect(count('ARCHIVED')).toBe(1)
+    expect(count('DRAFT')).toBe(SEED_COUNTS.products - 24)
+  })
+
+  it('스펙시트 실모델(칠러·CDU·환기)도 분류와 함께 조회된다', async () => {
+    const rows = (await makeAdmin()).listProducts()
+    expect(rows.find((r) => r.modelCode === 'ACAH020LET2')).toMatchObject({ categoryCode: 'OUTDOOR', energySource: 'Chiller', status: 'DRAFT' })
+    expect(rows.find((r) => r.modelCode === 'Z-E0100R2AR')).toMatchObject({ categoryCode: 'VENT', energySource: 'ERV', status: 'DRAFT' })
+    expect(rows.find((r) => r.modelCode === 'RPUW281X9P')).toMatchObject({ horsepower: 28, coolingW: 78400, status: 'DRAFT' })
   })
 
   it('실외기 행에 분류·계열·HP·용량이 채워진다', async () => {
@@ -39,9 +48,10 @@ describe('SqliteEquipmentAdminRepository (관리 조회 — 전 상태)', () => 
     })
   })
 
-  it('실내기 행은 장비번호(equipmentCode)가 있다', async () => {
+  it('큐레이션 게시본 실내기는 장비번호(equipmentCode)를 갖고, 스펙시트 모델은 갖지 않는다', async () => {
     const rows = (await makeAdmin()).listProducts()
     const idu = rows.find((r) => r.modelCode === 'RNW0401C2S')!
     expect(idu).toMatchObject({ categoryCode: 'INDOOR', subcategoryName: '4WAY 카세트', equipmentCode: '40C' })
+    expect(rows.find((r) => r.modelCode === 'RPUW281X9P')!.equipmentCode).toBeNull()
   })
 })

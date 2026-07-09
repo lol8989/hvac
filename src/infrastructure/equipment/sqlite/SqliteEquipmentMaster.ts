@@ -10,6 +10,7 @@ import type { IndoorSpecFields, OutdoorSpecFields } from '../../../domain/equipm
 import type { EnergySourceCode } from '../../../domain/shared/EnergySource'
 import { SCHEMA_SQL } from './schema'
 import { seedDatabase } from './seed'
+import type { SeedData } from '../seed/seedTypes'
 import { queryRows, num, numOrNull } from './query'
 
 // sql.js 초기화 함수(WASM 로딩 방식 주입: 브라우저=?url, 노드=fs wasmBinary).
@@ -72,10 +73,10 @@ function readPublishedOutdoor(db: Database): OutdoorSpecFields[] {
 }
 
 // 신규 DB 생성 + 스키마 + 시드. (기존 바이트가 없을 때)
-function buildFreshDatabase(SQL: SqlJsStatic): Database {
+function buildFreshDatabase(SQL: SqlJsStatic, seed: SeedData): Database {
   const db = new SQL.Database()
   db.run(SCHEMA_SQL)
-  seedDatabase(db)
+  seedDatabase(db, seed)
   return db
 }
 
@@ -85,14 +86,21 @@ export interface SqliteEquipmentMasterHandle extends EquipmentMaster {
 }
 
 // 부팅 팩토리: WASM 로드 → (영속 바이트 복원 | 신규 시드) → PUBLISHED 스냅샷 materialize.
-export async function createSqliteEquipmentMaster(deps: { initSql: SqlInit; store?: BytesStore }): Promise<SqliteEquipmentMasterHandle> {
+// loadSeed는 캐시 미스일 때만 호출된다 → 4MB 시드 JSON을 매 부팅마다 받지 않는다.
+export interface SqliteMasterDeps {
+  initSql: SqlInit
+  store?: BytesStore
+  loadSeed: () => Promise<SeedData>
+}
+
+export async function createSqliteEquipmentMaster(deps: SqliteMasterDeps): Promise<SqliteEquipmentMasterHandle> {
   const SQL = await deps.initSql()
   let db: Database
   const saved = deps.store ? await deps.store.load() : null
   if (saved) {
     db = new SQL.Database(saved)
   } else {
-    db = buildFreshDatabase(SQL)
+    db = buildFreshDatabase(SQL, await deps.loadSeed())
     if (deps.store) await deps.store.save(db.export())
   }
 

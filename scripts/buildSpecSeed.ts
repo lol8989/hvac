@@ -23,8 +23,9 @@ const SPEC_DIR = resolve('../03_참고자료/LG전자 스펙시트 모음')
 const OUT_JSON = resolve('public/equipment-seed.json')
 const OUT_META = resolve('src/infrastructure/equipment/seed/seedMeta.ts')
 
-// 큐레이션 게시본이 속할 중분류(기존 시드 규칙 유지).
-const curatedIndoorSub = (type: string) => (type === '덕트' ? 'IN_DUCT_HIGH' : 'IN_4WAY')
+// 큐레이션 게시본이 속할 중분류. 라벨은 InMemory 시드(seedData.ts)의 type과 정확히 일치해야 한다
+// — 생성/검도가 그 문자열을 실내기 유형으로 표시하고, 동치 테스트가 이를 고정한다.
+const curatedIndoorSub = (type: string) => (type === '덕트' ? 'IN_DUCT_CURATED' : 'IN_4WAY')
 const curatedOutdoorSub = (cat: string) => (cat === 'GHP' ? 'OUT_GHP' : cat === '냉방전용' ? 'OUT_CO' : 'OUT_HR')
 const kwToW = (kw: number) => Math.round(kw * 1000)
 
@@ -77,6 +78,9 @@ async function main() {
           coolingW: p.coolingW,
           heatingW: p.heatingW,
           maxConnections: p.maxConnections,
+          efficiencyGradeId: null, // 시트의 효율 등급 행은 대부분 '-' → 추출하지 않는다
+          copCooling: null,
+          copHeating: null,
           status: PUBLISH_STATUS.DRAFT,
           specData: p.specData,
           source: `${file} | ${sheet.sheetName}`,
@@ -99,16 +103,27 @@ async function main() {
       series.set(seriesCode, { code: seriesCode, subcategoryCode: subCode, nameKo: seriesName, mflCode: null, derivesHp: false })
     }
     const existing = products.get(modelCode)
-    // 스펙시트에 있는 모델은 시트가 진실이다(주인님 결정 2026-07-09).
-    // 큐레이션 시드는 장비번호·게시 상태·단가만 공급한다. 시트에 없으면 큐레이션 값을 그대로 쓴다.
+
+    // 스펙시트에 있는 모델은 hot 필드(용량·HP·최대연결수)를 시트에서 취한다(주인님 결정 2026-07-09).
+    //
+    // 분류는 다르다. 목업 큐레이션의 장비번호 접미문자가 실제 유형과 어긋난다
+    // (20C~72C는 '4WAY 카세트' 표기지만 시트상 프리미엄 1WAY, 40T~145T는 '덕트' 표기지만 4WAY 듀얼베인).
+    // 생성·검도가 보는 유형 라벨을 바꾸지 않기 위해, 시트 중분류가 큐레이션과 다르면 큐레이션 시리즈에 붙인다.
+    // (실외기는 시트와 큐레이션 중분류가 일치하므로 시트 시리즈를 그대로 쓴다.)
+    const sheetSub = existing ? series.get(existing.seriesCode)!.subcategoryCode : null
+    const keepSheetSeries = existing !== undefined && sheetSub === subCode
+
     products.set(modelCode, {
-      seriesCode: existing?.seriesCode ?? seriesCode,
+      seriesCode: keepSheetSeries ? existing.seriesCode : seriesCode,
       modelCode,
       equipmentCode: fields.equipmentCode,
       horsepower: existing ? existing.horsepower : fields.horsepower,
       coolingW: existing ? existing.coolingW : fields.coolingW,
       heatingW: existing ? existing.heatingW : fields.heatingW,
       maxConnections: existing ? existing.maxConnections : fields.maxConnections,
+      efficiencyGradeId: fields.efficiencyGradeId, // 등급·COP는 큐레이션 값(시트 미추출)
+      copCooling: fields.copCooling,
+      copHeating: fields.copHeating,
       status,
       specData: existing?.specData ?? {},
       source: existing?.source ?? '큐레이션 시드(장비선정표 목업)',
@@ -120,7 +135,7 @@ async function main() {
       r.model,
       curatedIndoorSub(r.type),
       `Multi V 실내기(큐레이션)`,
-      { equipmentCode: r.code, horsepower: null, coolingW: r.coolW, heatingW: r.heatW, maxConnections: null },
+      { equipmentCode: r.code, horsepower: null, coolingW: r.coolW, heatingW: r.heatW, maxConnections: null, efficiencyGradeId: null, copCooling: null, copHeating: null },
       r.status,
     )
   }
@@ -135,6 +150,9 @@ async function main() {
         coolingW: kwToW(r.cool),
         heatingW: r.heatKw === null ? null : kwToW(r.heatKw),
         maxConnections: r.maxConn,
+        efficiencyGradeId: r.efficiencyGradeId,
+        copCooling: r.copCooling,
+        copHeating: r.copHeating,
       },
       r.status,
     )
@@ -150,12 +168,21 @@ async function main() {
   // 큐레이션이 붙인 중분류가 시트에 없었다면 보충(예: OUT_CO)
   const CURATED_SUBS: SeedSubcategory[] = [
     { code: 'IN_4WAY', categoryCode: 'INDOOR', nameKo: '4WAY 카세트', energySource: 'EHP' },
-    { code: 'IN_DUCT_HIGH', categoryCode: 'INDOOR', nameKo: '덕트(고정압)', energySource: 'EHP' },
+    { code: 'IN_DUCT_CURATED', categoryCode: 'INDOOR', nameKo: '덕트', energySource: 'EHP' },
     { code: 'OUT_HR', categoryCode: 'OUTDOOR', nameKo: '냉난방 절환형', energySource: 'EHP' },
     { code: 'OUT_CO', categoryCode: 'OUTDOOR', nameKo: '냉방전용', energySource: 'EHP' },
     { code: 'OUT_GHP', categoryCode: 'OUTDOOR', nameKo: 'GHP', energySource: 'GHP' },
   ]
   for (const s of CURATED_SUBS) if (!subcategories.has(s.code)) subcategories.set(s.code, s)
+
+  // 적재 순서 = products.id 순서 = 생성/검도가 보는 PUBLISHED 목록 순서.
+  // 큐레이션 게시본을 시드 정의 순서 그대로 먼저 넣어 InMemory 마스터와 순서까지 동치를 유지한다.
+  const curatedOrder = [...INDOOR_RECORDS.map((r) => r.model), ...OUTDOOR_RECORDS.map((r) => r.model)]
+  const curatedSet = new Set(curatedOrder)
+  const ordered = [
+    ...curatedOrder.map((m) => products.get(m)!),
+    ...[...products.values()].filter((p) => !curatedSet.has(p.modelCode)).sort((a, b) => a.modelCode.localeCompare(b.modelCode)),
+  ]
 
   const seed: SeedData = {
     hash: '',
@@ -163,7 +190,7 @@ async function main() {
     categories: CATEGORIES,
     subcategories: [...subcategories.values()].sort((a, b) => a.code.localeCompare(b.code)),
     series: [...series.values()].map(({ derivesHp: _drop, ...s }) => s).sort((a, b) => a.code.localeCompare(b.code)),
-    products: [...products.values()].sort((a, b) => a.modelCode.localeCompare(b.modelCode)),
+    products: ordered,
     prices,
   }
   seed.hash = createHash('sha256').update(JSON.stringify({ ...seed, hash: '' })).digest('hex').slice(0, 16)

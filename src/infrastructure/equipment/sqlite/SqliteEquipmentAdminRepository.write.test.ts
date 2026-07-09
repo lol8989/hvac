@@ -5,11 +5,17 @@ import initSqlJs from 'sql.js'
 import type { Database } from 'sql.js'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { loadNodeSeed } from '../../../test/seedFixture'
 import { createSqliteEquipmentMaster } from './SqliteEquipmentMaster'
 import { SqliteEquipmentAdminRepository } from './SqliteEquipmentAdminRepository'
 import { queryRows } from './query'
 import type { EquipmentDomainError } from '../../../domain/equipment/errors'
 import type { ProductDraft } from '../../../domain/equipment/ProductDraft'
+import { SEED_COUNTS } from '../seed/seedMeta'
+
+// 실데이터 시드의 시리즈 코드(중분류로 스코프됨)
+const GHP_SERIES = 'S_GHP_SUPER_III__OUT_GHP'
+const IN_SERIES = 'S_CURATED_IN_4WAY'
 
 const nodeInit = () => {
   const bytes = new Uint8Array(readFileSync(resolve('node_modules/sql.js/dist/sql-wasm.wasm')))
@@ -19,13 +25,13 @@ const nodeInit = () => {
 const FIXED_NOW = '2026-07-09T00:00:00.000Z'
 
 async function makeRepo(onChange?: () => void) {
-  const { db } = await createSqliteEquipmentMaster({ initSql: nodeInit })
+  const { db } = await createSqliteEquipmentMaster({ initSql: nodeInit, loadSeed: loadNodeSeed })
   const repo = new SqliteEquipmentAdminRepository(db, { onChange, now: () => FIXED_NOW })
   return { repo, db }
 }
 
 const draft = (over: Partial<ProductDraft> = {}): ProductDraft => ({
-  seriesCode: 'S_IN_4WAY',
+  seriesCode: IN_SERIES,
   modelCode: 'RNW-NEW-001',
   equipmentCode: '99C',
   horsepower: null,
@@ -51,13 +57,14 @@ const byModel = (repo: SqliteEquipmentAdminRepository, model: string) =>
 const idOf = (repo: SqliteEquipmentAdminRepository, model: string): number => byModel(repo, model)!.id
 
 describe('listSeries (등록 폼 선택지)', () => {
-  it('시드의 5개 시리즈를 분류·계열과 함께 반환한다', async () => {
+  it('시드의 전 시리즈를 분류·계열과 함께 반환한다', async () => {
     const { repo } = await makeRepo()
     const series = repo.listSeries()
-    expect(series).toHaveLength(5)
-    expect(series.find((s) => s.code === 'S_OUT_GHP')).toMatchObject({
+    expect(series).toHaveLength(SEED_COUNTS.series)
+    expect(series.find((s) => s.code === GHP_SERIES)).toMatchObject({
       categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: 'GHP', energySource: 'GHP',
     })
+    expect(series.some((s) => s.energySource === 'ERV')).toBe(true) // 환기 계열도 노출
   })
 })
 
@@ -81,7 +88,7 @@ describe('createProduct (등록)', () => {
 
   it('실외기 시리즈로 등록하면 마력·최대연결수가 저장된다', async () => {
     const { repo } = await makeRepo()
-    repo.createProduct(draft({ seriesCode: 'S_OUT_GHP', modelCode: 'GPUW-NEW', equipmentCode: null, horsepower: 20, coolingW: 56000, heatingW: 63000, maxConnections: 24 }))
+    repo.createProduct(draft({ seriesCode: GHP_SERIES, modelCode: 'GPUW-NEW', equipmentCode: null, horsepower: 20, coolingW: 56000, heatingW: 63000, maxConnections: 24 }))
     expect(byModel(repo, 'GPUW-NEW')).toMatchObject({ categoryCode: 'OUTDOOR', energySource: 'GHP', horsepower: 20, maxConnections: 24 })
   })
 
