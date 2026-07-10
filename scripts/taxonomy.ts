@@ -9,7 +9,7 @@ export interface Taxon {
   energySource: string
   seriesCode: string
   seriesName: string
-  derivesHp: boolean // 모델명이 마력을 인코딩하는 VRF 계열만 true
+  isVrf: boolean // VRF 계열(실외기 1대 ↔ 실내기 N대). 모델명 HP 인코딩·maxConn 요건·조합 후보 노출을 함께 가른다
 }
 
 export const CATEGORIES = [
@@ -55,14 +55,14 @@ const slug = (name: string): string =>
 
 const seriesCode = (name: string, subcategoryCode: string): string => `S_${slug(name)}__${subcategoryCode}`
 
-const outdoor = (subCode: string, subName: string, sys: string, series: string, derivesHp = false): Taxon => ({
+const outdoor = (subCode: string, subName: string, sys: string, series: string, isVrf = false): Taxon => ({
   categoryCode: 'OUTDOOR',
   subcategoryCode: subCode,
   subcategoryName: subName,
   energySource: sys,
   seriesCode: seriesCode(series, subCode),
   seriesName: series,
-  derivesHp,
+  isVrf,
 })
 
 const indoor = (sheet: string, sys: string, series: string): Taxon => {
@@ -74,7 +74,7 @@ const indoor = (sheet: string, sys: string, series: string): Taxon => {
     energySource: sys,
     seriesCode: seriesCode(series, t.code),
     seriesName: series,
-    derivesHp: false,
+    isVrf: false,
   }
 }
 
@@ -111,7 +111,7 @@ export function classifySheet(fileName: string, sheetName: string): Taxon | null
       energySource: 'ERV',
       seriesCode: seriesCode(series, 'VENT_ERV'),
       seriesName: series,
-      derivesHp: false,
+      isVrf: false,
     }
   }
 
@@ -123,7 +123,7 @@ export function classifySheet(fileName: string, sheetName: string): Taxon | null
       energySource: 'EHP',
       seriesCode: seriesCode('DOAS / Slim DOAS', 'IN_DOAS'),
       seriesName: 'DOAS / Slim DOAS',
-      derivesHp: false,
+      isVrf: false,
     }
   }
   if (f.includes('FCU')) {
@@ -134,7 +134,7 @@ export function classifySheet(fileName: string, sheetName: string): Taxon | null
       energySource: 'EHP',
       seriesCode: seriesCode('FCU', 'IN_FCU'),
       seriesName: 'FCU',
-      derivesHp: false,
+      isVrf: false,
     }
   }
 

@@ -8,8 +8,8 @@ import type { ParsedProduct } from '../../domain/equipment/SpecImport'
 import type { ParsedSheet } from '../../infrastructure/equipment/spec/parseSpecSheet'
 
 const SERIES: SeriesOption[] = [
-  { code: 'S_OUT_HR', nameKo: 'Multi V Super 절환형', categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP' },
-  { code: 'S_IN_4WAY', nameKo: 'Multi V 실내기 4WAY', categoryCode: 'INDOOR', categoryName: '실내기', subcategoryName: '4WAY 카세트', energySource: 'EHP' },
+  { code: 'S_OUT_HR', nameKo: 'Multi V Super 절환형', categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP', isVrf: true },
+  { code: 'S_IN_4WAY', nameKo: 'Multi V 실내기 4WAY', categoryCode: 'INDOOR', categoryName: '실내기', subcategoryName: '4WAY 카세트', energySource: 'EHP', isVrf: false },
 ]
 
 const prod = (over: Partial<ParsedProduct> = {}): ParsedProduct => ({

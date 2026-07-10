@@ -36,12 +36,13 @@ export function seedDatabase(db: Database, data: SeedData, now: string = new Dat
   data.series.forEach((s, i) => {
     const id = i + 1
     seriesId.set(s.code, id)
-    db.run(`INSERT INTO product_series (id, subcategory_id, code, name_ko, mfl_code) VALUES (?,?,?,?,?)`, [
+    db.run(`INSERT INTO product_series (id, subcategory_id, code, name_ko, mfl_code, is_vrf) VALUES (?,?,?,?,?,?)`, [
       id,
       subcategoryId.get(s.subcategoryCode)!,
       s.code,
       s.nameKo,
       s.mflCode,
+      s.isVrf ? 1 : 0,
     ])
   })
 
@@ -49,10 +50,10 @@ export function seedDatabase(db: Database, data: SeedData, now: string = new Dat
   db.run(`INSERT INTO price_types (id, code, name_ko, priority) VALUES (?,?,?,?)`, [CONSUMER_PRICE_TYPE_ID, 'CONSUMER', '소비자가', 10])
 
   const insertProduct = `INSERT INTO products
-    (id, series_id, model_code, equipment_code, horsepower, cooling_capacity_w, heating_capacity_w,
+    (id, series_id, model_code, equipment_code, horsepower, hp_source, cooling_capacity_w, heating_capacity_w,
      max_connections, efficiency_grade_id, cop_cooling, cop_heating, status, discontinued_at,
      created_at, updated_at, published_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   const insertSpec = `INSERT INTO product_specs (product_id, spec_data) VALUES (?,?)`
 
   data.products.forEach((p, i) => {
@@ -64,6 +65,7 @@ export function seedDatabase(db: Database, data: SeedData, now: string = new Dat
       p.modelCode,
       p.equipmentCode,
       p.horsepower,
+      p.hpSource,
       p.coolingW,
       p.heatingW,
       p.maxConnections,

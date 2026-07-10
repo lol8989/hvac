@@ -7,8 +7,8 @@ import { EquipmentDomainError } from '../../domain/equipment/errors'
 
 const mk = (over: Partial<ProductRow>): ProductRow => ({
   id: 0, categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP',
-  seriesCode: 'S_OUT_HR', seriesName: 'S', modelCode: 'M', equipmentCode: null, horsepower: 10, coolingW: 20000,
-  heatingW: 22000, maxConnections: 16, status: 'PUBLISHED',
+  seriesCode: 'S_OUT_HR', seriesName: 'S', modelCode: 'M', equipmentCode: null, horsepower: 10, hpSource: 'MODEL_CODE',
+  coolingW: 20000, heatingW: 22000, maxConnections: 16, status: 'PUBLISHED',
   createdAt: null, updatedAt: null, publishedAt: null, ...over,
 })
 
@@ -20,8 +20,8 @@ const rows: ProductRow[] = [
 ]
 
 const SERIES: SeriesOption[] = [
-  { code: 'S_IN_4WAY', nameKo: 'Multi V 실내기 4WAY', categoryCode: 'INDOOR', categoryName: '실내기', subcategoryName: '4WAY 카세트', energySource: 'EHP' },
-  { code: 'S_OUT_HR', nameKo: 'Multi V Super 절환형', categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP' },
+  { code: 'S_IN_4WAY', nameKo: 'Multi V 실내기 4WAY', categoryCode: 'INDOOR', categoryName: '실내기', subcategoryName: '4WAY 카세트', energySource: 'EHP', isVrf: false },
+  { code: 'S_OUT_HR', nameKo: 'Multi V Super 절환형', categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP', isVrf: true },
 ]
 
 // 목록은 스텁 배열을 그대로 돌려주고, 쓰기는 스파이로 관찰한다(저장소 계약은 SQLite 테스트가 담당).

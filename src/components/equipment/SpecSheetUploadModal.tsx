@@ -38,19 +38,22 @@ export default function SpecSheetUploadModal({
   const pick = useSubmitGuard() // 파일 파싱 중 재선택 방지
   const submit = useSubmitGuard() // 업로드 더블클릭 방지
 
-  const isOutdoor = series.find((s) => s.code === seriesCode)?.categoryCode === 'OUTDOOR'
+  const optionOf = (code: string) => series.find((s) => s.code === code)
+  const isOutdoor = optionOf(seriesCode)?.categoryCode === 'OUTDOOR'
 
-  // 시리즈를 바꾸면 실내/실외가 달라져 HP 검증 결과가 뒤집힌다 → 같은 파일을 재분류한다.
-  const classify = (sheets: ParsedSheet[], outdoor: boolean) =>
-    classifyImport(
+  // 시리즈를 바꾸면 실내/실외와 VRF 여부가 달라져 HP 검증 결과가 뒤집힌다 → 같은 파일을 재분류한다.
+  // (VRF는 모델명에서 HP를 유도하고, 비-VRF는 냉방용량 환산으로 백필한다.)
+  const classify = (sheets: ParsedSheet[], code: string) => {
+    const opt = optionOf(code)
+    return classifyImport(
       sheets.flatMap((s) => s.products),
-      { isOutdoor: outdoor, existingModelCodes },
+      { isOutdoor: opt?.categoryCode === 'OUTDOOR', isVrf: opt?.isVrf ?? false, existingModelCodes },
     )
+  }
 
   const onSeriesChange = (code: string) => {
     setSeriesCode(code)
-    const outdoor = series.find((s) => s.code === code)?.categoryCode === 'OUTDOOR'
-    setLoaded((cur) => (cur ? { ...cur, preview: classify(cur.sheets, outdoor) } : cur))
+    setLoaded((cur) => (cur ? { ...cur, preview: classify(cur.sheets, code) } : cur))
   }
 
   const onFile = (file: File | undefined) =>
@@ -72,7 +75,7 @@ export default function SpecSheetUploadModal({
           setLoaded(null)
           return
         }
-        setLoaded({ file, sheets, preview: classify(sheets, isOutdoor) })
+        setLoaded({ file, sheets, preview: classify(sheets, seriesCode) })
       } catch {
         setError('엑셀 파일을 읽지 못했습니다. 손상되지 않았는지 확인하세요.')
         setLoaded(null)

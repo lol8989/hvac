@@ -12,6 +12,9 @@ const STATUS_LABEL: Record<PublishStatus, string> = { DRAFT: '작성중', PUBLIS
 const kw = (w: number | null) => (w == null ? '—' : (Math.round(w / 100) / 10).toFixed(1))
 const hp = (n: number | null) => (n == null ? '—' : String(n))
 
+// 냉방용량 환산으로 백필한 마력은 실측이 아니다 → 목록에서 구분해 표기한다.
+const HP_ESTIMATED_TITLE = '냉방용량 환산 추정치 (실측 아님)'
+
 const PAGE_SIZE = 20
 
 // 상태별 행 전이 액션. DRAFT: 등록 취소 / PUBLISHED: 단종 (둘 다 →ARCHIVED) / ARCHIVED: 재게시.
@@ -208,7 +211,15 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
                   <td>{r.seriesName}</td>
                   <td className="mono">{r.modelCode}</td>
                   <td className="mono">{r.equipmentCode ?? '—'}</td>
-                  <td className="num">{hp(r.horsepower)}</td>
+                  <td className="num">
+                    {hp(r.horsepower)}
+                    {r.hpSource === 'DERIVED' && (
+                      <span className="eq-est" title={HP_ESTIMATED_TITLE} aria-label={HP_ESTIMATED_TITLE}>
+                        {' '}
+                        (추정)
+                      </span>
+                    )}
+                  </td>
                   <td className="num">{kw(r.coolingW)}</td>
                   <td className="num">{kw(r.heatingW)}</td>
                   <td className="dt">{formatDateTime(r.createdAt)}</td>

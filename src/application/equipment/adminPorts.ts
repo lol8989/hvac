@@ -2,6 +2,7 @@
 // 생성/검도의 읽기 포트(EquipmentMaster=PUBLISHED만)와 구분된다.
 // 구현: infrastructure/equipment/sqlite/SqliteEquipmentAdminRepository (POC), 추후 마스터 API로 교체.
 
+import type { HpSource } from '../../domain/equipment/HpSource'
 import type { PublishStatus } from '../../domain/equipment/PublishStatus'
 import type { ProductDraft, ProductPatch } from '../../domain/equipment/ProductDraft'
 import type { ImportRow } from '../../domain/equipment/SpecImport'
@@ -18,6 +19,7 @@ export interface ProductRow {
   modelCode: string
   equipmentCode: string | null
   horsepower: number | null
+  hpSource: HpSource | null // DERIVED = 냉방용량 환산 추정치(실측 아님)
   coolingW: number | null
   heatingW: number | null
   maxConnections: number | null
@@ -35,6 +37,7 @@ export interface SeriesOption {
   categoryName: string
   subcategoryName: string
   energySource: string | null
+  isVrf: boolean // VRF 계열 — 업로드 시 모델명 HP 유도, 아니면 냉방용량 환산 백필
 }
 
 // 일괄 전이 결과 — 적용 건수 + 건너뛴 행의 사유(미리보기/토스트 표시용).

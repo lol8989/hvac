@@ -7,6 +7,7 @@ import type { Database } from 'sql.js'
 import type { BulkStatusResult, EquipmentAdminRepository, ProductRow, SeriesOption } from '../../../application/equipment/adminPorts'
 import type { PublishStatus } from '../../../domain/equipment/PublishStatus'
 import { assertTransition, assertSpecEditable, canTransition, PUBLISH_STATUS } from '../../../domain/equipment/PublishStatus'
+import { isHpSource } from '../../../domain/equipment/HpSource'
 import { publishBlockReason, type PublishCandidate } from '../../../domain/equipment/Publishability'
 import { EquipmentDomainError } from '../../../domain/equipment/errors'
 import { assertValidDraft, assertValidPatch, type ProductDraft, type ProductPatch } from '../../../domain/equipment/ProductDraft'
@@ -17,7 +18,7 @@ const LIST_SQL = `
   SELECT p.id, c.code AS category_code, c.name_ko AS category_name,
          sc.name_ko AS subcategory_name, sc.energy_source,
          s.code AS series_code, s.name_ko AS series_name, p.model_code, p.equipment_code,
-         p.horsepower, p.cooling_capacity_w, p.heating_capacity_w, p.max_connections, p.status,
+         p.horsepower, p.hp_source, p.cooling_capacity_w, p.heating_capacity_w, p.max_connections, p.status,
          p.created_at, p.updated_at, p.published_at
   FROM products p
   JOIN product_series s        ON p.series_id = s.id
@@ -27,7 +28,7 @@ const LIST_SQL = `
 `
 
 const SERIES_SQL = `
-  SELECT s.code, s.name_ko, c.code AS category_code, c.name_ko AS category_name,
+  SELECT s.code, s.name_ko, s.is_vrf, c.code AS category_code, c.name_ko AS category_name,
          sc.name_ko AS subcategory_name, sc.energy_source
   FROM product_series s
   JOIN product_subcategories sc ON s.subcategory_id = sc.id
@@ -73,6 +74,7 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
       modelCode: String(r.model_code),
       equipmentCode: strOrNull(r.equipment_code),
       horsepower: numOrNull(r.horsepower),
+      hpSource: isHpSource(r.hp_source) ? r.hp_source : null,
       coolingW: numOrNull(r.cooling_capacity_w),
       heatingW: numOrNull(r.heating_capacity_w),
       maxConnections: numOrNull(r.max_connections),
@@ -91,6 +93,7 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
       categoryName: String(r.category_name),
       subcategoryName: String(r.subcategory_name),
       energySource: strOrNull(r.energy_source),
+      isVrf: Number(r.is_vrf) === 1, // 업로드 시 HP 유도(VRF) vs 환산 백필(비-VRF) 분기
     }))
   }
 
@@ -237,16 +240,17 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
 
     const ts = this.now()
     return this.inTransaction(() => {
-      for (const { product, horsepower } of targets) {
+      for (const { product, horsepower, hpSource } of targets) {
         this.db.run(
           `INSERT INTO products
-             (series_id, model_code, horsepower, cooling_capacity_w, heating_capacity_w,
+             (series_id, model_code, horsepower, hp_source, cooling_capacity_w, heating_capacity_w,
               max_connections, status, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?)`,
           [
             seriesId,
             product.modelCode.trim(),
             horsepower,
+            hpSource,
             product.coolingW,
             product.heatingW,
             product.maxConnections,
@@ -297,7 +301,7 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
     const rows = queryRows(
       this.db,
       `SELECT p.status, p.model_code, p.cooling_capacity_w, p.heating_capacity_w, p.horsepower, p.max_connections,
-              c.code AS category_code
+              c.code AS category_code, s.is_vrf
          FROM products p
          JOIN product_series s         ON p.series_id = s.id
          JOIN product_subcategories sc ON s.subcategory_id = sc.id
@@ -315,6 +319,7 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
       heatingW: numOrNull(r.heating_capacity_w),
       horsepower: numOrNull(r.horsepower),
       maxConnections: numOrNull(r.max_connections),
+      isVrf: Number(r.is_vrf) === 1, // 비-VRF는 최대 연결 실내기 수를 요구하지 않는다
     }
   }
 

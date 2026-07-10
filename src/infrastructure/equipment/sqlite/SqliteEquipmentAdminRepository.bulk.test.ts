@@ -49,13 +49,21 @@ describe('setStatusMany (일괄 전이)', () => {
     expect(statusOf(repo, 'RPUW281X9P')).toBe('PUBLISHED')
   })
 
-  it('마력 없는 실외기(공랭식 칠러)는 게시 전제조건 미달로 스킵된다', async () => {
+  // 2026-07-10: 칠러는 냉방용량 환산으로 HP가 백필되고(22HP, DERIVED), 비-VRF라 최대 연결 실내기 수를
+  // 요구하지 않으므로 게시된다. 대신 생성단 조합 후보에서 제외된다(SqliteEquipmentMaster.publishedOutdoor).
+  it('비-VRF 실외기(공랭식 칠러)는 최대 연결 실내기 수 없이도 게시된다', async () => {
     const { repo } = await makeRepo()
-    const id = idOf(repo, 'ACAH020LET2')
-    const res = repo.setStatusMany([id], 'PUBLISHED')
+    const res = repo.setStatusMany([idOf(repo, 'ACAH020LET2')], 'PUBLISHED')
+    expect(res.applied).toBe(1)
+    expect(statusOf(repo, 'ACAH020LET2')).toBe('PUBLISHED')
+  })
+
+  it('냉방 용량이 없어 HP를 환산할 수 없는 실외기는 스킵된다', async () => {
+    const { repo } = await makeRepo()
+    const res = repo.setStatusMany([idOf(repo, 'HBW0900A2A')], 'PUBLISHED')
     expect(res.applied).toBe(0)
-    expect(res.skipped[0].reason).toContain('마력(HP)')
-    expect(statusOf(repo, 'ACAH020LET2')).toBe('DRAFT')
+    expect(res.skipped[0].reason).toContain('냉방 용량')
+    expect(statusOf(repo, 'HBW0900A2A')).toBe('DRAFT')
   })
 
   it('냉난방 용량이 없는 환기(ERV)는 게시된다(생성·검도 미소비)', async () => {
@@ -89,7 +97,7 @@ describe('setStatusMany (일괄 전이)', () => {
   it('적용분이 0이면 영속 훅을 부르지 않는다(스킵만 있는 경우)', async () => {
     let calls = 0
     const { repo } = await makeRepo(() => calls++)
-    repo.setStatusMany([idOf(repo, 'ACAH020LET2')], 'PUBLISHED')
+    repo.setStatusMany([idOf(repo, 'HBW0900A2A')], 'PUBLISHED') // 용량 없어 게시 불가
     expect(calls).toBe(0)
   })
 
@@ -118,14 +126,14 @@ describe('setStatusMany (일괄 전이)', () => {
 })
 
 describe('setStatus (단건) — 게시 전제조건', () => {
-  it('마력 없는 실외기 게시는 도메인 예외로 거부한다', async () => {
+  it('냉방 용량이 없는 실외기 게시는 도메인 예외로 거부한다', async () => {
     const { repo } = await makeRepo()
     try {
-      repo.setStatus(idOf(repo, 'ACAH020LET2'), 'PUBLISHED')
+      repo.setStatus(idOf(repo, 'HBW0900A2A'), 'PUBLISHED')
       throw new Error('예외가 발생하지 않았다')
     } catch (e) {
       expect((e as EquipmentDomainError).code).toBe('INVALID_FIELD')
-      expect((e as Error).message).toContain('마력(HP)')
+      expect((e as Error).message).toContain('냉방 용량')
     }
     expect(statusOf(repo, 'ACAH020LET2')).toBe('DRAFT')
   })

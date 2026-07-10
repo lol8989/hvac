@@ -227,6 +227,8 @@ button{font-family:inherit;cursor:pointer;}
 .eq-table .mono{font-family:'Consolas','D2Coding',monospace;color:var(--ink2);}
 .eq-table td.dt{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;}
 .eq-empty{text-align:center;color:var(--muted);padding:28px 0;}
+/* 환산 추정 마력 — 실측과 구분되는 보조 표기(무채색) */
+.eq-est{font-size:12px;color:#777;}
 .eq-badge{display:inline-block;font-size:12px;font-weight:700;border-radius:10px;padding:2px 9px;border:1px solid var(--line);}
 .eq-badge.published{background:var(--dark);color:#fff;border-color:var(--dark);}
 .eq-badge.draft{background:#fff;color:var(--ink2);}

@@ -6,6 +6,8 @@
 //    (스펙시트에 실내기 장비번호가 없어 지어낼 수 없다 → 게시본은 장비번호를 가진 큐레이션 레코드가 담당)
 //  - 큐레이션 모델이 스펙시트에도 있으면: hot 필드는 큐레이션(선정표 검증값) 우선, 롱테일 스펙은 시트에서 채운다.
 //  - 마력(HP)은 모델명에서 유도하되, VRF 계열(Multi V·GHP·Water)만. 칠러·CDU·SINGLE은 모델명 숫자가 HP가 아니다.
+//    비-VRF 실외기는 냉방용량 환산(÷2907)으로 백필한다(주인님 지시 2026-07-10, hpSource='DERIVED').
+//    doc/05_설계결정/마력_환산식_적용_검토.md
 
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -13,7 +15,9 @@ import { resolve, dirname } from 'node:path'
 import readXlsxFile from 'read-excel-file/node'
 
 import { toParsedSheets, type WrappedSheet } from '../src/infrastructure/equipment/spec/specSheetRows'
+import type { HpSource } from '../src/domain/equipment/HpSource'
 import { horsepowerFromModelCode } from '../src/domain/equipment/ModelCode'
+import { horsepowerFromCapacityW } from '../src/domain/shared/Horsepower'
 import { PUBLISH_STATUS } from '../src/domain/equipment/PublishStatus'
 import { INDOOR_RECORDS, OUTDOOR_RECORDS } from '../src/infrastructure/equipment/seedData'
 import type { SeedData, SeedProduct, SeedSeries, SeedSubcategory, SeedPrice } from '../src/infrastructure/equipment/seed/seedTypes'
@@ -29,11 +33,26 @@ const curatedIndoorSub = (type: string) => (type === '덕트' ? 'IN_DUCT_CURATED
 const curatedOutdoorSub = (cat: string) => (cat === 'GHP' ? 'OUT_GHP' : cat === '냉방전용' ? 'OUT_CO' : 'OUT_HR')
 const kwToW = (kw: number) => Math.round(kw * 1000)
 
+// 실외기 1건의 마력과 출처.
+//   VRF     — 모델명 유도. 냉방용량을 함께 넘겨 100HP대(RP-Q1001X9S)를 10HP로 오독하지 않게 한다.
+//   비-VRF  — 모델명 숫자가 용량이므로 유도 금지. 냉방용량 환산으로 백필한다.
+// 실내기·환기는 마력 개념이 없다.
+function resolveHp(categoryCode: string, isVrf: boolean, modelCode: string, coolingW: number | null): { hp: number | null; src: HpSource | null } {
+  if (categoryCode !== 'OUTDOOR') return { hp: null, src: null }
+
+  if (isVrf) {
+    const hp = horsepowerFromModelCode(modelCode, coolingW)
+    if (hp !== null) return { hp, src: 'MODEL_CODE' }
+  }
+  const derived = horsepowerFromCapacityW(coolingW)
+  return derived === null ? { hp: null, src: null } : { hp: derived, src: 'DERIVED' }
+}
+
 async function main() {
   const files = readdirSync(SPEC_DIR).filter((f) => f.endsWith('.xlsx') && !f.startsWith('~$'))
 
   const subcategories = new Map<string, SeedSubcategory>()
-  const series = new Map<string, SeedSeries & { derivesHp: boolean }>()
+  const series = new Map<string, SeedSeries>()
   const products = new Map<string, SeedProduct>() // modelCode → product (첫 등장 우선)
 
   const skipped: string[] = []
@@ -64,17 +83,19 @@ async function main() {
           subcategoryCode: taxon.subcategoryCode,
           nameKo: taxon.seriesName,
           mflCode: mfl ? `MFL${mfl[1]}` : null,
-          derivesHp: taxon.derivesHp,
+          isVrf: taxon.isVrf,
         })
       }
 
       for (const p of sheet.products) {
         if (products.has(p.modelCode)) continue // 같은 모델이 여러 시트/파일에 있으면 첫 건 유지
+        const { hp, src } = resolveHp(taxon.categoryCode, taxon.isVrf, p.modelCode, p.coolingW)
         products.set(p.modelCode, {
           seriesCode: taxon.seriesCode,
           modelCode: p.modelCode,
           equipmentCode: null,
-          horsepower: taxon.derivesHp ? horsepowerFromModelCode(p.modelCode) : null,
+          horsepower: hp,
+          hpSource: src,
           coolingW: p.coolingW,
           heatingW: p.heatingW,
           maxConnections: p.maxConnections,
@@ -95,12 +116,13 @@ async function main() {
     modelCode: string,
     subCode: string,
     seriesName: string,
-    fields: Omit<SeedProduct, 'seriesCode' | 'modelCode' | 'status' | 'specData' | 'source'>,
+    fields: Omit<SeedProduct, 'seriesCode' | 'modelCode' | 'status' | 'specData' | 'source' | 'hpSource'>,
     status: SeedProduct['status'],
   ) => {
     const seriesCode = `S_CURATED_${subCode}`
     if (!series.has(seriesCode)) {
-      series.set(seriesCode, { code: seriesCode, subcategoryCode: subCode, nameKo: seriesName, mflCode: null, derivesHp: false })
+      // 큐레이션 실외기는 생성·검도가 소비하는 Multi V/GHP 게시본이다 → VRF.
+      series.set(seriesCode, { code: seriesCode, subcategoryCode: subCode, nameKo: seriesName, mflCode: null, isVrf: subCode.startsWith('OUT_') })
     }
     const existing = products.get(modelCode)
 
@@ -118,6 +140,7 @@ async function main() {
       modelCode,
       equipmentCode: fields.equipmentCode,
       horsepower: existing ? existing.horsepower : fields.horsepower,
+      hpSource: existing ? existing.hpSource : fields.horsepower === null ? null : 'CURATED',
       coolingW: existing ? existing.coolingW : fields.coolingW,
       heatingW: existing ? existing.heatingW : fields.heatingW,
       maxConnections: existing ? existing.maxConnections : fields.maxConnections,
@@ -189,7 +212,7 @@ async function main() {
     generatedFrom: `03_참고자료/LG전자 스펙시트 모음 (${files.length}개 파일, ${sheetCount}개 시트)`,
     categories: CATEGORIES,
     subcategories: [...subcategories.values()].sort((a, b) => a.code.localeCompare(b.code)),
-    series: [...series.values()].map(({ derivesHp: _drop, ...s }) => s).sort((a, b) => a.code.localeCompare(b.code)),
+    series: [...series.values()].sort((a, b) => a.code.localeCompare(b.code)),
     products: ordered,
     prices,
   }
@@ -207,12 +230,18 @@ async function main() {
   )
 
   const byStatus = (s: string) => seed.products.filter((p) => p.status === s).length
+  const bySource = (s: HpSource) => seed.products.filter((p) => p.hpSource === s).length
   const noCapacity = seed.products.filter((p) => p.coolingW === null && p.heatingW === null).length
-  const noHp = seed.products.filter((p) => p.horsepower === null).length
+  const vrfSeries = new Set(seed.series.filter((s) => s.isVrf).map((s) => s.code))
+  // 실외기만 HP 대상이다 — 실내기·환기의 null은 정상이므로 세지 않는다.
+  const subCategory = new Map(seed.subcategories.map((s) => [s.code, s.categoryCode]))
+  const seriesCategory = new Map(seed.series.map((s) => [s.code, subCategory.get(s.subcategoryCode)!]))
+  const outdoorNoHp = seed.products.filter((p) => seriesCategory.get(p.seriesCode) === 'OUTDOOR' && p.horsepower === null).length
   console.log(`파일 ${files.length} · 시트 ${sheetCount} · 모델 ${seed.products.length}`)
-  console.log(`  중분류 ${seed.subcategories.length} · 시리즈 ${seed.series.length}`)
+  console.log(`  중분류 ${seed.subcategories.length} · 시리즈 ${seed.series.length} (VRF ${vrfSeries.size})`)
   console.log(`  PUBLISHED ${byStatus('PUBLISHED')} · DRAFT ${byStatus('DRAFT')} · ARCHIVED ${byStatus('ARCHIVED')}`)
-  console.log(`  용량 미상 ${noCapacity} · HP 미상 ${noHp}`)
+  console.log(`  HP 출처: 모델명 ${bySource('MODEL_CODE')} · 환산백필 ${bySource('DERIVED')} · 큐레이션 ${bySource('CURATED')}`)
+  console.log(`  용량 미상 ${noCapacity} · HP 미상(실외기, 용량 없어 백필 불가) ${outdoorNoHp}`)
   console.log(`  hash ${seed.hash} · ${(readFileSync(OUT_JSON).length / 1024 / 1024).toFixed(2)} MB`)
   if (skipped.length) {
     console.log(`\n분류 불가 ${skipped.length}건:`)

@@ -5,7 +5,8 @@
 // 스키마 구조 버전 — IndexedDB 캐시 무효화 키의 일부(DDL 구조 또는 시드 '적재 규칙' 변경 시 증가).
 // 시드 '값' 변경은 별도로 seedData.ts의 SEED_HASH(내용 해시)가 자동 무효화하므로 여기 손댈 필요 없음.
 // v2: 시드 제품에 created_at/updated_at/published_at 스탬프 추가(등록·수정·게시일 컬럼 표기).
-export const SCHEMA_VERSION = 2
+// v3: product_series.is_vrf(계열별 게시 요건·HP 유도 분기) + products.hp_source(마력 출처).
+export const SCHEMA_VERSION = 3
 
 export const SCHEMA_SQL = `
 PRAGMA foreign_keys = ON;
@@ -30,7 +31,12 @@ CREATE TABLE product_series (
   subcategory_id INTEGER NOT NULL REFERENCES product_subcategories(id),
   code           TEXT NOT NULL UNIQUE,
   name_ko        TEXT NOT NULL,
-  mfl_code       TEXT
+  mfl_code       TEXT,
+  -- VRF(실외기 1대 ↔ 실내기 N대) 계열 여부. 이 한 축이 세 가지를 가른다:
+  --   ① 모델명이 마력을 인코딩하는가 ② 게시에 최대 연결 실내기 수를 요구하는가
+  --   ③ 생성단 실외기 조합 후보로 노출되는가
+  -- 실데이터에서 세 성질이 정확히 일치한다(칠러·CDU·단품은 모두 false).
+  is_vrf         INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE efficiency_grades (
@@ -44,7 +50,9 @@ CREATE TABLE products (
   model_code               TEXT NOT NULL UNIQUE,      -- 모델명 (RNW0401C2S)
   equipment_code           TEXT,                      -- 장비번호 단축코드 (실내기 '40C')
   name_display             TEXT,
-  horsepower               REAL,                      -- 마력(HP)
+  horsepower               REAL,                      -- 마력(HP). 1HP 미만 소용량은 소수(0.34)
+  hp_source                TEXT                       -- MODEL_CODE / DERIVED(용량 환산 추정) / CURATED / MANUAL
+                           CHECK (hp_source IS NULL OR hp_source IN ('MODEL_CODE','DERIVED','CURATED','MANUAL')),
   cooling_capacity_w       INTEGER,                   -- 정격냉방능력(W)
   heating_capacity_w       INTEGER,                   -- 정격난방능력(W). NULL=냉방전용
   heating_capacity_cold_w  INTEGER,                   -- 난방 한랭지(-15℃)

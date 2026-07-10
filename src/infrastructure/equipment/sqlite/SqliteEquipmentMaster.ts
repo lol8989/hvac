@@ -46,6 +46,9 @@ function readPublishedIndoor(db: Database): IndoorSpecFields[] {
   }))
 }
 
+// 생성·검도가 소비하는 실외기는 VRF만이다. 칠러(냉수 배관)·CDU(쇼케이스)·단품(1:1)은
+// 실내기를 조합하지 않으므로 게시되더라도 조합 후보로 노출하지 않는다(주인님 확정 2026-07-10).
+// 이들은 max_connections가 없어 OutdoorUnit 불변식도 충족하지 못한다.
 function readPublishedOutdoor(db: Database): OutdoorSpecFields[] {
   const rows = queryRows(
     db,
@@ -57,7 +60,7 @@ function readPublishedOutdoor(db: Database): OutdoorSpecFields[] {
      JOIN product_series s ON vp.series_id = s.id
      LEFT JOIN product_prices pp ON pp.product_id = vp.id AND pp.effective_end_date IS NULL
      LEFT JOIN price_types pt ON pp.price_type_id = pt.id
-     WHERE vp.category_code = 'OUTDOOR' ORDER BY vp.id`,
+     WHERE vp.category_code = 'OUTDOOR' AND s.is_vrf = 1 ORDER BY vp.id`,
   )
   // comboMin/Max는 P1에서 미저장(정책 UI = P2) → 키를 넣지 않아 기본(0.5~1.3) 적용. 인메모리 시드와 동치.
   // 현행가가 없는 모델은 단가 키를 넣지 않는다(선택 항목) → 소비측이 '단가 미상'으로 처리.

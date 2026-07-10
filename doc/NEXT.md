@@ -2,6 +2,19 @@
 
 > 세션 시작 시 이 파일부터 확인한다. 완료한 항목은 지우지 말고 `[x]` + 완료일·커밋을 남기고, 새 항목은 위에 추가한다.
 
+## 2026-07-10
+
+- [x] **마력(HP) 환산식 적용 + 백필** (2026-07-10, 주인님 지시) → [`doc/05_설계결정/마력_환산식_적용_검토.md`](05_설계결정/마력_환산식_적용_검토.md)
+  - Confluence 0708 확정 환산식(1HP = 2500 kcal/h = 2907 W) 도메인화(`shared/Horsepower.ts`). 원문 자기모순(`2900w` vs `2907W`) → 2907 채택(주인님).
+  - **환산식은 산출식이 아니라 검증·백필식**임을 실데이터 670건 전수 대조로 확인(정수 일치 최대 66.9%, 계열별 W/HP 2,813~2,900). HP 1차 출처는 모델명 유도 유지.
+  - **결함 발견·수정**: 100HP 이상 모델 12건을 10HP로 오독(`RP-Q1001X9S` 등, 접두 뒤 2자리만 읽음). 냉방용량 환산으로 100HP대를 판별하도록 `horsepowerFromModelCode(model, coolingW?)` 확장. 전부 DRAFT였어 생성단 무영향.
+  - **백필 179건**: 비-VRF(칠러·CDU·단품)는 모델명 숫자가 용량이라 유도 금지 → `HP = round(coolingW/2907)`. 1HP 미만 1건(`LSC-G0100F2`)은 소수 보존(0.34, 주인님 지시).
+  - **`is_vrf`를 시리즈 테이블로 승격**(구 `derivesHp`): `energy_source`로는 못 가른다(수냉식에 VRF·칠러 공존, EHP에 Multi V·단품 공존). 이 한 축이 ①모델명 HP 인코딩 ②maxConn 게시 요건 ③생성단 조합 후보 노출을 함께 가른다.
+  - **게시 요건 계열별 분리**: HP만 백필하면 게시가 0건 풀린다(179건 전부 maxConn 없음). 비-VRF는 maxConn 면제(주인님 확정), 대신 `publishedOutdoor()`가 VRF만 노출해 생성단 격리.
+  - `hp_source`(MODEL_CODE/DERIVED/CURATED/MANUAL) 기록 + 관리 목록 `22 (추정)` 표기. SCHEMA_VERSION 3.
+  - 브라우저 실검증: 칠러 게시(23→24) 후에도 생성단 실외기 카탈로그 VRF 7종만. 테스트 634 그린.
+  - 잔여: 실외기 16건은 냉방용량이 없어 백필 불가(게시 계속 차단). CDU 3건은 시트에 마력이 있어 `hp_source='SHEET'` 도입 시 시트값 우선이 정확.
+
 ## 2026-07-09 예정 (2026-07-08 주인님 지시)
 
 - [x] **장비선정표 데이터 소스를 장비마스터 참조로 전환** (2026-07-09, 미커밋) — Equipment Master 컨텍스트 신설(`domain/equipment`: PublishStatus·MasterRecord·EquipmentMaster 포트, `infrastructure/equipment/InMemoryEquipmentMaster` = 시드 SSOT + 게시 게이트). 실내기 SEED·실외기 ODU_CATALOG를 마스터로 이관(PUBLISHED), 게이트 실증용 DRAFT/ARCHIVED 1건씩 추가. 생성 카탈로그(Indoor/Outdoor)를 마스터 참조 어댑터로 전환(기본 싱글턴 주입 → 기존 호출부 유지). App 컴포지션 루트에서 마스터 1개 주입. 마스터는 PUBLISHED만 노출(생성/검도 참조). 테스트 387개 그린.

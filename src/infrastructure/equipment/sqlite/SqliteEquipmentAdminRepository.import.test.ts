@@ -36,6 +36,7 @@ const parsedFrom = async (name: string): Promise<ParsedProduct[]> =>
 const row = (over: Partial<ImportRow> = {}): ImportRow => ({
   product: { modelCode: 'ZZZ011X', coolingW: 10000, heatingW: 11000, maxConnections: 5, specData: { '냉매 > 종류': { value: 'R410A', unit: null } } },
   horsepower: 1,
+  hpSource: 'MODEL_CODE',
   verdict: 'OK',
   ...over,
 })
