@@ -11,6 +11,7 @@ import type {
   ComboJudgement,
   SelectionGroupInput,
   SelectionRow,
+  SelectionSubtotal,
   SelectionTable,
   SelectionTableInput,
 } from './SelectionTable.types'
@@ -18,6 +19,7 @@ import type {
 export type {
   ComboJudgement,
   FloorSection,
+  GroupSection,
   OutdoorSpecLite,
   SelectionBom,
   SelectionGroupInput,
@@ -134,19 +136,61 @@ export const buildSelectionTable = (input: SelectionTableInput): SelectionTable 
     hpTotal += spec.hp
   }
 
-  // 4) 층 섹션 + 소계(배치된 실내기만: 대수·총냉방W·총난방W)
-  const floors = [...rowsByFloor.entries()].map(([floor, rows]) => {
-    const subtotal = { quantity: 0, totalCoolW: 0, totalHeatW: 0 }
+  // 4) 층 섹션 > 실외기 그룹 소섹션 (주인님 지시 2026-07-10)
+  //
+  // Confluence 자동배치 룰: "한 실외기가 여러 층에 걸치지 않는다" → 그룹은 한 층 안에 있다.
+  // 조합비는 행이 아니라 그룹에 붙는다. 미배정 실은 층의 unassigned로 모인다.
+  const sumOf = (rows: readonly SelectionRow[]): SelectionSubtotal => {
+    const t = { quantity: 0, totalCoolW: 0, totalHeatW: 0 }
     for (const r of rows) {
       if (!r.indoor) continue
-      subtotal.quantity += r.indoor.quantity
-      subtotal.totalCoolW += r.indoor.totalCoolW
-      subtotal.totalHeatW += r.indoor.totalHeatW
+      t.quantity += r.indoor.quantity
+      t.totalCoolW += r.indoor.totalCoolW
+      t.totalHeatW += r.indoor.totalHeatW
     }
+    return t
+  }
+
+  const floors = [...rowsByFloor.entries()].map(([floor, rows]) => {
+    const frozen = rows.map((r) => Object.freeze(r))
+
+    // 그룹 등장 순서(표 순서)를 유지한다.
+    const byGroup = new Map<string, SelectionRow[]>()
+    const unassigned: SelectionRow[] = []
+    for (const r of frozen) {
+      if (!r.group) { unassigned.push(r); continue }
+      const list = byGroup.get(r.group.key) ?? []
+      if (!list.length) byGroup.set(r.group.key, list)
+      list.push(r)
+    }
+
+    const groups = [...byGroup.entries()].map(([key, groupRows]) => {
+      const g = groupByKey.get(key)!
+      const spec = specByModel.get(g.model)!
+      const comboRatio = (groupCoolW.get(key) ?? 0) / (spec.coolKw * 1000)
+      return Object.freeze({
+        key,
+        label: g.label,
+        rows: Object.freeze(groupRows),
+        subtotal: Object.freeze(sumOf(groupRows)),
+        outdoor: Object.freeze({
+          hp: spec.hp,
+          model: spec.model,
+          coolKw: spec.coolKw,
+          heatKw: spec.heatKw,
+          quantity: 1,
+          comboRatio,
+          judgement: judge(comboRatio, spec.comboRange ?? ComboRange.DEFAULT),
+        }),
+      })
+    })
+
     return Object.freeze({
       floor,
-      rows: Object.freeze(rows.map((r) => Object.freeze(r))),
-      subtotal: Object.freeze(subtotal),
+      rows: Object.freeze(frozen),
+      groups: Object.freeze(groups),
+      unassigned: Object.freeze(unassigned),
+      subtotal: Object.freeze(sumOf(frozen)),
     })
   })
 

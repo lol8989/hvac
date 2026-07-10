@@ -62,10 +62,39 @@ export interface SelectionRow {
   }
 }
 
+export interface SelectionSubtotal {
+  quantity: number
+  totalCoolW: number
+  totalHeatW: number
+}
+
+// 실외기 그룹 소섹션. 조합비는 행이 아니라 그룹에 붙는다.
+//
+// 근거: Confluence「자동배치 룰」 ⑥-(3) "실내기를 층별로 먼저 묶고, 층 안에서만 실외기를 구성한다.
+// 한 실외기가 여러 층에 걸치지 않는다." → 그룹은 항상 한 층 안에 있다.
+export interface GroupSection {
+  key: string
+  label: string
+  rows: readonly SelectionRow[]
+  subtotal: SelectionSubtotal
+  outdoor: {
+    hp: number
+    model: string
+    coolKw: number
+    heatKw: number | null
+    quantity: number
+    comboRatio: number
+    judgement: ComboJudgement
+  }
+}
+
 export interface FloorSection {
   floor: string
+  // 표 순서 그대로의 평탄한 행 목록(CSV 직렬화·집계용). groups/unassigned와 같은 행을 가리킨다.
   rows: readonly SelectionRow[]
-  subtotal: { quantity: number; totalCoolW: number; totalHeatW: number } // 배치된 실내기만
+  groups: readonly GroupSection[]
+  unassigned: readonly SelectionRow[] // 아직 실외기에 배정되지 않은 실
+  subtotal: SelectionSubtotal // 배치된 실내기만(미배정 포함)
 }
 
 export interface SelectionBom {

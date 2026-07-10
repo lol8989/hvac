@@ -52,12 +52,23 @@ describe('SelectionGrid', () => {
   it('층 섹션·합계 행·조합비·AI/수정 뱃지를 표시한다', () => {
     renderGrid()
     expect(screen.getByText('지하1층')).toBeInTheDocument()
-    expect(screen.getAllByText('합계').length).toBeGreaterThan(0) // 층 합계 행(+BOM 합계)
-    // 조합비 = (12000+4000) / 23300 = 0.6867
-    expect(screen.getByText('0.6867')).toBeInTheDocument()
+    expect(screen.getAllByText(/합계/).length).toBeGreaterThan(0) // 층 합계 행(+BOM 합계)
+    // 조합비 = (12000+4000) / 23300 = 68.7% — 실무는 퍼센트로 말한다(그룹 소계 행에 표기)
+    expect(screen.getByText('68.7%')).toBeInTheDocument()
     // R1은 AI 선정, R2는 수동 오버라이드(대수 2)
     expect(screen.getAllByText('AI').length).toBeGreaterThan(0)
     expect(screen.getAllByText('수정').length).toBe(1)
+  })
+
+  // 같은 실외기에 엮인 실이 한눈에 묶여 보여야 한다(주인님 지시).
+  it('실외기 그룹마다 소계 행을 두고 조합비를 거기에 붙인다', () => {
+    const { container } = renderGrid()
+    const groupSubtotals = container.querySelectorAll('tr.group-subtotal')
+    expect(groupSubtotals.length).toBe(1) // 그룹 1개
+    expect(groupSubtotals[0].textContent).toContain('68.7%')
+    expect(groupSubtotals[0].textContent).toContain('8HP')
+    // 그룹 시작 행에 기준선 클래스가 붙는다
+    expect(container.querySelectorAll('tr.group-start').length).toBe(1)
   })
 
   it('실명을 수정하고 blur하면 onRenameRoom이 호출된다', () => {
@@ -106,6 +117,6 @@ describe('SelectionGrid', () => {
     renderGrid()
     expect(screen.getByText('실내기 집계')).toBeInTheDocument()
     expect(screen.getByText('HP 합계')).toBeInTheDocument()
-    expect(screen.getAllByText('8HP').length).toBeGreaterThan(0) // 행 실외기 셀 + BOM
+    expect(screen.getAllByText('8HP').length).toBeGreaterThan(0) // 그룹 소계 행 + BOM
   })
 })

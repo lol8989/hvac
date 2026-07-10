@@ -21,6 +21,7 @@ const w = (n: number) => n.toLocaleString('ko-KR', { maximumFractionDigits: 1 })
 export interface SelectionRowViewProps {
   row: SelectionRow
   floorSpan: number | null // 층 셀 rowSpan(섹션 첫 행) — 그 외 null
+  rowClass?: string // 그룹 경계선 표시용(group-start 등)
   groupOptions: readonly { key: string; label: string }[]
   indoorModels: readonly IndoorModelOption[]
   onRenameRoom: (roomId: string, name: string) => void
@@ -33,10 +34,10 @@ export interface SelectionRowViewProps {
 
 // 장비선정표 1행(=실 1개). 편집 셀: 실명·단위부하(냉/난)·모델·대수·그룹. 나머지 자동 계산.
 export default function SelectionRowView({
-  row, floorSpan, groupOptions, indoorModels,
+  row, floorSpan, rowClass, groupOptions, indoorModels,
   onRenameRoom, onOverrideUnitLoad, onResetUnitLoad, onOverrideIndoor, onResetIndoor, onMoveRoom,
 }: SelectionRowViewProps) {
-  const { unitLoad, requiredW, indoor, group, outdoor } = row
+  const { unitLoad, requiredW, indoor, group } = row
   const num = (v: string) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null }
   const qty = (v: string) => { const n = Number(v); return Number.isInteger(n) && n >= 1 ? n : null }
 
@@ -46,7 +47,7 @@ export default function SelectionRowView({
   }
 
   return (
-    <tr>
+    <tr className={rowClass}>
       {floorSpan !== null && <td className="floorcell" rowSpan={floorSpan}>{row.floor}</td>}
       <td className="t">
         <EditCell text value={row.roomName} onCommit={(v) => onRenameRoom(row.roomId, v)} />
@@ -94,18 +95,12 @@ export default function SelectionRowView({
           {groupOptions.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
         </select>
       </td>
-      <td className="c">{outdoor ? `${outdoor.hp}HP` : ''}</td>
-      <td className="t">{outdoor?.model ?? ''}</td>
-      <td>{outdoor ? w(outdoor.coolKw * 1000) : ''}</td>
-      <td>{outdoor ? (outdoor.heatKw !== null ? w(outdoor.heatKw * 1000) : '—') : ''}</td>
-      <td className={outdoor ? (outdoor.judgement === 'OK' ? 'combo-ok' : 'combo-warn') : undefined}>
-        {outdoor ? (
-          <>
-            {outdoor.comboRatio.toFixed(4)}
-            {outdoor.judgement !== 'OK' && <span className="badge warn">{outdoor.judgement === 'OVERLOADED' ? '과부하' : '저부하'}</span>}
-          </>
-        ) : ''}
-      </td>
+      {/* 실외기·조합비는 그룹의 성질이다 → 행이 아니라 그룹 소계 행에 표기한다(SelectionGrid). */}
+      <td className="c" />
+      <td className="t" />
+      <td />
+      <td />
+      <td />
     </tr>
   )
 }

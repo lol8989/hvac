@@ -34,3 +34,16 @@
 .selbom td{border:1px solid #DDDDDD;padding:3px 10px;}
 .selbom .ttl{font-size:12px;font-weight:700;margin-bottom:6px;color:#111;}
 .selbom .hp-total{font-weight:700;background:#F2F2F2;}
+
+/* ── 층 > 실외기 그룹 2단 구조 ──
+   같은 실외기에 엮인 실이 한눈에 묶여 보이도록, 그룹 시작 행 위에 굵은 기준선을 긋는다. */
+.selgrid tr.group-start > td{border-top:2px solid #555;}
+.selgrid tr.group-subtotal td{background:#FAFAFA;font-weight:700;border-bottom:2px solid #555;}
+.selgrid tr.group-subtotal td.t{text-align:left;color:#333;}
+
+/* 아직 실외기에 배정되지 않은 실 — 조합에서 빠져 있음을 흐리게 알린다. */
+.selgrid tr.unassigned > td{background:#FCFCFC;}
+.selgrid tr.group-subtotal.unassigned td{background:#F5F5F5;color:#777;font-weight:500;border-bottom:2px dashed #999;}
+
+/* 층 합계는 그룹 소계보다 무겁게 */
+.selgrid tr.subtotal td{border-top:2px solid #222;border-bottom:2px solid #222;}
