@@ -207,9 +207,9 @@ describe('buildSelectionTable — 예외', () => {
 describe('buildSelectionTable — comboRange 커스텀(0.3~1.0) judgement', () => {
   const range = new ComboRange(0.3, 1.0)
 
-  it('커스텀 최대(1.0)를 넘으면 OVERLOADED로 판정한다 (기본 범위면 OK인 1.2)', () => {
-    expect(firstOutdoor(buildSelectionTable(ratioInput(12000, range))).judgement).toBe('OVERLOADED')
-    expect(firstOutdoor(buildSelectionTable(ratioInput(12000))).judgement).toBe('OK') // DEFAULT 0.5~1.3
+  it('커스텀 최대(1.0)를 넘으면 OVERLOADED로 판정한다 (기본 범위면 OK인 1.02)', () => {
+    expect(firstOutdoor(buildSelectionTable(ratioInput(10200, range))).judgement).toBe('OVERLOADED')
+    expect(firstOutdoor(buildSelectionTable(ratioInput(10200))).judgement).toBe('OK') // DEFAULT 0.5~1.03
   })
 
   it('커스텀 최소(0.3) 이상이면 OK로 판정한다 (기본 범위면 UNDERLOADED인 0.4)', () => {

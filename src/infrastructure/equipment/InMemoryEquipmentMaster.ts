@@ -7,12 +7,20 @@
 
 import type { EquipmentMaster } from '../../domain/equipment/EquipmentMaster'
 import type { IndoorMasterRecord, IndoorSpecFields, OutdoorMasterRecord, OutdoorSpecFields } from '../../domain/equipment/MasterRecord'
+import { ComboRange } from '../../domain/shared/ComboRange'
 import { isPublished } from '../../domain/equipment/PublishStatus'
 import { INDOOR_RECORDS, OUTDOOR_RECORDS } from './seedData'
 
 // status를 벗겨 스펙 필드만 노출(게시 게이트 통과분).
 const stripIndoor = ({ status: _s, ...spec }: IndoorMasterRecord): IndoorSpecFields => spec
-const stripOutdoor = ({ status: _s, ...spec }: OutdoorMasterRecord): OutdoorSpecFields => spec
+
+// 조합비 허용범위는 정책값이다. 인메모리 마스터에는 정책 저장소가 없으므로 전역 기본을 싣는다.
+// (SQLite 마스터는 모델별 override > 전역 기본으로 해석한다 — 두 백엔드가 같은 계약을 낸다.)
+const stripOutdoor = ({ status: _s, ...spec }: OutdoorMasterRecord): OutdoorSpecFields => ({
+  ...spec,
+  comboMin: spec.comboMin ?? ComboRange.DEFAULT.min,
+  comboMax: spec.comboMax ?? ComboRange.DEFAULT.max,
+})
 
 export class InMemoryEquipmentMaster implements EquipmentMaster {
   private readonly _indoor: readonly IndoorSpecFields[] = Object.freeze(INDOOR_RECORDS.filter((r) => isPublished(r.status)).map(stripIndoor))

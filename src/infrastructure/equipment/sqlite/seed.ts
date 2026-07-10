@@ -4,6 +4,8 @@
 
 import type { Database } from 'sql.js'
 import type { SeedData } from '../seed/seedTypes'
+import { ComboRange } from '../../../domain/shared/ComboRange'
+import { COMBO_MAX_KEY, COMBO_MIN_KEY } from './settingsKeys'
 
 // 단가 유형은 POC상 소비자가(CONSUMER=1) 하나만 쓴다.
 const CONSUMER_PRICE_TYPE_ID = 1
@@ -45,6 +47,10 @@ export function seedDatabase(db: Database, data: SeedData, now: string = new Dat
       s.isVrf ? 1 : 0,
     ])
   })
+
+  // 전역 조합비 기본 — 관리 UI(조합비 정책)에서 변경한다. 초기값은 도메인 DEFAULT(50~103%).
+  db.run(`INSERT INTO system_settings (key, value) VALUES (?,?)`, [COMBO_MIN_KEY, String(ComboRange.DEFAULT.min)])
+  db.run(`INSERT INTO system_settings (key, value) VALUES (?,?)`, [COMBO_MAX_KEY, String(ComboRange.DEFAULT.max)])
 
   for (let g = 1; g <= 5; g++) db.run(`INSERT INTO efficiency_grades (id, name) VALUES (?,?)`, [g, `${g}등급`])
   db.run(`INSERT INTO price_types (id, code, name_ko, priority) VALUES (?,?,?,?)`, [CONSUMER_PRICE_TYPE_ID, 'CONSUMER', '소비자가', 10])

@@ -8,6 +8,8 @@ import type { Database, SqlJsStatic } from 'sql.js'
 import type { EquipmentMaster } from '../../../domain/equipment/EquipmentMaster'
 import type { IndoorSpecFields, OutdoorSpecFields } from '../../../domain/equipment/MasterRecord'
 import type { EnergySourceCode } from '../../../domain/shared/EnergySource'
+import { ComboRange } from '../../../domain/shared/ComboRange'
+import { COMBO_MAX_KEY, COMBO_MIN_KEY } from './settingsKeys'
 import { SCHEMA_SQL } from './schema'
 import { seedDatabase } from './seed'
 import type { SeedData } from '../seed/seedTypes'
@@ -49,11 +51,27 @@ function readPublishedIndoor(db: Database): IndoorSpecFields[] {
 // 생성·검도가 소비하는 실외기는 VRF만이다. 칠러(냉수 배관)·CDU(쇼케이스)·단품(1:1)은
 // 실내기를 조합하지 않으므로 게시되더라도 조합 후보로 노출하지 않는다(주인님 확정 2026-07-10).
 // 이들은 max_connections가 없어 OutdoorUnit 불변식도 충족하지 못한다.
+// 전역 조합비 기본. 설정이 없거나 깨졌으면 도메인 DEFAULT로 떨어진다(fail-safe).
+function readGlobalComboRange(db: Database): ComboRange {
+  const rows = queryRows(db, `SELECT key, value FROM system_settings WHERE key IN (?,?)`, [COMBO_MIN_KEY, COMBO_MAX_KEY])
+  const map = new Map(rows.map((r) => [String(r.key), Number(r.value)]))
+  const min = map.get(COMBO_MIN_KEY)
+  const max = map.get(COMBO_MAX_KEY)
+  if (min === undefined || max === undefined) return ComboRange.DEFAULT
+  try {
+    return new ComboRange(min, max)
+  } catch {
+    return ComboRange.DEFAULT // 저장된 값이 불변식을 깨면 기본으로
+  }
+}
+
 function readPublishedOutdoor(db: Database): OutdoorSpecFields[] {
+  const global = readGlobalComboRange(db)
   const rows = queryRows(
     db,
     `SELECT vp.model_code, vp.subcategory_name, vp.energy_source, vp.cooling_capacity_w, vp.heating_capacity_w,
             vp.horsepower, vp.max_connections, vp.efficiency_grade_id, vp.cop_cooling, vp.cop_heating,
+            vp.combo_min, vp.combo_max,
             s.name_ko AS series_name,
             pp.price_krw, pt.code AS price_type_code, pp.price_with_vat_krw, pp.effective_start_date, pp.priority AS price_priority
      FROM v_published_products vp
@@ -62,10 +80,14 @@ function readPublishedOutdoor(db: Database): OutdoorSpecFields[] {
      LEFT JOIN price_types pt ON pp.price_type_id = pt.id
      WHERE vp.category_code = 'OUTDOOR' AND s.is_vrf = 1 ORDER BY vp.id`,
   )
-  // comboMin/Max는 P1에서 미저장(정책 UI = P2) → 키를 넣지 않아 기본(0.5~1.3) 적용. 인메모리 시드와 동치.
+  // 조합비 허용범위: 모델별 override > 전역 기본(system_settings). 여기서 해석해 스펙에 실어 보낸다
+  // → 생성단 조합비 경고선이 관리 UI 설정을 즉시 따른다.
   // 현행가가 없는 모델은 단가 키를 넣지 않는다(선택 항목) → 소비측이 '단가 미상'으로 처리.
   return rows.map((r) => {
+    const override = r.combo_min == null || r.combo_max == null ? null : { min: num(r.combo_min), max: num(r.combo_max) }
     const base = {
+      comboMin: override?.min ?? global.min,
+      comboMax: override?.max ?? global.max,
       model: String(r.model_code),
       cat: String(r.subcategory_name),
       series: String(r.series_name),

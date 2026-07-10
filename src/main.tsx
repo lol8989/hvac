@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import SelectionReviewWindow from './components/selection/SelectionReviewWindow'
 import EquipmentAdminPage from './components/equipment/EquipmentAdminPage'
+import ComboPolicyPage from './components/equipment/ComboPolicyPage'
 import ForbiddenPage from './components/equipment/ForbiddenPage'
 import { canManageEquipment } from './domain/auth/Permission'
 import { CURRENT_USER } from './data'
@@ -62,23 +63,27 @@ const persistOn = (handle: SqliteEquipmentMasterHandle) => () => {
 const root = createRoot(rootEl)
 const render = (node: React.ReactNode) => root.render(<React.StrictMode>{node}</React.StrictMode>)
 
+// 관리 영역(장비 목록관리·조합비 정책)은 모두 ADMIN 전용이고 SQLite DB 핸들이 필요하다
+// (인메모리 폴백은 읽기 전용 → 편집 불가).
+const ADMIN_VIEWS = ['equipment', 'combo']
+
 if (view === 'selection') {
   render(<SelectionReviewWindow />)
-} else if (view === 'equipment' && !canManageEquipment(CURRENT_USER)) {
+} else if (view !== null && ADMIN_VIEWS.includes(view) && !canManageEquipment(CURRENT_USER)) {
   // 메뉴를 숨기는 것만으로는 URL 직접 입력을 막지 못한다. 권한이 없으면 저장소를 열지도 않는다.
   render(<ForbiddenPage userName={CURRENT_USER.name} />)
-} else if (view === 'equipment') {
-  // 관리 페이지는 전 상태 편집을 위해 SQLite DB 핸들이 필요하다(인메모리 폴백은 읽기 전용 → 불가).
+} else if (view !== null && ADMIN_VIEWS.includes(view)) {
   const handle = await resolveSqliteHandle()
-  render(
-    handle ? (
-      <EquipmentAdminPage admin={new SqliteEquipmentAdminRepository(handle.db, { onChange: persistOn(handle) })} />
-    ) : (
+  if (!handle) {
+    render(
       <div style={{ padding: 40, fontFamily: "'Noto Sans KR',sans-serif", color: '#666' }}>
         장비마스터 저장소(SQLite) 초기화에 실패했습니다. 새로고침하거나 브라우저 저장소 설정을 확인하세요.
-      </div>
-    ),
-  )
+      </div>,
+    )
+  } else {
+    const admin = new SqliteEquipmentAdminRepository(handle.db, { onChange: persistOn(handle) })
+    render(view === 'combo' ? <ComboPolicyPage admin={admin} /> : <EquipmentAdminPage admin={admin} />)
+  }
 } else {
   // 생성/검도는 PUBLISHED만 읽으므로 SQLite 실패 시 인메모리 기본으로 폴백(앱은 항상 렌더).
   const handle = await resolveSqliteHandle()

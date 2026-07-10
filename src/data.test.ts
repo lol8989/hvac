@@ -1,3 +1,4 @@
+import { ComboRange } from './domain/shared/ComboRange'
 import { describe, it, expect } from 'vitest'
 import { recommendedIndoorIdx, outdoorIdxByModel, ratioOf, indoorCoolByModel, MODELS, ROOMS, INITIAL_GROUPS, INITIAL_POOL, DEFAULT_COMBINATION } from './data'
 import type { ModelCard } from './data'
@@ -128,13 +129,12 @@ describe('DEFAULT_COMBINATION (combine 진입 시 자동 조합 기본값)', () 
     }
   })
 
-  it('각 그룹의 설계부하 기준 조합비가 0.5~1.3 범위 안이다', () => {
+  it('각 그룹의 설계부하 기준 조합비가 전역 기본 허용범위(0.5~1.03) 안이다', () => {
     for (const c of DEFAULT_COMBINATION) {
       if (!c.items.length) continue
       const spec = specOfGroup(c.key)
       const r = ratioOf({ items: c.items, cool: spec.capacityKw })
-      expect(r).toBeGreaterThanOrEqual(0.5)
-      expect(r).toBeLessThanOrEqual(1.3)
+      expect(ComboRange.DEFAULT.contains(r)).toBe(true)
     }
   })
 })

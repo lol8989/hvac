@@ -39,7 +39,8 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
   const [cat, setCat] = useState<'ALL' | 'INDOOR' | 'OUTDOOR' | 'VENT'>('ALL')
   const [status, setStatus] = useState<'ALL' | PublishStatus>('ALL')
   const [seriesCode, setSeriesCode] = useState('ALL')
-  const [q, setQ] = useState('')
+  const [qInput, setQInput] = useState('') // 입력 중인 검색어
+  const [q, setQ] = useState('') // 실제로 목록에 적용된 검색어(검색 버튼·Enter로 확정)
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0])
   const [sort, setSort] = useState<SortState>(null)
@@ -131,19 +132,24 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
     return c
   }, [all])
 
-  const filterOn = cat !== 'ALL' || seriesCode !== 'ALL' || status !== 'ALL' || q !== ''
+  const filterOn = cat !== 'ALL' || seriesCode !== 'ALL' || status !== 'ALL' || q !== '' || qInput !== ''
   const resetFilters = () => {
     setCat('ALL')
     setSeriesCode('ALL')
     setStatus('ALL')
+    setQInput('')
     setQ('')
+    setPage(0)
+  }
+  const submitSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    setQ(qInput)
     setPage(0)
   }
 
   return (
     <AdminShell
       active="products"
-      description="게시(PUBLISHED)된 모델만 생성·검도에 노출됩니다."
       actions={
         <>
           <button className="btn" onClick={() => setUploading(true)}>스펙시트 업로드</button>
@@ -154,9 +160,14 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
       {/* 상태 요약 = 상태 필터. 관리자의 첫 질문은 "지금 몇 건이 게시 대기 중인가"다. */}
       <StatusFilterChips counts={counts} total={all.length} value={status} onChange={resetPage(setStatus)} />
 
-      {/* 탐색 전용 툴바 — 생성 액션(등록·업로드)과 표시 설정(건수)은 여기 두지 않는다. */}
-      <div className="eq-toolbar" role="search">
-        <input className="field eq-search" aria-label="모델명·장비번호 검색" placeholder="모델명·장비번호 검색" value={q} onChange={(e) => resetPage(setQ)(e.target.value)} />
+      {/* 검색은 버튼·Enter로 확정한다(입력할 때마다 1,206행을 다시 거르지 않는다). */}
+      <form className="eq-searchbar" role="search" onSubmit={submitSearch}>
+        <input className="field eq-search" aria-label="모델명·장비번호 검색" placeholder="모델명·장비번호 검색" value={qInput} onChange={(e) => setQInput(e.target.value)} />
+        <button className="btn sm" type="submit">검색</button>
+        <button className="btn sm" type="button" onClick={resetFilters} disabled={!filterOn}>초기화</button>
+      </form>
+
+      <div className="eq-filterbar">
         <select className="field" aria-label="분류 필터" value={cat} onChange={(e) => resetPage(setCat)(e.target.value as typeof cat)}>
           <option value="ALL">전체 분류</option>
           <option value="INDOOR">실내기</option>
@@ -173,8 +184,6 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
               </option>
             ))}
         </select>
-        {/* 건수는 상태 칩(전체 기준)과 하단 표기(현재 범위)가 이미 말한다 — 여기서 세 번째로 반복하지 않는다. */}
-        <button className="btn sm" onClick={resetFilters} disabled={!filterOn}>초기화</button>
       </div>
 
       <BulkActionBar

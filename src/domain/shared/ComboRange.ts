@@ -28,6 +28,13 @@ export class ComboRange {
     return other instanceof ComboRange && other.min === this.min && other.max === this.max
   }
 
-  // 기본 권장 범위 0.5~1.3 (기존 고정 상수와 동일).
-  static readonly DEFAULT = new ComboRange(0.5, 1.3)
+  // 전역 기본 50% ~ 103% (주인님 확정 2026-07-10).
+  //
+  // 근거: Confluence「실내기·실외기 자동배치 룰」 — "조합비 = 실내기 용량 합계 ÷ 실외기 용량.
+  // 목표 100%, 허용 50% ~ 103%. 103% 초과 = 실외기 용량 부족(over), 50% 미만 = 실외기 과대(low)."
+  // 선정표 주석의 "100% 이내"·기존 코드의 1.3과 상충했으나 회의 확정값을 따른다.
+  //
+  // 이 값은 관리 UI(조합비 정책)에서 바꿀 수 있는 '초기 기본값'이지 불변 상수가 아니다.
+  // 실외기 모델별 override는 ComboPolicy가 해석한다.
+  static readonly DEFAULT = new ComboRange(0.5, 1.03)
 }

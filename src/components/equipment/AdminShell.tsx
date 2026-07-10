@@ -9,7 +9,7 @@
 import type { ReactNode } from 'react'
 import { CURRENT_USER, GNB_MENUS } from '../../data'
 
-export type AdminMenuKey = 'products'
+export type AdminMenuKey = 'products' | 'combo'
 
 interface AdminMenu {
   key: AdminMenuKey
@@ -17,19 +17,22 @@ interface AdminMenu {
   href: string
 }
 
-const ADMIN_MENUS: readonly AdminMenu[] = [{ key: 'products', label: '장비 목록관리', href: '?view=equipment' }]
+const ADMIN_MENUS: readonly AdminMenu[] = [
+  { key: 'products', label: '장비 목록관리', href: '?view=equipment' },
+  { key: 'combo', label: '조합비 정책', href: '?view=combo' },
+]
 
 const HOME_HREF = './'
 
 interface AdminShellProps {
   active: AdminMenuKey
-  description?: string // 페이지 한 줄 설명
   actions?: ReactNode // 페이지 주 액션(등록·업로드)
   children: ReactNode
 }
 
-export default function AdminShell({ active, description, actions, children }: AdminShellProps) {
+export default function AdminShell({ active, actions, children }: AdminShellProps) {
   const current = ADMIN_MENUS.find((m) => m.key === active)!
+  const adminHome = ADMIN_MENUS[0].href // 브레드크럼의 '관리자'는 관리 영역의 첫 화면으로 간다
 
   return (
     // adm-root: LG 디자인 시스템 적용 스코프. 생성·검도 화면은 무채색을 유지한다.
@@ -44,7 +47,7 @@ export default function AdminShell({ active, description, actions, children }: A
                 {m}
               </a>
             ))}
-            <a href={current.href} className="on">
+            <a href={adminHome} className="on">
               관리자
             </a>
           </nav>
@@ -76,7 +79,7 @@ export default function AdminShell({ active, description, actions, children }: A
               <span className="sep" aria-hidden="true">
                 /
               </span>
-              <a href={current.href}>관리자</a>
+              <a href={adminHome}>관리자</a>
               <span className="sep" aria-hidden="true">
                 /
               </span>
@@ -86,7 +89,6 @@ export default function AdminShell({ active, description, actions, children }: A
             <div className="adm-head-row">
               <div className="adm-head-text">
                 <h1 className="title">{current.label}</h1>
-                {description && <p className="adm-head-desc">{description}</p>}
               </div>
               {actions && <div className="adm-head-actions">{actions}</div>}
             </div>

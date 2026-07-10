@@ -33,7 +33,7 @@ describe('OutdoorUnit (실외기 값객체)', () => {
   })
 
   describe('comboRange — 제품군별 조합비 허용범위', () => {
-    it('comboRange 미지정 시 기본값 ComboRange.DEFAULT(0.5~1.3)를 가진다', () => {
+    it('comboRange 미지정 시 기본값 ComboRange.DEFAULT(0.5~1.03)를 가진다', () => {
       const odu = make()
       expect(odu.comboRange.equals(ComboRange.DEFAULT)).toBe(true)
     })
@@ -47,7 +47,7 @@ describe('OutdoorUnit (실외기 값객체)', () => {
     it('equals: comboRange가 다르면 false, 같으면 true', () => {
       expect(make().equals(make({ comboRange: new ComboRange(0.3, 1.0) }))).toBe(false)
       expect(make({ comboRange: new ComboRange(0.3, 1.0) }).equals(make({ comboRange: new ComboRange(0.3, 1.0) }))).toBe(true)
-      expect(make().equals(make({ comboRange: new ComboRange(0.5, 1.3) }))).toBe(true) // DEFAULT와 동값
+      expect(make().equals(make({ comboRange: new ComboRange(0.5, 1.03) }))).toBe(true) // DEFAULT와 동값
     })
   })
 

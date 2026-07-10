@@ -48,10 +48,18 @@ describe('ComboRatio (조합비 값객체)', () => {
       expect(new ComboRatio(101, 100).judgeWith(range)).toBe('OVERLOADED') // 1.01
     })
 
-    it('DEFAULT 범위로 판정하면 기존 상수(0.5~1.3) 판정과 동일하다', () => {
-      expect(new ComboRatio(110.6, 100).judgeWith(ComboRange.DEFAULT)).toBe('OK') // GHP 1.106
+    it('DEFAULT(0.5~1.03) 경계에서 3분기한다', () => {
+      expect(new ComboRatio(100, 100).judgeWith(ComboRange.DEFAULT)).toBe('OK') // 목표 100%
+      expect(new ComboRatio(103, 100).judgeWith(ComboRange.DEFAULT)).toBe('OK') // 상한 경계
       expect(new ComboRatio(49, 100).judgeWith(ComboRange.DEFAULT)).toBe('UNDERLOADED')
-      expect(new ComboRatio(131, 100).judgeWith(ComboRange.DEFAULT)).toBe('OVERLOADED')
+      expect(new ComboRatio(104, 100).judgeWith(ComboRange.DEFAULT)).toBe('OVERLOADED')
+    })
+
+    // 실데이터의 GHP 1.106은 선정표에 '정상'으로 기재돼 있으나 전역 기본(1.03)을 넘는다.
+    // 이것이 모델별 override가 필요한 이유다 — 전역 기본을 GHP에 맞춰 늘리면 EHP가 헐거워진다.
+    it('GHP 1.106은 전역 기본에서 과부하지만, 모델별 override로 정상이 된다', () => {
+      expect(new ComboRatio(110.6, 100).judgeWith(ComboRange.DEFAULT)).toBe('OVERLOADED')
+      expect(new ComboRatio(110.6, 100).judgeWith(new ComboRange(0.5, 1.12))).toBe('OK')
     })
   })
 

@@ -85,13 +85,13 @@ describe('OutdoorGroup (실외기 조합 애그리거트)', () => {
       expect(g.warnings()).toContain('UNDERLOADED')
     })
 
-    it('[경계] 0.5/1.3은 경고 없음, 0.49/1.31은 경고', () => {
+    it('[경계] 0.5/1.03은 경고 없음, 0.49/1.04는 경고', () => {
       const capa = 100 // 실외기 용량 100kW로 경계 계산 단순화
       const at = (kw: number) => group({ outdoorUnit: odu({ capacityKw: capa, maxConnections: 99 }), indoorUnits: [idu('AC_1', kw)] })
       expect(at(50).warnings()).not.toContain('UNDERLOADED') // 0.50
-      expect(at(130).warnings()).not.toContain('OVERLOADED') // 1.30
+      expect(at(103).warnings()).not.toContain('OVERLOADED') // 1.03
       expect(at(49).warnings()).toContain('UNDERLOADED') // 0.49
-      expect(at(131).warnings()).toContain('OVERLOADED') // 1.31
+      expect(at(104).warnings()).toContain('OVERLOADED') // 1.04
     })
 
     it('실외기 comboRange(0.3~1.0)를 따르면 조합비 0.32는 경고 없음이다', () => {

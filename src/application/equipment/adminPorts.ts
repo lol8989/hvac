@@ -2,6 +2,8 @@
 // 생성/검도의 읽기 포트(EquipmentMaster=PUBLISHED만)와 구분된다.
 // 구현: infrastructure/equipment/sqlite/SqliteEquipmentAdminRepository (POC), 추후 마스터 API로 교체.
 
+import type { ComboPolicy } from '../../domain/equipment/ComboPolicy'
+import type { ComboRange } from '../../domain/shared/ComboRange'
 import type { HpSource } from '../../domain/equipment/HpSource'
 import type { PublishStatus } from '../../domain/equipment/PublishStatus'
 import type { ProductDraft, ProductPatch } from '../../domain/equipment/ProductDraft'
@@ -66,6 +68,17 @@ export interface EquipmentAdminRepository {
   // 일괄 상태 전이. 전이 불가·게시 전제조건 미달 행은 사유와 함께 건너뛰고 나머지만 적용한다
   // (한 건 때문에 수백 건이 실패하지 않도록). 적용분은 단일 트랜잭션.
   setStatusMany(ids: readonly number[], next: PublishStatus): BulkStatusResult
+
+  // ── 조합비 정책 ──
+  // 전역 기본 + 실외기 모델별 override. 게시 상태와 무관하다(스펙이 아니라 정책이므로 게시본도 조정 가능).
+  getComboPolicy(): ComboPolicy
+
+  // 전역 기본 저장. throws INVALID_FIELD(min>=max 등 ComboRange 불변식 위반)
+  saveGlobalComboRange(range: ComboRange): void
+
+  // 모델별 override 저장. range가 null이면 override를 걷어내 전역 기본으로 되돌린다.
+  // throws NOT_FOUND(모델), INVALID_FIELD
+  setProductComboRange(modelCode: string, range: ComboRange | null): void
 
   // 스펙시트 업로드 일괄 등록. verdict==='OK' 행만 DRAFT로 적재하고 롱테일 스펙을 product_specs에 저장한다.
   // 오류·중복 행은 조용히 건너뛴다(사유는 미리보기에서 이미 제시됨). 반환값: 실제 적재 건수.

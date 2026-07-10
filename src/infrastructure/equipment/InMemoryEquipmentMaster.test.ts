@@ -2,6 +2,7 @@
 // 시드 근거: 표준 260415 장비선정표 엑셀(실내기 Multi V Super 탭, 실외기 스펙).
 import { describe, it, expect } from 'vitest'
 import { InMemoryEquipmentMaster } from './InMemoryEquipmentMaster'
+import { ComboRange } from '../../domain/shared/ComboRange'
 
 describe('InMemoryEquipmentMaster (게시 SSOT + 게이트)', () => {
   const master = new InMemoryEquipmentMaster()
@@ -54,10 +55,12 @@ describe('InMemoryEquipmentMaster (게시 SSOT + 게이트)', () => {
       expect(s.priceWithVatKrw).toBeNull()
     })
 
-    it('comboMin/Max는 정책 미확정으로 전부 미지정(기본 0.5~1.3 적용 대상)', () => {
+    // 인메모리 마스터에는 정책 저장소가 없다 → 전역 기본을 싣는다.
+    // (SQLite 마스터는 모델별 override > 전역 기본으로 해석한다. 두 백엔드가 같은 계약을 낸다.)
+    it('comboMin/Max에 전역 기본(0.5~1.03)을 실어 노출한다', () => {
       for (const e of pub) {
-        expect(e.comboMin).toBeUndefined()
-        expect(e.comboMax).toBeUndefined()
+        expect(e.comboMin).toBe(ComboRange.DEFAULT.min)
+        expect(e.comboMax).toBe(ComboRange.DEFAULT.max)
       }
     })
 

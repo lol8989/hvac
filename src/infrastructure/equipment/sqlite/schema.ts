@@ -6,7 +6,8 @@
 // 시드 '값' 변경은 별도로 seedData.ts의 SEED_HASH(내용 해시)가 자동 무효화하므로 여기 손댈 필요 없음.
 // v2: 시드 제품에 created_at/updated_at/published_at 스탬프 추가(등록·수정·게시일 컬럼 표기).
 // v3: product_series.is_vrf(계열별 게시 요건·HP 유도 분기) + products.hp_source(마력 출처).
-export const SCHEMA_VERSION = 3
+// v4: system_settings(전역 조합비 기본) + products.combo_min/combo_max(실외기 모델별 override).
+export const SCHEMA_VERSION = 4
 
 export const SCHEMA_SQL = `
 PRAGMA foreign_keys = ON;
@@ -60,12 +61,21 @@ CREATE TABLE products (
   cop_heating              REAL,
   efficiency_grade_id      INTEGER REFERENCES efficiency_grades(id),
   max_connections          INTEGER,                   -- 실외기 최대 연결 실내기 수
+  -- 조합비 허용범위 override(실외기). NULL이면 system_settings의 전역 기본을 따른다.
+  combo_min                REAL,
+  combo_max                REAL,
   status                   TEXT NOT NULL DEFAULT 'DRAFT'
                            CHECK (status IN ('DRAFT','PUBLISHED','ARCHIVED')),
   published_at             TEXT,
   discontinued_at          TEXT,
   created_at               TEXT,
   updated_at               TEXT
+);
+
+-- 전역 설정(key/value). 현재는 조합비 기본 허용범위: combo.ratio.min / combo.ratio.max
+CREATE TABLE system_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 
 CREATE TABLE product_specs (

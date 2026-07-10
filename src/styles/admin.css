@@ -88,11 +88,6 @@
   color: var(--n-900);
   letter-spacing: -0.02em;
 }
-.adm-head-desc {
-  margin: var(--sp-1) 0 0;
-  font-size: var(--fs-sm);
-  color: var(--n-500);
-}
 .adm-head-actions {
   margin-left: auto;
   display: flex;
@@ -304,23 +299,113 @@
 }
 .adm-main > .adm-head,
 .adm-main > .eq-chips,
-.adm-main > .eq-toolbar,
+.adm-main > .combo-global,
+.adm-main > .eq-searchbar,
+.adm-main > .eq-filterbar,
 .adm-main > .eq-bulk,
 .adm-main > .eq-foot {
   flex-shrink: 0;
 }
 
-/* ── 툴바 ── */
-.eq-toolbar {
+/* ── 조합비 정책: 전역 기본 ── */
+.combo-global {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--n-0);
+  border-bottom: 1px solid var(--n-200);
+}
+.combo-global-text {
+  margin: 0 auto 0 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--n-900);
+}
+.combo-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--n-500);
+}
+.combo-field .field {
+  width: 84px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.combo-field em {
+  font-style: normal;
+  color: var(--n-500);
+}
+.combo-tilde {
+  color: var(--n-300);
+}
+.combo-err {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--stop);
+}
+.combo-err-inline {
+  font-size: var(--fs-xs);
+  color: var(--stop);
+}
+
+/* 모델별 예외가 걸린 행은 한눈에 구분된다 */
+.combo-overridden td:first-child {
+  box-shadow: inset 3px 0 0 var(--lg-red);
+}
+.combo-tag {
+  display: inline-block;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--lg-red);
+  background: var(--lg-red-wash);
+  border: 1px solid var(--lg-red-line);
+  border-radius: var(--r-pill);
+  padding: 2px 9px;
+}
+.combo-muted {
+  font-size: var(--fs-xs);
+  color: var(--n-500);
+}
+.combo-cell {
+  width: 76px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.eq-count b {
+  color: var(--n-900);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 탐색: 검색 바(1행) + 필터 바(2행) ──
+   검색은 명시적 제출이라 액션이 붙고, 필터는 즉시 반영이라 값만 있다. 줄을 나눠 성격을 구분한다. */
+.eq-searchbar {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-5);
   background: var(--n-0);
+  border-bottom: 1px solid var(--n-150);
+}
+.eq-filterbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-5) var(--sp-3);
+  background: var(--n-0);
   border-bottom: 1px solid var(--n-200);
 }
-.eq-toolbar .eq-search {
-  min-width: 280px;
+.eq-searchbar .sp,
+.eq-filterbar .sp {
+  flex: 1;
+}
+.eq-searchbar .eq-search {
+  min-width: 300px;
 }
 
 /* ── 일괄 작업 바 ── */

@@ -8,9 +8,9 @@ describe('ComboRange (조합비 허용범위 값객체)', () => {
     expect(r.max).toBe(1.0)
   })
 
-  it('DEFAULT는 (0.5, 1.3)이다', () => {
+  it('DEFAULT는 (0.5, 1.03)이다 — Confluence 자동배치 룰 "허용 50%~103%"', () => {
     expect(ComboRange.DEFAULT.min).toBe(0.5)
-    expect(ComboRange.DEFAULT.max).toBe(1.3)
+    expect(ComboRange.DEFAULT.max).toBe(1.03)
   })
 
   it('contains: 경계값 min/max는 범위에 포함된다', () => {

@@ -7,7 +7,7 @@ import AdminShell from './AdminShell'
 
 const renderShell = () =>
   render(
-    <AdminShell active="products" description="게시된 모델만 노출됩니다." actions={<button>＋ 제품 등록</button>}>
+    <AdminShell active="products" actions={<button>＋ 제품 등록</button>}>
       <div>본문</div>
     </AdminShell>,
   )
@@ -39,11 +39,16 @@ describe('AdminShell', () => {
     expect(here.tagName).not.toBe('A')
   })
 
-  it('페이지 헤더에 타이틀·설명·주 액션을 렌더한다', () => {
+  it('페이지 헤더에 타이틀과 주 액션을 렌더한다', () => {
     renderShell()
     expect(screen.getByRole('heading', { name: '장비 목록관리' })).toBeInTheDocument()
-    expect(screen.getByText('게시된 모델만 노출됩니다.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '＋ 제품 등록' })).toBeInTheDocument()
     expect(screen.getByText('본문')).toBeInTheDocument()
+  })
+
+  it('사이드 메뉴에 조합비 정책이 함께 노출된다', () => {
+    renderShell()
+    const side = screen.getByRole('navigation', { name: '관리자 메뉴' })
+    expect(within(side).getByRole('link', { name: '조합비 정책' })).toHaveAttribute('href', '?view=combo')
   })
 })

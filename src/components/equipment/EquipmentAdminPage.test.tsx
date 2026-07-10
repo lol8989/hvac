@@ -4,6 +4,8 @@ import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import EquipmentAdminPage from './EquipmentAdminPage'
 import type { ProductRow, EquipmentAdminRepository, SeriesOption } from '../../application/equipment/adminPorts'
 import { EquipmentDomainError } from '../../domain/equipment/errors'
+import { ComboPolicy } from '../../domain/equipment/ComboPolicy'
+import { ComboRange } from '../../domain/shared/ComboRange'
 
 const mk = (over: Partial<ProductRow>): ProductRow => ({
   id: 0, categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP',
@@ -33,6 +35,9 @@ const makeAdmin = (over: Partial<EquipmentAdminRepository> = {}): EquipmentAdmin
   setStatus: vi.fn(),
   setStatusMany: vi.fn(() => ({ applied: 0, skipped: [] })),
   importProducts: vi.fn(() => 0),
+  getComboPolicy: () => new ComboPolicy(ComboRange.DEFAULT),
+  saveGlobalComboRange: vi.fn(),
+  setProductComboRange: vi.fn(),
   ...over,
 })
 
@@ -213,13 +218,32 @@ describe('EquipmentAdminPage (관리 목록)', () => {
     })
   })
 
-  it('검색으로 모델명 필터, 0건이면 빈 상태 안내', () => {
+  // 검색은 입력할 때가 아니라 버튼(또는 Enter)으로 확정한다.
+  it('검색 버튼을 눌러야 목록이 걸러진다', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
     const search = screen.getByPlaceholderText('모델명·장비번호 검색')
     fireEvent.change(search, { target: { value: 'ARCHX' } })
+    expect(bodyRows()).toHaveLength(15) // 아직 그대로
+
+    fireEvent.click(screen.getByRole('button', { name: '검색' }))
     expect(bodyRows()).toHaveLength(1)
-    fireEvent.change(search, { target: { value: 'ZZZNONE' } })
+  })
+
+  it('0건이면 빈 상태를 안내한다', () => {
+    render(<EquipmentAdminPage admin={makeAdmin()} />)
+    fireEvent.change(screen.getByPlaceholderText('모델명·장비번호 검색'), { target: { value: 'ZZZNONE' } })
+    fireEvent.click(screen.getByRole('button', { name: '검색' }))
     expect(screen.getByText('조건에 맞는 제품이 없습니다')).toBeInTheDocument()
+  })
+
+  it('초기화는 검색어까지 지운다', () => {
+    render(<EquipmentAdminPage admin={makeAdmin()} />)
+    const search = screen.getByPlaceholderText('모델명·장비번호 검색')
+    fireEvent.change(search, { target: { value: 'ARCHX' } })
+    fireEvent.click(screen.getByRole('button', { name: '검색' }))
+    fireEvent.click(screen.getByRole('button', { name: '초기화' }))
+    expect(search).toHaveValue('')
+    expect(bodyRows()).toHaveLength(15)
   })
 })
 
