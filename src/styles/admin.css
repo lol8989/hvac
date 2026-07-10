@@ -44,27 +44,121 @@
   border-bottom-color: var(--lg-red);
 }
 
-/* ── 서브 헤더 ── */
-.adm-root .sub {
+/* ── 페이지 헤더 (브레드크럼 + 타이틀 + 주 액션) ── */
+.adm-head {
   background: var(--n-0);
-  color: var(--n-900);
   border-bottom: 1px solid var(--n-200);
-  height: 52px;
-  padding: 0 var(--sp-5);
+  padding: var(--sp-3) var(--sp-5) var(--sp-4);
 }
-.adm-root .sub .title {
-  text-align: left;
-  font-size: var(--fs-xl);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-.adm-root .sub .b {
-  background: var(--n-100);
-  color: var(--n-700);
-  border: 1px solid var(--n-200);
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
   font-size: var(--fs-sm);
+  color: var(--n-500);
+}
+.crumbs a {
+  color: var(--n-500);
+  text-decoration: none;
+}
+.crumbs a:hover {
+  color: var(--lg-red);
+  text-decoration: underline;
+}
+.crumbs .sep {
+  color: var(--n-300);
+}
+.crumbs [aria-current='page'] {
+  color: var(--n-800);
+  font-weight: 500;
+}
+.adm-head-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-4);
+  margin-top: var(--sp-2);
+}
+.adm-head-text {
+  min-width: 0;
+}
+.adm-head .title {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  color: var(--n-900);
+  letter-spacing: -0.02em;
+}
+.adm-head-desc {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--n-500);
+}
+.adm-head-actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+/* ── 상태 칩 (요약 + 필터) ── */
+.eq-chips {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--n-0);
+  border-bottom: 1px solid var(--n-200);
+}
+.eq-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border: 1px solid var(--n-200);
+  background: var(--n-0);
   border-radius: var(--r-pill);
-  padding: 3px 11px;
+  padding: 6px 14px;
+  font-size: var(--fs-md);
+  color: var(--n-700);
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.eq-chip:hover {
+  border-color: var(--n-500);
+}
+.eq-chip-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--n-900);
+}
+/* 선택된 칩만 브랜드 색을 입는다. 상태 자체의 의미색은 좌측 점으로 표시한다. */
+.eq-chip.on {
+  border-color: var(--lg-red);
+  background: var(--lg-red-wash);
+  color: var(--lg-red);
+  font-weight: 700;
+}
+.eq-chip.on .eq-chip-count {
+  color: var(--lg-red);
+}
+.eq-chip.published .eq-chip-label::before,
+.eq-chip.draft .eq-chip-label::before,
+.eq-chip.archived .eq-chip-label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.eq-chip.published .eq-chip-label::before {
+  background: var(--ok);
+}
+.eq-chip.draft .eq-chip-label::before {
+  background: var(--idle);
+}
+.eq-chip.archived .eq-chip-label::before {
+  background: var(--stop);
 }
 
 /* ── 버튼 ── */
@@ -163,10 +257,11 @@
   display: flex;
   flex-direction: column;
 }
-.adm-main > .sub,
+.adm-main > .adm-head,
+.adm-main > .eq-chips,
 .adm-main > .eq-toolbar,
 .adm-main > .eq-bulk,
-.adm-main > .eq-pager {
+.adm-main > .eq-foot {
   flex-shrink: 0;
 }
 
@@ -182,8 +277,8 @@
 .eq-toolbar .sp {
   flex: 1;
 }
-.eq-toolbar input.field {
-  min-width: 240px;
+.eq-toolbar .eq-search {
+  min-width: 280px;
 }
 .eq-count {
   font-size: var(--fs-md);
@@ -354,16 +449,32 @@
   border-color: var(--stop-line);
 }
 
-/* ── 페이저 ── */
-.eq-pager {
+/* ── 하단: 표시 범위 + 페이지 이동 ── */
+.eq-foot {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--sp-4);
-  padding: var(--sp-4);
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--n-0);
+  border-top: 1px solid var(--n-200);
   font-size: var(--fs-md);
   color: var(--n-700);
+}
+.eq-foot .sp {
+  flex: 1;
+}
+.eq-foot-total {
+  color: var(--n-500);
   font-variant-numeric: tabular-nums;
+}
+.eq-foot-page {
+  min-width: 64px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.adm-root .field.sm {
+  padding: 4px 8px;
+  font-size: var(--fs-sm);
 }
 
 /* ── 행 액션 ── */

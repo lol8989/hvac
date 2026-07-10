@@ -5,6 +5,7 @@ import ProductFormModal from './ProductFormModal'
 import SpecSheetUploadModal from './SpecSheetUploadModal'
 import BulkActionBar from './BulkActionBar'
 import AdminShell from './AdminShell'
+import StatusFilterChips from './StatusFilterChips'
 import { useSubmitGuard } from './useSubmitGuard'
 import { formatDateTime } from '../../presentation/formatDateTime'
 
@@ -118,13 +119,32 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
     return c
   }, [all])
 
+  const filterOn = cat !== 'ALL' || seriesCode !== 'ALL' || status !== 'ALL' || q !== ''
+  const resetFilters = () => {
+    setCat('ALL')
+    setSeriesCode('ALL')
+    setStatus('ALL')
+    setQ('')
+    setPage(0)
+  }
+
   return (
     <AdminShell
       active="products"
-      title="장비 목록관리"
-      badge={`게시 ${counts.PUBLISHED} · 작성중 ${counts.DRAFT} · 단종 ${counts.ARCHIVED}`}
+      description="게시(PUBLISHED)된 모델만 생성·검도에 노출됩니다."
+      actions={
+        <>
+          <button className="btn" onClick={() => setUploading(true)}>스펙시트 업로드</button>
+          <button className="btn primary" onClick={() => setEditing({ mode: 'create' })}>＋ 제품 등록</button>
+        </>
+      }
     >
-      <div className="eq-toolbar">
+      {/* 상태 요약 = 상태 필터. 관리자의 첫 질문은 "지금 몇 건이 게시 대기 중인가"다. */}
+      <StatusFilterChips counts={counts} total={all.length} value={status} onChange={resetPage(setStatus)} />
+
+      {/* 탐색 전용 툴바 — 생성 액션(등록·업로드)과 표시 설정(건수)은 여기 두지 않는다. */}
+      <div className="eq-toolbar" role="search">
+        <input className="field eq-search" aria-label="모델명·장비번호 검색" placeholder="모델명·장비번호 검색" value={q} onChange={(e) => resetPage(setQ)(e.target.value)} />
         <select className="field" aria-label="분류 필터" value={cat} onChange={(e) => resetPage(setCat)(e.target.value as typeof cat)}>
           <option value="ALL">전체 분류</option>
           <option value="INDOOR">실내기</option>
@@ -141,25 +161,9 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
               </option>
             ))}
         </select>
-        <select className="field" aria-label="상태 필터" value={status} onChange={(e) => resetPage(setStatus)(e.target.value as typeof status)}>
-          <option value="ALL">전체 상태</option>
-          <option value="PUBLISHED">게시</option>
-          <option value="DRAFT">작성중</option>
-          <option value="ARCHIVED">단종</option>
-        </select>
-        <input className="field" aria-label="모델명·장비번호 검색" placeholder="모델명·장비번호 검색" value={q} onChange={(e) => resetPage(setQ)(e.target.value)} />
+        <button className="btn sm" onClick={resetFilters} disabled={!filterOn}>초기화</button>
         <div className="sp" />
-        <span className="eq-count">{filtered.length}건</span>
-        {/* 표시 건수를 바꾸면 보고 있던 페이지 번호가 범위를 벗어날 수 있어 첫 페이지로 되돌린다. */}
-        <select className="field" aria-label="표시 건수" value={pageSize} onChange={(e) => resetPage(setPageSize)(Number(e.target.value))}>
-          {PAGE_SIZES.map((n) => (
-            <option key={n} value={n}>
-              {n}건씩
-            </option>
-          ))}
-        </select>
-        <button className="btn sm" onClick={() => setUploading(true)}>스펙시트 업로드</button>
-        <button className="btn sm primary" onClick={() => setEditing({ mode: 'create' })}>＋ 제품 등록</button>
+        <span className="eq-count">{filtered.length.toLocaleString()}건</span>
       </div>
 
       <BulkActionBar
@@ -248,9 +252,22 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
         </table>
       </div>
 
-      <div className="eq-pager">
+      {/* 표시 설정과 페이지 이동은 테이블 바로 아래에 함께 둔다 — 둘 다 '지금 보는 범위'를 다룬다. */}
+      <div className="eq-foot">
+        <span className="eq-foot-total">
+          총 {filtered.length.toLocaleString()}건 중 {rows.length.toLocaleString()}건 표시
+        </span>
+        {/* 표시 건수를 바꾸면 보고 있던 페이지 번호가 범위를 벗어날 수 있어 첫 페이지로 되돌린다. */}
+        <select className="field sm" aria-label="표시 건수" value={pageSize} onChange={(e) => resetPage(setPageSize)(Number(e.target.value))}>
+          {PAGE_SIZES.map((n) => (
+            <option key={n} value={n}>
+              {n}건씩
+            </option>
+          ))}
+        </select>
+        <div className="sp" />
         <button className="btn sm" disabled={cur === 0} onClick={() => setPage(cur - 1)}>← 이전</button>
-        <span>{cur + 1} / {pageCount}</span>
+        <span className="eq-foot-page">{cur + 1} / {pageCount}</span>
         <button className="btn sm" disabled={cur >= pageCount - 1} onClick={() => setPage(cur + 1)}>다음 →</button>
       </div>
 

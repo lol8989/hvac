@@ -43,10 +43,34 @@ const fill = (label: string, value: string) => fireEvent.change(screen.getByLabe
 beforeEach(() => vi.clearAllMocks())
 
 describe('EquipmentAdminPage (관리 목록)', () => {
-  it('전 상태 요약과 상태 뱃지를 렌더한다', () => {
+  // 요약 pill과 상태 드롭다운이 같은 정보를 두 번 말하던 것을 상태 칩 하나로 합쳤다.
+  it('상태 칩이 전 상태 건수를 요약한다 (필터와 무관한 전체 기준)', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
-    expect(screen.getByText(/게시 13 · 작성중 1 · 단종 1/)).toBeInTheDocument()
-    expect(screen.getAllByText('게시').length).toBeGreaterThan(0)
+    const chips = screen.getByRole('group', { name: '상태 필터' })
+    const countOf = (label: string) => within(within(chips).getByRole('button', { name: `상태 필터: ${label}` })).getByText(/^\d/).textContent
+    expect(countOf('전체')).toBe('15')
+    expect(countOf('게시')).toBe('13')
+    expect(countOf('작성중')).toBe('1')
+    expect(countOf('단종')).toBe('1')
+  })
+
+  it('상태 칩을 눌러도 건수는 전체 기준을 유지한다 (필터로 줄어들지 않는다)', () => {
+    render(<EquipmentAdminPage admin={makeAdmin()} />)
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 작성중' }))
+    const chips = screen.getByRole('group', { name: '상태 필터' })
+    expect(within(chips).getByRole('button', { name: '상태 필터: 게시' })).toHaveTextContent('13')
+    expect(within(chips).getByRole('button', { name: '상태 필터: 작성중' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('초기화 버튼은 필터가 걸렸을 때만 활성화되고, 누르면 전 조건이 풀린다', () => {
+    render(<EquipmentAdminPage admin={makeAdmin()} />)
+    const reset = () => screen.getByRole('button', { name: '초기화' })
+    expect(reset()).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 작성중' }))
+    expect(reset()).toBeEnabled()
+    fireEvent.click(reset())
+    expect(bodyRows()).toHaveLength(15)
+    expect(screen.getByRole('button', { name: '상태 필터: 전체' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('한 페이지에 최대 20행을 보여준다(15행이면 1페이지)', () => {
@@ -92,7 +116,7 @@ describe('EquipmentAdminPage (관리 목록)', () => {
 
   it('상태 필터(작성중)로 DRAFT만 남는다', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'DRAFT' } })
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 작성중' }))
     const r = bodyRows()
     expect(r).toHaveLength(1)
     expect(within(r[0]).getByText('DRAFTX')).toBeInTheDocument()
@@ -133,26 +157,26 @@ describe('행 액션 (게시 전이 · 게시본 잠금)', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
     expect(screen.getByRole('button', { name: 'PUB0 단종' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'PUB0 게시' })).not.toBeInTheDocument() // 이미 게시
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'DRAFT' } })
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 작성중' }))
     expect(screen.queryByRole('button', { name: 'DRAFTX 게시' })).not.toBeInTheDocument() // 게시는 일괄 게시로만
     expect(screen.getByRole('button', { name: 'DRAFTX 등록 취소' })).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'ARCHIVED' } })
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 단종' }))
     expect(screen.getByRole('button', { name: 'ARCHX 재게시' })).toBeInTheDocument()
   })
 
   it('게시·보관본의 수정 버튼은 비활성이고, 작성중만 수정할 수 있다', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
     expect(screen.getByRole('button', { name: 'PUB0 수정' })).toBeDisabled()
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'ARCHIVED' } })
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 단종' }))
     expect(screen.getByRole('button', { name: 'ARCHX 수정' })).toBeDisabled()
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'DRAFT' } })
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 작성중' }))
     expect(screen.getByRole('button', { name: 'DRAFTX 수정' })).toBeEnabled()
   })
 
   it('재게시 버튼 클릭 시 setStatus(PUBLISHED)를 호출하고 완료 토스트를 띄운다', () => {
     const admin = makeAdmin()
     render(<EquipmentAdminPage admin={admin} />)
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'ARCHIVED' } })
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 단종' }))
     fireEvent.click(screen.getByRole('button', { name: 'ARCHX 재게시' }))
     expect(admin.setStatus).toHaveBeenCalledWith(101, 'PUBLISHED')
     expect(screen.getByRole('status')).toHaveTextContent('ARCHX — 재게시 완료')
@@ -216,7 +240,7 @@ describe('일괄 선택 · 일괄 게시', () => {
     const admin = makeAdmin()
     render(<EquipmentAdminPage admin={admin} />)
     fireEvent.click(screen.getByRole('checkbox', { name: '이 페이지 전체 선택' })) // 15건
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'DRAFT' } })
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 작성중' }))
     expect(bulkBar()).toHaveTextContent('1건 선택')
     fireEvent.click(screen.getByRole('button', { name: '일괄 게시' }))
     expect(admin.setStatusMany).toHaveBeenCalledWith([100], 'PUBLISHED')
@@ -297,7 +321,7 @@ describe('등록/수정 폼 (더블클릭 방지 포함)', () => {
   it('행 액션(재게시)도 연타 시 setStatus가 1회만 호출된다', () => {
     const admin = makeAdmin()
     render(<EquipmentAdminPage admin={admin} />)
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'ARCHIVED' } })
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 단종' }))
     const republish = screen.getByRole('button', { name: 'ARCHX 재게시' })
     fireEvent.click(republish)
     fireEvent.click(republish)
@@ -348,7 +372,7 @@ describe('등록/수정 폼 (더블클릭 방지 포함)', () => {
   it('수정 폼은 기존 값으로 채워지고 updateProduct를 호출한다', () => {
     const admin = makeAdmin()
     render(<EquipmentAdminPage admin={admin} />)
-    fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'DRAFT' } })
+    fireEvent.click(screen.getByRole('button', { name: '상태 필터: 작성중' }))
     fireEvent.click(screen.getByRole('button', { name: 'DRAFTX 수정' }))
     expect(screen.getByLabelText('모델명')).toHaveValue('DRAFTX')
     fill('냉방 용량(W)', '21000')
