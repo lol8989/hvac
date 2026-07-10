@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { ROOMS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, outdoorIdxByModel, DEFAULT_COMBINATION } from './data'
+import { canManageEquipment } from './domain/auth/Permission'
 import type { ModelCard, Room } from './data'
 import ReportStrip from './components/ReportStrip'
 import Viewer, { LAYER_OPTIONS, type LayerFilter, type ViewerHandle, type TileManifest } from './components/Viewer'
@@ -527,7 +528,8 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
             {GNB_MENUS.map((m) => (
               <a key={m} href="#" className={m === ACTIVE_MENU ? 'on' : undefined}>{m}</a>
             ))}
-            <a href="?view=equipment">관리자</a>
+            {/* 관리자 메뉴는 권한자에게만 보인다. 숨기는 것만으로는 부족해 진입 경로도 막는다(main.tsx). */}
+            {canManageEquipment(CURRENT_USER) && <a href="?view=equipment">관리자</a>}
           </nav>
         </div>
         <div className="r">

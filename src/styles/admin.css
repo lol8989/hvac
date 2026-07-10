@@ -204,6 +204,51 @@
   outline: none;
 }
 
+/* ── 403: 권한 없는 접근 ── */
+.forbidden {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+}
+.forbidden-card {
+  max-width: 480px;
+  text-align: center;
+  background: var(--n-0);
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 40px 32px;
+}
+.forbidden-code {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--lg-red);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.forbidden-title {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--n-900);
+}
+.forbidden-desc {
+  margin: var(--sp-3) 0 var(--sp-5);
+  font-size: var(--fs-md);
+  color: var(--n-500);
+  line-height: 1.7;
+}
+.forbidden-desc b {
+  color: var(--n-800);
+}
+.forbidden .btn {
+  display: inline-block;
+  text-decoration: none;
+}
+
 /* ── 셸: 좌측 사이드 메뉴 + 본문 ── */
 /* 페이지는 뷰포트에 고정하고 테이블만 스크롤한다.
    툴바·일괄 바·페이저를 항상 손 닿는 곳에 두고, sticky 헤더가 뷰포트가 아니라

@@ -234,6 +234,22 @@ npm run build      # 프로덕션 빌드
 
 ---
 
+## 8.1 권한 (Authorization)
+
+로그인·세션은 아직 구현하지 않았다. **권한 규칙만 먼저 세워 두고 사용자 역할을 하드코딩한다**(주인님 지시 2026-07-10).
+
+- 규칙은 도메인에 둔다: `src/domain/auth/Permission.ts` (`Role`, `Principal`, `canManageEquipment`).
+- **fail-closed**: 사용자를 알 수 없거나 모르는 역할이면 거부한다. 새 역할이 규칙에 안 적혔다면 조용히 열리는 것보다 조용히 막히는 편이 안전하다.
+- 목업 사용자는 `src/data.ts`의 `CURRENT_USER.role`. 일반 사용자 화면을 보려면 `'USER'`로 바꾼다.
+- 인증이 붙으면 `CURRENT_USER`를 세션에서 만든 `Principal`로 바꾸기만 한다. 규칙과 화면 분기는 그대로 남는다.
+
+**메뉴를 숨기는 것은 권한 통제가 아니다.** 반드시 진입 경로도 막는다.
+- GNB 메뉴 노출: `canManageEquipment(CURRENT_USER) && <a …>`
+- 라우팅 차단: `main.tsx`가 권한 없으면 `ForbiddenPage`(403)를 렌더하고 **저장소(SQLite)를 열지도 않는다.**
+- 실서비스에서는 서버가 먼저 거부한다. 클라이언트 게이트는 그 응답을 사용자에게 옮기는 자리일 뿐이다.
+
+---
+
 ## 9. 용어집 (Ubiquitous Language)
 
 | 용어 | 코드/영문 | 의미 |

@@ -1,5 +1,6 @@
 // 목업 데이터 (장비일람표 기반). 실제 서비스에서는 장비마스터 API에서 로드.
 
+import type { Principal } from './domain/auth/Permission'
 import type { EnergySourceCode } from './domain/shared/EnergySource'
 import { DEFAULT_UNIT_LOADS } from './domain/shared/UnitLoad'
 
@@ -22,12 +23,17 @@ const roomCoolKw = (areaM2: number, usage: string): number =>
   Math.round((areaM2 * DEFAULT_UNIT_LOADS[usage].cool * 1.163) / 100) / 10
 
 // 로그인 사용자·GNB 메뉴 목업 (실서비스: 인증/세션 API에서 로드)
-export interface CurrentUser {
+//
+// 권한(role)은 로그인이 붙기 전까지 하드코딩이다(주인님 지시 2026-07-10).
+// 인증이 생기면 이 상수만 세션에서 만든 Principal로 바꾸면 되고,
+// 권한 규칙(domain/auth/Permission.ts)과 화면 분기는 그대로 남는다.
+// 일반 사용자 화면을 확인하려면 role을 'USER'로 바꾼다.
+export interface CurrentUser extends Principal {
   team: string
   name: string
   email: string
 }
-export const CURRENT_USER: CurrentUser = { team: '영업1팀', name: '홍길동', email: 'hong@lg.com' }
+export const CURRENT_USER: CurrentUser = { team: '영업1팀', name: '홍길동', email: 'hong@lg.com', role: 'ADMIN' }
 export const GNB_MENUS: readonly string[] = ['대시보드', '검도', '생성']
 export const ACTIVE_MENU = '생성'
 

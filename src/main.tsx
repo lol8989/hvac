@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import SelectionReviewWindow from './components/selection/SelectionReviewWindow'
 import EquipmentAdminPage from './components/equipment/EquipmentAdminPage'
+import ForbiddenPage from './components/equipment/ForbiddenPage'
+import { canManageEquipment } from './domain/auth/Permission'
+import { CURRENT_USER } from './data'
 // 순서 주의: 토큰 → 공통(생성 앱, 무채색) → 관리자(.adm-root 스코프에서 브랜드 색으로 덮어씀)
 import './styles/tokens.css'
 import './styles.css'
@@ -61,6 +64,9 @@ const render = (node: React.ReactNode) => root.render(<React.StrictMode>{node}</
 
 if (view === 'selection') {
   render(<SelectionReviewWindow />)
+} else if (view === 'equipment' && !canManageEquipment(CURRENT_USER)) {
+  // 메뉴를 숨기는 것만으로는 URL 직접 입력을 막지 못한다. 권한이 없으면 저장소를 열지도 않는다.
+  render(<ForbiddenPage userName={CURRENT_USER.name} />)
 } else if (view === 'equipment') {
   // 관리 페이지는 전 상태 편집을 위해 SQLite DB 핸들이 필요하다(인메모리 폴백은 읽기 전용 → 불가).
   const handle = await resolveSqliteHandle()
