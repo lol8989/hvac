@@ -1,8 +1,8 @@
 import { ComboRange } from './domain/shared/ComboRange'
 import { describe, it, expect } from 'vitest'
-import { recommendedIndoorIdx, outdoorIdxByModel, ratioOf, indoorCoolByModel, MODELS, ROOMS, INITIAL_GROUPS, INITIAL_POOL, DEFAULT_COMBINATION } from './data'
+import { recommendedIndoorIdx, outdoorIdxByModel, ratioOf, indoorCoolByModel, MODELS, ROOMS, INITIAL_GROUPS, INITIAL_POOL, DEFAULT_COMBINATION, DEFAULT_FACILITY } from './data'
 import type { ModelCard } from './data'
-import { DEFAULT_UNIT_LOADS } from './domain/shared/UnitLoad'
+import { lookupUnitLoadKcal } from './domain/shared/unitLoadTable'
 import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemoryOutdoorModelCatalog'
 
 // 부하 근사 매칭용 목업 카드(용량만 의미 있음)
@@ -74,18 +74,19 @@ describe('ROOMS 부하 파생 (부하 = 면적 × 용도별 단위부하 × 1.16
     }
   })
 
-  it('cool(kW)은 하드코딩이 아니라 산식 파생값이다 (거실 6.3 등)', () => {
-    expect(ROOMS.AC_001.cool).toBeCloseTo(6.3) // 거실 31.89㎡ × 170kcal × 1.163
-    expect(ROOMS.AC_002.cool).toBeCloseTo(3.2) // 침실1 18.5㎡ × 150kcal
-    expect(ROOMS.AC_003.cool).toBeCloseTo(5.6) // 회의실 28.5㎡ × 170kcal
-    expect(ROOMS.AC_004.cool).toBeCloseTo(8.8) // 사무실 42.0㎡ × 180kcal
-    expect(ROOMS.AC_005.cool).toBeCloseTo(11.5) // 로비 55.0㎡ × 180kcal
-    expect(ROOMS.AC_006.cool).toBeCloseTo(2.1) // 탕비실 12.0㎡ × 150kcal
+  // 프로젝트 기본 시설군은 OFFICE. 목업 도면의 거실·침실·로비·탕비실은 OFFICE 표에 없어 기본 150kcal로 떨어진다.
+  it('cool(kW)은 하드코딩이 아니라 산식 파생값이다 (LG 단위부하표 기준)', () => {
+    expect(ROOMS.AC_001.cool).toBeCloseTo(5.6) // 거실 31.89㎡ × 150kcal(기본) × 1.163
+    expect(ROOMS.AC_002.cool).toBeCloseTo(3.2) // 침실1 18.5㎡ × 150kcal(기본)
+    expect(ROOMS.AC_003.cool).toBeCloseTo(5.0) // 회의실 28.5㎡ × 150kcal
+    expect(ROOMS.AC_004.cool).toBeCloseTo(7.3) // 사무실 42.0㎡ × 150kcal
+    expect(ROOMS.AC_005.cool).toBeCloseTo(9.6) // 로비 55.0㎡ × 150kcal(기본)
+    expect(ROOMS.AC_006.cool).toBeCloseTo(2.1) // 탕비실 12.0㎡ × 150kcal(기본)
   })
 
-  it('모든 실의 cool이 장비선정표 엑셀 산식과 일치한다 (0.1kW 반올림)', () => {
+  it('모든 실의 cool이 단위부하 산식과 일치한다 (0.1kW 반올림)', () => {
     for (const r of Object.values(ROOMS)) {
-      const expected = Math.round((r.area * DEFAULT_UNIT_LOADS[r.usage].cool * 1.163) / 100) / 10
+      const expected = Math.round((r.area * lookupUnitLoadKcal(DEFAULT_FACILITY, r.usage) * 1.163) / 100) / 10
       expect(r.cool).toBeCloseTo(expected)
     }
   })

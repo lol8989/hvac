@@ -1,6 +1,6 @@
 // UnitLoad 값객체 테스트 (TDD Red → Green)
 import { describe, it, expect } from 'vitest'
-import { UnitLoad, KCAL_TO_W, DEFAULT_UNIT_LOADS, unitLoadForUsage } from './UnitLoad'
+import { UnitLoad, KCAL_TO_W, unitLoadForUsage } from './UnitLoad'
 
 describe('UnitLoad 생성자 자기검증', () => {
   it('coolKcal이 0이면 throw한다', () => {
@@ -65,27 +65,33 @@ describe('UnitLoad.requiredLoadW 필요부하량', () => {
   })
 })
 
-describe('unitLoadForUsage 용도별 기본값', () => {
-  it('등록된 용도(사무실)는 시드 값(180)을 반환한다', () => {
-    const u = unitLoadForUsage('사무실')
-    expect(u.coolKcal).toBe(180)
-    expect(u.heatKcal).toBe(180)
+// 단위부하는 시설군·용도·부하강도로 정해진다(LG전자 단위부하 참고자료).
+// 난방 자료가 없어 냉방값을 그대로 쓴다.
+describe('unitLoadForUsage — 시설군·용도별 기본값', () => {
+  it('시설군에 따라 같은 실명도 값이 다르다', () => {
+    expect(unitLoadForUsage('주거시설', '식당').coolKcal).toBe(120)
+    expect(unitLoadForUsage('상업시설', '식당').coolKcal).toBe(210)
   })
 
-  it('시청각실은 140을 반환한다', () => {
-    expect(unitLoadForUsage('시청각실').coolKcal).toBe(140)
+  it('냉방값을 난방값으로 그대로 쓴다(난방 부하표 미제공)', () => {
+    const u = unitLoadForUsage('OFFICE', '사무실')
+    expect(u.coolKcal).toBe(150)
+    expect(u.heatKcal).toBe(150)
   })
 
-  it('미등록 용도는 기본값 170을 반환한다', () => {
-    const u = unitLoadForUsage('창고')
-    expect(u.coolKcal).toBe(170)
-    expect(u.heatKcal).toBe(170)
+  it('부하강도를 주면 해당 열을 쓴다', () => {
+    expect(unitLoadForUsage('OFFICE', '사무실', 'HIGH').coolKcal).toBe(170)
+    expect(unitLoadForUsage('OFFICE', '사무실', 'SPECIAL').coolKcal).toBe(200)
   })
 
-  it('DEFAULT_UNIT_LOADS는 13개 용도를 포함한다', () => {
-    expect(Object.keys(DEFAULT_UNIT_LOADS)).toHaveLength(13)
-    expect(DEFAULT_UNIT_LOADS['거실']).toEqual({ cool: 170, heat: 170 })
-    expect(DEFAULT_UNIT_LOADS['침실']).toEqual({ cool: 150, heat: 150 })
+  it('표에 없는 용도는 기본값 150을 반환한다', () => {
+    const u = unitLoadForUsage('OFFICE', '시청각실')
+    expect(u.coolKcal).toBe(150)
+    expect(u.heatKcal).toBe(150)
+  })
+
+  it('동의어는 표준 실명으로 흡수된다(창고 → 관리실)', () => {
+    expect(unitLoadForUsage('OFFICE', '창고').coolKcal).toBe(150)
   })
 })
 

@@ -11,6 +11,7 @@ const baseProps = {
   name: '시청각실101',
   areaM2: 20,
   usage: '시청각실',
+  facility: 'OFFICE' as const,
 }
 
 describe('Room', () => {
@@ -53,7 +54,7 @@ describe('Room', () => {
   describe('usage 기반 기본 단위부하', () => {
     it('aiUnitLoad를 생략하면 unitLoadForUsage(usage)가 AI 기본값이 된다', () => {
       const r = Room.create(baseProps)
-      expect(r.effectiveUnitLoad.equals(unitLoadForUsage('시청각실'))).toBe(true)
+      expect(r.effectiveUnitLoad.equals(unitLoadForUsage('OFFICE', '시청각실'))).toBe(true)
       expect(r.isUnitLoadOverridden).toBe(false)
     })
 
@@ -65,11 +66,12 @@ describe('Room', () => {
   })
 
   describe('requiredLoadW', () => {
-    it('20㎡ 시청각실(140kcal)이면 필요부하량이 약 3256W이다', () => {
+    // 시청각실은 LG 단위부하표에 없는 실명 → 기본값 150kcal/h·㎡.
+    it('20㎡ 시청각실(표에 없어 기본 150kcal)이면 필요부하량이 약 3489W이다', () => {
       const r = Room.create(baseProps)
-      // 140 × 1.163 × 20 = 3256.4
-      expect(r.requiredLoadW.cool).toBeCloseTo(3256.4, 1)
-      expect(r.requiredLoadW.heat).toBeCloseTo(3256.4, 1)
+      // 150 × 1.163 × 20 = 3489.0
+      expect(r.requiredLoadW.cool).toBeCloseTo(3489.0, 1)
+      expect(r.requiredLoadW.heat).toBeCloseTo(3489.0, 1)
     })
 
     it('단위부하를 오버라이드하면 필요부하량이 오버라이드 값 기준으로 계산된다', () => {
@@ -90,7 +92,7 @@ describe('Room', () => {
         .overrideUnitLoad(new UnitLoad(200, 200))
         .clearUnitLoadOverride()
       expect(r.isUnitLoadOverridden).toBe(false)
-      expect(r.effectiveUnitLoad.equals(unitLoadForUsage('시청각실'))).toBe(true)
+      expect(r.effectiveUnitLoad.equals(unitLoadForUsage('OFFICE', '시청각실'))).toBe(true)
     })
   })
 
@@ -98,7 +100,7 @@ describe('Room', () => {
     it('용도를 변경하면 AI 단위부하가 새 용도 기본값으로 갱신된다', () => {
       const r = Room.create(baseProps).withUsage('사무실')
       expect(r.usage).toBe('사무실')
-      expect(r.effectiveUnitLoad.equals(unitLoadForUsage('사무실'))).toBe(true)
+      expect(r.effectiveUnitLoad.equals(unitLoadForUsage('OFFICE', '사무실'))).toBe(true)
     })
 
     it('용도를 변경해도 user 오버라이드는 보존된다(withAi 정책)', () => {
@@ -107,7 +109,7 @@ describe('Room', () => {
       expect(r.isUnitLoadOverridden).toBe(true)
       expect(r.effectiveUnitLoad.equals(override)).toBe(true)
       // 오버라이드 해제 시 새 용도(사무실) AI 기본값이 드러난다
-      expect(r.clearUnitLoadOverride().effectiveUnitLoad.equals(unitLoadForUsage('사무실'))).toBe(true)
+      expect(r.clearUnitLoadOverride().effectiveUnitLoad.equals(unitLoadForUsage('OFFICE', '사무실'))).toBe(true)
     })
   })
 

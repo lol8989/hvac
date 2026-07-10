@@ -2,12 +2,12 @@
 
 import type { Principal } from './domain/auth/Permission'
 import type { EnergySourceCode } from './domain/shared/EnergySource'
-import { DEFAULT_UNIT_LOADS } from './domain/shared/UnitLoad'
+import { lookupUnitLoadKcal, type FacilityType } from './domain/shared/unitLoadTable'
 
 export interface Room {
   name: string
   floor: string // 층 (예: '지상1층')
-  usage: string // 용도 (단위부하 조회 키 — DEFAULT_UNIT_LOADS)
+  usage: string // 용도 (단위부하 조회 키)
   area: number
   type: string
   cool: number
@@ -18,9 +18,10 @@ export interface Room {
   h: number
 }
 
-// 부하 = 면적 × 용도별 단위부하 × 1.163 (장비선정표 엑셀 산식). kW, 0.1 단위 반올림.
-const roomCoolKw = (areaM2: number, usage: string): number =>
-  Math.round((areaM2 * DEFAULT_UNIT_LOADS[usage].cool * 1.163) / 100) / 10
+// 부하 = 면적 × 시설군·용도별 단위부하 × 1.163. kW, 0.1 단위 반올림.
+// 근거: doc/03_데이터/LG전자_단위부하_참고자료.pdf (Confluence: 면적 × 단위부하 ÷ 860 과 동일)
+const roomCoolKw = (areaM2: number, facility: FacilityType, usage: string): number =>
+  Math.round((areaM2 * lookupUnitLoadKcal(facility, usage) * 1.163) / 100) / 10
 
 // 로그인 사용자·GNB 메뉴 목업 (실서비스: 인증/세션 API에서 로드)
 //
@@ -37,14 +38,18 @@ export const CURRENT_USER: CurrentUser = { team: '영업1팀', name: '홍길동'
 export const GNB_MENUS: readonly string[] = ['대시보드', '검도', '생성']
 export const ACTIVE_MENU = '생성'
 
-// cool은 하드코딩이 아닌 산식 파생값 (거실 6.3 / 침실1 3.2 / 회의실 5.6 / 사무실 8.8 / 로비 11.5 / 탕비실 2.1)
+// 시설군은 프로젝트 설정이다(생성 첫 화면에서 선택 — 주인님 지시 2026-07-10).
+// 목업 도면은 사무 건물이라 기본값 OFFICE. 표에 없는 실(거실·침실·로비·탕비실)은 기본 150kcal로 떨어진다.
+export const DEFAULT_FACILITY: FacilityType = 'OFFICE'
+
+// cool은 하드코딩이 아닌 산식 파생값(프로젝트 기본 시설군 기준). 사용자가 시설군을 바꾸면 도메인 Room이 다시 계산한다.
 export const ROOMS: Record<string, Room> = {
-  AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 31.89, type: '4WAY', cool: roomCoolKw(31.89, '거실'), sys: 'EHP', x: 24, y: 24, w: 250, h: 150 },
-  AC_002: { name: '침실1', floor: '지상1층', usage: '침실', area: 18.5, type: '1WAY', cool: roomCoolKw(18.5, '침실'), sys: 'EHP', x: 292, y: 24, w: 180, h: 110 },
-  AC_003: { name: '회의실', floor: '지상1층', usage: '회의실', area: 28.5, type: '4WAY', cool: roomCoolKw(28.5, '회의실'), sys: 'EHP', x: 490, y: 24, w: 206, h: 150 },
-  AC_004: { name: '사무실', floor: '지상1층', usage: '사무실', area: 42.0, type: '4WAY', cool: roomCoolKw(42.0, '사무실'), sys: 'EHP', x: 24, y: 196, w: 250, h: 150 },
-  AC_005: { name: '로비', floor: '지상1층', usage: '로비', area: 55.0, type: '4WAY', cool: roomCoolKw(55.0, '로비'), sys: 'EHP', x: 292, y: 152, w: 180, h: 194 },
-  AC_006: { name: '탕비실', floor: '지상1층', usage: '탕비실', area: 12.0, type: '1WAY', cool: roomCoolKw(12.0, '탕비실'), sys: 'EHP', x: 490, y: 196, w: 206, h: 150 },
+  AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 31.89, type: '4WAY', cool: roomCoolKw(31.89, DEFAULT_FACILITY, '거실'), sys: 'EHP', x: 24, y: 24, w: 250, h: 150 },
+  AC_002: { name: '침실1', floor: '지상1층', usage: '침실', area: 18.5, type: '1WAY', cool: roomCoolKw(18.5, DEFAULT_FACILITY, '침실'), sys: 'EHP', x: 292, y: 24, w: 180, h: 110 },
+  AC_003: { name: '회의실', floor: '지상1층', usage: '회의실', area: 28.5, type: '4WAY', cool: roomCoolKw(28.5, DEFAULT_FACILITY, '회의실'), sys: 'EHP', x: 490, y: 24, w: 206, h: 150 },
+  AC_004: { name: '사무실', floor: '지상1층', usage: '사무실', area: 42.0, type: '4WAY', cool: roomCoolKw(42.0, DEFAULT_FACILITY, '사무실'), sys: 'EHP', x: 24, y: 196, w: 250, h: 150 },
+  AC_005: { name: '로비', floor: '지상1층', usage: '로비', area: 55.0, type: '4WAY', cool: roomCoolKw(55.0, DEFAULT_FACILITY, '로비'), sys: 'EHP', x: 292, y: 152, w: 180, h: 194 },
+  AC_006: { name: '탕비실', floor: '지상1층', usage: '탕비실', area: 12.0, type: '1WAY', cool: roomCoolKw(12.0, DEFAULT_FACILITY, '탕비실'), sys: 'EHP', x: 490, y: 196, w: 206, h: 150 },
 }
 
 // 실외기 배치 레이아웃 (어떤 모델을 어느 실외기 위치에 두고 어떤 실내기를 연결하는가).

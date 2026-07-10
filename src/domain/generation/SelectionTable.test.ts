@@ -20,8 +20,10 @@ const IDU_20C = new IndoorModel({
 const ODU_8HP = { model: 'ARUM080LTE5', coolKw: 23.3, heatKw: 26.3, hp: 8 }
 const ODU_10HP = { model: 'ARUM100LTE5', coolKw: 29.0, heatKw: 32.0, hp: 10 }
 
-const roomAv = Room.create({ id: 'r1', floor: '지하1층', name: '시청각실', areaM2: 20, usage: '시청각실' })
-const roomPrep = Room.create({ id: 'r2', floor: '지하1층', name: '준비실', areaM2: 5.4, usage: '준비실' })
+// 시청각실·준비실은 LG 단위부하표에 없는 실명이다(표준 표는 150으로 떨어뜨린다).
+// 이 시나리오는 장비선정표 엑셀 실측값을 재현하는 것이 목적이므로 단위부하를 명시한다.
+const roomAv = Room.create({ id: 'r1', floor: '지하1층', name: '시청각실', areaM2: 20, usage: '시청각실', facility: 'OFFICE', aiUnitLoad: new UnitLoad(140, 140) })
+const roomPrep = Room.create({ id: 'r2', floor: '지하1층', name: '준비실', areaM2: 5.4, usage: '준비실', facility: 'OFFICE', aiUnitLoad: new UnitLoad(150, 150) })
 
 // 엑셀 지하1층 시나리오: 시청각실 40C×3 + 준비실 20C×3 → 실외기 8HP(23.3kW)
 const excelInput = (): SelectionTableInput => ({
@@ -37,7 +39,7 @@ const excelInput = (): SelectionTableInput => ({
 
 // 조합비 판정 시나리오: 실내기 coolW×qty ÷ 10kW 실외기
 const ratioInput = (coolW: number, comboRange?: ComboRange): SelectionTableInput => ({
-  rooms: [Room.create({ id: 'rx', floor: '1층', name: '실X', areaM2: 10, usage: '사무실' })],
+  rooms: [Room.create({ id: 'rx', floor: '1층', name: '실X', areaM2: 10, usage: '사무실', facility: 'OFFICE' })],
   placements: { rx: Placement.ai('rx', { modelCode: 'X', quantity: 1 }) },
   groups: [{ key: 'gx', label: '실외기 X', model: 'ODU-10', items: ['rx'] }],
   indoorModels: [new IndoorModel({ code: 'X', model: 'X-M', coolW, heatW: coolW, type: '덕트', energySource: 'EHP' })],
@@ -91,8 +93,8 @@ describe('buildSelectionTable — 엑셀 지하1층 재현', () => {
 
 describe('buildSelectionTable — 층 섹션', () => {
   const roomB1a = roomAv
-  const room1Fb = Room.create({ id: 'b', floor: '1층', name: '사무실', areaM2: 10, usage: '사무실' })
-  const roomB1c = Room.create({ id: 'c', floor: '지하1층', name: '준비실2', areaM2: 5.4, usage: '준비실' })
+  const room1Fb = Room.create({ id: 'b', floor: '1층', name: '사무실', areaM2: 10, usage: '사무실', facility: 'OFFICE' })
+  const roomB1c = Room.create({ id: 'c', floor: '지하1층', name: '준비실2', areaM2: 5.4, usage: '준비실', facility: 'OFFICE', aiUnitLoad: new UnitLoad(150, 150) })
   const input = (): SelectionTableInput => ({
     rooms: [roomB1a, room1Fb, roomB1c],
     placements: {
@@ -165,7 +167,7 @@ describe('buildSelectionTable — 오버라이드 플래그 전파', () => {
 
 describe('buildSelectionTable — BOM', () => {
   it('실내기는 code별 표 등장 순서로 합산되고 실외기는 model별 그룹 수로 집계된다', () => {
-    const roomC = Room.create({ id: 'r3', floor: '1층', name: '교장실', areaM2: 15, usage: '교장실' })
+    const roomC = Room.create({ id: 'r3', floor: '1층', name: '교장실', areaM2: 15, usage: '교장실', facility: 'OFFICE' })
     const input = excelInput()
     input.rooms = [...input.rooms, roomC]
     input.placements = { ...input.placements, r3: Placement.ai('r3', { modelCode: '40C', quantity: 2 }) }

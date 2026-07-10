@@ -12,6 +12,7 @@ import {
   withAi,
 } from '../shared/Adjustable'
 import { UnitLoad, unitLoadForUsage } from '../shared/UnitLoad'
+import type { FacilityType, LoadIntensity } from '../shared/unitLoadTable'
 
 const assertNonEmpty = (v: string, name: string): void => {
   if (typeof v !== 'string' || v.trim() === '') {
@@ -32,6 +33,10 @@ export class Room {
     readonly name: string,
     readonly areaM2: number,
     readonly usage: string,
+    // 시설군·부하강도가 있어야 단위부하가 정해진다 — 같은 실명도 시설군마다 값이 다르다
+    // (식당: 주거 120 / 상업 210). 근거: doc/03_데이터/LG전자_단위부하_참고자료.pdf
+    readonly facility: FacilityType,
+    readonly intensity: LoadIntensity,
     readonly unitLoad: Adjustable<UnitLoad>,
   ) {
     assertNonEmpty(id, 'id')
@@ -48,10 +53,13 @@ export class Room {
     name: string
     areaM2: number
     usage: string
+    facility: FacilityType
+    intensity?: LoadIntensity
     aiUnitLoad?: UnitLoad
   }): Room {
-    const ai = props.aiUnitLoad ?? unitLoadForUsage(props.usage)
-    return new Room(props.id, props.floor, props.name, props.areaM2, props.usage, adjustable(ai))
+    const intensity = props.intensity ?? 'STANDARD'
+    const ai = props.aiUnitLoad ?? unitLoadForUsage(props.facility, props.usage, intensity)
+    return new Room(props.id, props.floor, props.name, props.areaM2, props.usage, props.facility, intensity, adjustable(ai))
   }
 
   get effectiveUnitLoad(): UnitLoad {
@@ -68,25 +76,31 @@ export class Room {
   }
 
   rename(name: string): Room {
-    return new Room(this.id, this.floor, name, this.areaM2, this.usage, this.unitLoad)
+    return new Room(this.id, this.floor, name, this.areaM2, this.usage, this.facility, this.intensity, this.unitLoad)
   }
 
   withArea(areaM2: number): Room {
-    return new Room(this.id, this.floor, this.name, areaM2, this.usage, this.unitLoad)
+    return new Room(this.id, this.floor, this.name, areaM2, this.usage, this.facility, this.intensity, this.unitLoad)
   }
 
   // 용도 변경 → AI 단위부하를 새 용도 기본값으로 갱신, user 오버라이드는 보존(withAi)
   withUsage(usage: string): Room {
-    const next = withAi(this.unitLoad, unitLoadForUsage(usage))
-    return new Room(this.id, this.floor, this.name, this.areaM2, usage, next)
+    const next = withAi(this.unitLoad, unitLoadForUsage(this.facility, usage, this.intensity))
+    return new Room(this.id, this.floor, this.name, this.areaM2, usage, this.facility, this.intensity, next)
+  }
+
+  // 부하강도 변경(지하층=저부하, 외기 2면 이상=고부하, 천정고 4m 이상=특수부하)
+  withIntensity(intensity: LoadIntensity): Room {
+    const next = withAi(this.unitLoad, unitLoadForUsage(this.facility, this.usage, intensity))
+    return new Room(this.id, this.floor, this.name, this.areaM2, this.usage, this.facility, intensity, next)
   }
 
   overrideUnitLoad(u: UnitLoad): Room {
-    return new Room(this.id, this.floor, this.name, this.areaM2, this.usage, withUser(this.unitLoad, u))
+    return new Room(this.id, this.floor, this.name, this.areaM2, this.usage, this.facility, this.intensity, withUser(this.unitLoad, u))
   }
 
   clearUnitLoadOverride(): Room {
-    return new Room(this.id, this.floor, this.name, this.areaM2, this.usage, clearUser(this.unitLoad))
+    return new Room(this.id, this.floor, this.name, this.areaM2, this.usage, this.facility, this.intensity, clearUser(this.unitLoad))
   }
 
   // 엔티티 동일성: id 기준

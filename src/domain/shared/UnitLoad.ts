@@ -2,6 +2,8 @@
 // 불변 + 자기검증. W 변환(×1.163)과 면적 기반 필요부하량 계산을 제공한다.
 // 근거: LG 장비선정표 엑셀(표준 260415) — 단위부하(kcal) → W 변환 → 필요부하량.
 
+import { lookupUnitLoadKcal, type FacilityType, type LoadIntensity } from './unitLoadTable'
+
 export const KCAL_TO_W = 1.163
 
 const assertPositiveFinite = (v: number, name: string): void => {
@@ -39,27 +41,11 @@ export class UnitLoad {
   }
 }
 
-// 용도별 기본 단위부하 시드 (kcal/h·㎡, 냉=난 동일값 목업)
-export const DEFAULT_UNIT_LOADS: Record<string, { cool: number; heat: number }> = Object.freeze({
-  거실: { cool: 170, heat: 170 },
-  침실: { cool: 150, heat: 150 },
-  회의실: { cool: 170, heat: 170 },
-  사무실: { cool: 180, heat: 180 },
-  로비: { cool: 180, heat: 180 },
-  탕비실: { cool: 150, heat: 150 },
-  시청각실: { cool: 140, heat: 140 },
-  준비실: { cool: 150, heat: 150 },
-  교장실: { cool: 160, heat: 160 },
-  보건실: { cool: 170, heat: 170 },
-  미술실: { cool: 180, heat: 180 },
-  기술실: { cool: 180, heat: 180 },
-  행정실: { cool: 180, heat: 180 },
-})
-
-// 미등록 용도 기본값
-const FALLBACK = { cool: 170, heat: 170 }
-
-export const unitLoadForUsage = (usage: string): UnitLoad => {
-  const seed = DEFAULT_UNIT_LOADS[usage] ?? FALLBACK
-  return new UnitLoad(seed.cool, seed.heat)
+// 시설군·용도별 단위부하 (kcal/h·㎡). 표는 unitLoadTable.ts (LG전자 단위부하 참고자료).
+//
+// ⚠️ 표는 냉방 부하만 제공한다. 난방 단위부하 자료가 없어 냉방값을 그대로 쓴다(기존 목업과 동일).
+//    난방 실측 자료가 들어오면 여기만 바꾸면 된다.
+export const unitLoadForUsage = (facility: FacilityType, usage: string, intensity: LoadIntensity = 'STANDARD'): UnitLoad => {
+  const kcal = lookupUnitLoadKcal(facility, usage, intensity)
+  return new UnitLoad(kcal, kcal)
 }

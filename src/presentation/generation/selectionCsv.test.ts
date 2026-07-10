@@ -6,6 +6,7 @@ import { buildSelectionCsv } from './selectionCsv'
 import { buildSelectionTable } from '../../domain/generation/SelectionTable'
 import type { SelectionTableInput } from '../../domain/generation/SelectionTable'
 import { Room } from '../../domain/generation/Room'
+import { UnitLoad } from '../../domain/shared/UnitLoad'
 import { Placement } from '../../domain/generation/Placement'
 import { IndoorModel } from '../../domain/generation/IndoorModel'
 
@@ -18,8 +19,8 @@ const IDU_20C = new IndoorModel({
 })
 const ODU_8HP = { model: 'ARUM080LTE5', coolKw: 23.3, heatKw: 26.3, hp: 8 }
 
-const roomAv = Room.create({ id: 'r1', floor: '지하1층', name: '시청각실', areaM2: 20, usage: '시청각실' })
-const roomPrep = Room.create({ id: 'r2', floor: '지하1층', name: '준비실', areaM2: 5.4, usage: '준비실' })
+const roomAv = Room.create({ id: 'r1', floor: '지하1층', name: '시청각실', areaM2: 20, usage: '시청각실', facility: 'OFFICE', aiUnitLoad: new UnitLoad(140, 140) })
+const roomPrep = Room.create({ id: 'r2', floor: '지하1층', name: '준비실', areaM2: 5.4, usage: '준비실', facility: 'OFFICE', aiUnitLoad: new UnitLoad(150, 150) })
 
 const excelInput = (): SelectionTableInput => ({
   rooms: [roomAv, roomPrep],
@@ -80,8 +81,8 @@ describe('buildSelectionCsv — RFC4180 인용 처리', () => {
   it('실명에 쉼표·따옴표가 있으면 따옴표로 감싸고 내부 따옴표는 두 번 쓴다', () => {
     const input = excelInput()
     input.rooms = [
-      Room.create({ id: 'r1', floor: '지하1층', name: '시청각실,별관', areaM2: 20, usage: '시청각실' }),
-      Room.create({ id: 'r2', floor: '지하1층', name: '준비실 "A"', areaM2: 5.4, usage: '준비실' }),
+      Room.create({ id: 'r1', floor: '지하1층', name: '시청각실,별관', areaM2: 20, usage: '시청각실', facility: 'OFFICE', aiUnitLoad: new UnitLoad(140, 140) }),
+      Room.create({ id: 'r2', floor: '지하1층', name: '준비실 "A"', areaM2: 5.4, usage: '준비실', facility: 'OFFICE', aiUnitLoad: new UnitLoad(150, 150) }),
     ]
     const lines = csvLines(input)
     expect(lines[1]).toContain('"시청각실,별관"')
@@ -104,7 +105,7 @@ describe('buildSelectionCsv — 층별 표기(엑셀 병합 모방)', () => {
     input.rooms = [
       roomAv,
       roomPrep,
-      Room.create({ id: 'r3', floor: '1층', name: '사무실', areaM2: 10, usage: '사무실' }),
+      Room.create({ id: 'r3', floor: '1층', name: '사무실', areaM2: 10, usage: '사무실', facility: 'OFFICE' }),
     ]
     const lines = csvLines(input)
     expect(lines[1].startsWith('지하1층,시청각실')).toBe(true)

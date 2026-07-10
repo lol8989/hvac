@@ -12,7 +12,7 @@ import { Placement } from '../../domain/generation/Placement'
 import { IndoorModel } from '../../domain/generation/IndoorModel'
 
 const table = buildSelectionTable({
-  rooms: [Room.create({ id: 'R1', floor: '지하1층', name: '시청각실', areaM2: 20, usage: '시청각실' })],
+  rooms: [Room.create({ id: 'R1', floor: '지하1층', name: '시청각실', areaM2: 20, usage: '시청각실', facility: 'OFFICE' })],
   placements: { R1: Placement.ai('R1', { modelCode: '40C', quantity: 3 }) },
   groups: [{ key: 'ODU1', label: '실외기-1', model: 'RPUW082X9E', items: ['R1'] }],
   indoorModels: [new IndoorModel({ code: '40C', model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP' })],

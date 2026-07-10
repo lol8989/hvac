@@ -223,3 +223,8 @@ button{font-family:inherit;cursor:pointer;}
 .rp-filter .field{min-width:0;font-size:13px;padding:5px 8px;}
 .rp-count{float:right;font-weight:400;color:var(--muted);font-size:12px;}
 .rp-empty{padding:18px 4px;text-align:center;color:#999;font-size:14px;}
+
+/* 프로젝트 설정(시설군) — 실 검출 전에만 활성 */
+.proj-set{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#666;}
+.proj-set .field{padding:4px 8px;font-size:13px;}
+.proj-set .field:disabled{background:#F2F2F2;color:#999;cursor:not-allowed;}

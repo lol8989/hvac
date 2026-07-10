@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ROOMS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, outdoorIdxByModel, DEFAULT_COMBINATION } from './data'
+import { ROOMS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, outdoorIdxByModel, DEFAULT_COMBINATION, DEFAULT_FACILITY } from './data'
 import { canManageEquipment } from './domain/auth/Permission'
 import type { ModelCard, Room } from './data'
 import ReportStrip from './components/ReportStrip'
@@ -12,6 +12,8 @@ import MappingModal from './components/MappingModal'
 import ConfirmModal from './components/ConfirmModal'
 import Stepper from './components/Stepper'
 import StepOverlay from './components/steps/StepOverlay'
+import ProjectSettings from './components/steps/ProjectSettings'
+import type { FacilityType } from './domain/shared/unitLoadTable'
 import { STEPS, stepDef, stepIndex, prevStep, isFirstStep } from './presentation/generation/steps'
 import type { StepId } from './presentation/generation/steps'
 import { InMemoryPlanRepository } from './infrastructure/generation/InMemoryPlanRepository'
@@ -59,6 +61,8 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
   // 도메인 Room(층·실명·면적·용도·단위부하 Adjustable) — 선정표 그리드에서 편집되는 SSOT.
   // 초기엔 비어 있다(검출 전). '실 검출 실행'이 도면에서 실을 찾아 채운다(파이프라인 의미론).
   const [domainRooms, setDomainRooms] = useState<Record<string, DomainRoom>>({})
+  // 시설군은 단위부하의 전제다(같은 실명도 시설군마다 값이 다르다) → 프로젝트 설정으로 검출 전에 정한다.
+  const [facility, setFacility] = useState<FacilityType>(DEFAULT_FACILITY)
   // 실별 실내기 배치(모델+대수, AI 기본값+사용자 오버라이드) — 실내기 선정의 SSOT.
   const [placements, setPlacements] = useState<Record<string, Placement>>({})
   const [selRooms, setSelRooms] = useState<string[]>([]) // 초기엔 선택 없음(뱃지·하이라이트 없음)
@@ -501,7 +505,7 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
   // 검출: 도면에서 실을 찾아 도메인 Room으로 채운다(초기 빈 상태 → 6실). 이후 부하·선정표가 채워진다.
   const doDetect = () => {
     const detected = Object.fromEntries(
-      Object.entries(ROOMS).map(([id, r]) => [id, DomainRoom.create({ id, floor: r.floor, name: r.name, areaM2: r.area, usage: r.usage })]),
+      Object.entries(ROOMS).map(([id, r]) => [id, DomainRoom.create({ id, floor: r.floor, name: r.name, areaM2: r.area, usage: r.usage, facility })]),
     )
     setDomainRooms(detected)
     setStep('place')
@@ -555,6 +559,8 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
         actions={
           <>
             <button className="btn sm" disabled={isFirstStep(step)} onClick={() => setStep(prevStep(step))}>← 이전</button>
+            {/* 시설군은 단위부하의 전제다 → 검출 전에 정하고, 검출 후에는 잠근다. */}
+            {step === 'detect' && <ProjectSettings facility={facility} locked={Object.keys(domainRooms).length > 0} onChange={setFacility} />}
             {step === 'detect' && <button className="btn sm primary" onClick={doDetect}>실 검출 실행 →</button>}
             {step === 'place' && <button className="btn sm primary" onClick={doPlace}>{placed ? '재배치' : '✦ AI 실내기 배치'}</button>}
             {step === 'place' && placed && <button className="btn sm primary" onClick={() => setStep('outdoor')}>실외기 배치 →</button>}

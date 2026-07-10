@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest'
 import { IndoorModel } from './IndoorModel'
 import { Placement } from './Placement'
 import { Room } from './Room'
+import { UnitLoad } from '../shared/UnitLoad'
 import { recommendIndoor } from './recommendIndoor'
 import { applyAiPlacement, placementTotalsW, groupIndoorTotalsW } from './recalc'
 
@@ -29,7 +30,7 @@ const model70C = new IndoorModel({
 const models = [model40C, model70C]
 
 // 시청각실(140kcal → 162.82W/㎡) 24㎡ → 필요냉방 3907.68W → 40C×1 추천
-const roomA = Room.create({ id: 'r-a', floor: '1F', name: '시청각실', areaM2: 24, usage: '시청각실' })
+const roomA = Room.create({ id: 'r-a', floor: '1F', name: '시청각실', areaM2: 24, usage: '시청각실', facility: 'OFFICE', aiUnitLoad: new UnitLoad(140, 140) })
 
 describe('applyAiPlacement', () => {
   it('placement가 없는 실이면 Placement.ai로 새로 생성한다', () => {
