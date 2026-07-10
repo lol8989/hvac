@@ -16,7 +16,8 @@ const hp = (n: number | null) => (n == null ? '—' : String(n))
 // 냉방용량 환산으로 백필한 마력은 실측이 아니다 → 목록에서 구분해 표기한다.
 const HP_ESTIMATED_TITLE = '냉방용량 환산 추정치 (실측 아님)'
 
-const PAGE_SIZE = 20
+// 표시 건수(페이지 크기) 선택지. 첫 값이 기본값이다.
+const PAGE_SIZES = [20, 30, 50, 100] as const
 
 // 상태별 행 전이 액션. DRAFT: 등록 취소 / PUBLISHED: 단종 (둘 다 →ARCHIVED) / ARCHIVED: 재게시.
 // 게시(DRAFT→PUBLISHED)는 행 버튼 없이 일괄 게시 바에서만 수행한다(실수 게시 방지 + 전제조건 사유 일괄 안내).
@@ -37,6 +38,7 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
   const [seriesCode, setSeriesCode] = useState('ALL')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0])
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
   const [editing, setEditing] = useState<Editing>(null)
   const [uploading, setUploading] = useState(false)
@@ -73,9 +75,9 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
     )
   }, [all, cat, status, seriesCode, q])
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
   const cur = Math.min(page, pageCount - 1)
-  const rows = filtered.slice(cur * PAGE_SIZE, cur * PAGE_SIZE + PAGE_SIZE)
+  const rows = filtered.slice(cur * pageSize, cur * pageSize + pageSize)
   const resetPage = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(0) }
 
   // 선택은 필터 결과 안에서만 유효하다(필터를 바꾸면 보이지 않는 선택이 남지 않도록 정리).
@@ -148,6 +150,14 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
         <input className="field" aria-label="모델명·장비번호 검색" placeholder="모델명·장비번호 검색" value={q} onChange={(e) => resetPage(setQ)(e.target.value)} />
         <div className="sp" />
         <span className="eq-count">{filtered.length}건</span>
+        {/* 표시 건수를 바꾸면 보고 있던 페이지 번호가 범위를 벗어날 수 있어 첫 페이지로 되돌린다. */}
+        <select className="field" aria-label="표시 건수" value={pageSize} onChange={(e) => resetPage(setPageSize)(Number(e.target.value))}>
+          {PAGE_SIZES.map((n) => (
+            <option key={n} value={n}>
+              {n}건씩
+            </option>
+          ))}
+        </select>
         <button className="btn sm" onClick={() => setUploading(true)}>스펙시트 업로드</button>
         <button className="btn sm primary" onClick={() => setEditing({ mode: 'create' })}>＋ 제품 등록</button>
       </div>

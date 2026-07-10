@@ -55,6 +55,41 @@ describe('EquipmentAdminPage (관리 목록)', () => {
     expect(screen.getByText('1 / 1')).toBeInTheDocument()
   })
 
+  describe('표시 건수 드롭다운', () => {
+    // 25행 → 기본 20건이면 2페이지, 30건으로 늘리면 1페이지.
+    const many = Array.from({ length: 25 }, (_, i) => mk({ id: i + 1, modelCode: `M${i}` }))
+    const renderMany = () => render(<EquipmentAdminPage admin={makeAdmin({ listProducts: () => many })} />)
+    const sizeSelect = () => screen.getByLabelText('표시 건수')
+
+    it('기본값은 20건이다', () => {
+      renderMany()
+      expect(sizeSelect()).toHaveValue('20')
+      expect(bodyRows()).toHaveLength(20)
+      expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    })
+
+    it('20 · 30 · 50 · 100건을 선택할 수 있다', () => {
+      renderMany()
+      const values = within(sizeSelect()).getAllByRole('option').map((o) => (o as HTMLOptionElement).value)
+      expect(values).toEqual(['20', '30', '50', '100'])
+    })
+
+    it('건수를 늘리면 그만큼 더 보여준다', () => {
+      renderMany()
+      fireEvent.change(sizeSelect(), { target: { value: '30' } })
+      expect(bodyRows()).toHaveLength(25)
+      expect(screen.getByText('1 / 1')).toBeInTheDocument()
+    })
+
+    it('건수를 바꾸면 첫 페이지로 되돌아간다', () => {
+      renderMany()
+      fireEvent.click(screen.getByRole('button', { name: '다음 →' }))
+      expect(screen.getByText('2 / 2')).toBeInTheDocument()
+      fireEvent.change(sizeSelect(), { target: { value: '30' } })
+      expect(screen.getByText('1 / 1')).toBeInTheDocument()
+    })
+  })
+
   it('상태 필터(작성중)로 DRAFT만 남는다', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
     fireEvent.change(screen.getByRole('combobox', { name: '상태 필터' }), { target: { value: 'DRAFT' } })
