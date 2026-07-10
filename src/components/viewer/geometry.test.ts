@@ -3,7 +3,8 @@ import { pointInZone, zoneOfPoint, roomIdsForUnits, zoneAreaM2 } from './geometr
 import type { ZoneBox, UnitSym } from './geometry'
 
 const z = (id: string, x: number, y: number, w: number, h: number): ZoneBox => ({ id, name: id, x, y, w, h })
-const u = (id: string, x: number, y: number): UnitSym => ({ id, x, y, rot: 0 })
+// 실내기 심볼 1개 = 실내기 1대. roomId가 소속 실이고, id는 `${roomId}#${n}`.
+const u = (roomId: string, x: number, y: number, n = 1): UnitSym => ({ id: `${roomId}#${n}`, roomId, x, y, rot: 0 })
 
 const ZONES: ZoneBox[] = [
   z('AC_001', 0, 0, 100, 100),
@@ -38,29 +39,23 @@ describe('zoneOfPoint', () => {
 })
 
 describe('roomIdsForUnits (선택 심볼 → 담당 실 id, 위치 우선)', () => {
-  it('바인딩 심볼이 다른 실 위로 옮겨지면 그 위치의 실을 반환한다 (드래그 이동 하이라이팅)', () => {
-    // 식별자는 AC_001인데 좌표는 AC_002 영역 → 위치가 이긴다
-    const syms = [{ id: 'AC_001', x: 150, y: 50, rot: 0 }]
-    expect(roomIdsForUnits(syms, ZONES)).toEqual(['AC_002'])
+  it('심볼이 다른 실 위로 옮겨지면 그 위치의 실을 반환한다 (드래그 이동 하이라이팅)', () => {
+    // 소속은 AC_001인데 좌표는 AC_002 영역 → 위치가 이긴다
+    expect(roomIdsForUnits([u('AC_001', 150, 50)], ZONES)).toEqual(['AC_002'])
   })
-  it('바인딩 심볼이 어느 존 밖이면 정체성(자기 실)으로 폴백한다', () => {
-    const syms = [{ id: 'AC_001', x: 999, y: 999, rot: 0 }]
+  it('심볼이 어느 존 밖이면 소속 실(roomId)로 폴백한다', () => {
+    expect(roomIdsForUnits([u('AC_001', 999, 999)], ZONES)).toEqual(['AC_001'])
+  })
+  it('같은 실의 여러 대수는 하나로 합친다', () => {
+    const syms = [u('AC_001', 20, 20, 1), u('AC_001', 80, 80, 2)]
     expect(roomIdsForUnits(syms, ZONES)).toEqual(['AC_001'])
   })
-  it('식별자가 실과 무관한 자유 심볼은 위치로 역참조한다', () => {
-    const syms = [u('IDU7', 150, 50)]
-    expect(roomIdsForUnits(syms, ZONES)).toEqual(['AC_002'])
-  })
-  it('같은 실의 여러 심볼은 하나로 합친다', () => {
-    const syms = [u('AC_001', 20, 20), u('IDU7', 80, 80)]
-    expect(roomIdsForUnits(syms, ZONES)).toEqual(['AC_001'])
-  })
-  it('어느 실에도 없는 자유 심볼은 무시한다', () => {
-    const syms = [u('AC_001', 50, 50), u('IDU_FREE', 999, 999)]
+  it('소속 실이 없고 좌표도 실 밖이면 무시한다 (실외기 심볼 등)', () => {
+    const syms = [u('AC_001', 50, 50), { id: 'ODU1', x: 999, y: 999, rot: 0 }]
     expect(roomIdsForUnits(syms, ZONES)).toEqual(['AC_001'])
   })
   it('선택 심볼이 모두 실과 무관/밖이면 빈 배열', () => {
-    expect(roomIdsForUnits([u('IDU_FREE', 999, 999)], ZONES)).toEqual([])
+    expect(roomIdsForUnits([{ id: 'ODU1', x: 999, y: 999, rot: 0 }], ZONES)).toEqual([])
   })
 })
 

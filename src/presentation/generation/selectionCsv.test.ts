@@ -8,6 +8,7 @@ import type { SelectionTableInput } from '../../domain/generation/SelectionTable
 import { Room } from '../../domain/generation/Room'
 import { UnitLoad } from '../../domain/shared/UnitLoad'
 import { Placement } from '../../domain/generation/Placement'
+import { POS } from '../../test/positions'
 import { IndoorModel } from '../../domain/generation/IndoorModel'
 
 // ── 공통 픽스처 (SelectionTable.test와 동일 시나리오) ─────────
@@ -25,8 +26,8 @@ const roomPrep = Room.create({ id: 'r2', floor: '지하1층', name: '준비실',
 const excelInput = (): SelectionTableInput => ({
   rooms: [roomAv, roomPrep],
   placements: {
-    r1: Placement.ai('r1', { modelCode: '40C', quantity: 3 }),
-    r2: Placement.ai('r2', { modelCode: '20C', quantity: 3 }),
+    r1: Placement.ai('r1', { modelCode: '40C', quantity: 3 }, POS(3)),
+    r2: Placement.ai('r2', { modelCode: '20C', quantity: 3 }, POS(3)),
   },
   groups: [{ key: 'g1', label: '실외기 1', model: 'ARUM080LTE5', items: ['r1', 'r2'] }],
   indoorModels: [IDU_40C, IDU_20C],

@@ -6,6 +6,7 @@ import SelectionGrid from './SelectionGrid'
 import { buildSelectionTable } from '../../domain/generation/SelectionTable'
 import { Room } from '../../domain/generation/Room'
 import { Placement } from '../../domain/generation/Placement'
+import { POS } from '../../test/positions'
 import { IndoorModel } from '../../domain/generation/IndoorModel'
 
 // 픽스처: 엑셀 지하1층 축약(시청각실 40C×3 → 8HP, 조합비 0.7725 근처 시나리오)
@@ -18,8 +19,8 @@ const rooms = [
   Room.create({ id: 'R2', floor: '지하1층', name: '준비실', areaM2: 5.4, usage: '준비실', facility: 'OFFICE', shortSideM: 2, longSideM: 2.7 }),
 ]
 const placements = {
-  R1: Placement.ai('R1', { modelCode: '40C', quantity: 3 }),
-  R2: Placement.ai('R2', { modelCode: '20C', quantity: 3 }).overrideSelection({ modelCode: '20C', quantity: 2 }),
+  R1: Placement.ai('R1', { modelCode: '40C', quantity: 3 }, POS(3)),
+  R2: Placement.ai('R2', { modelCode: '20C', quantity: 3 }, POS(3)).overrideSelection({ modelCode: '20C', quantity: 2 }, POS(2)),
 }
 const table = buildSelectionTable({
   rooms,

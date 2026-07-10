@@ -1,10 +1,19 @@
 // 생성(Generation) 파이프라인의 작업 단계 정의 — presentation 전용, 순수/테스트 가능.
 // (업로드는 목록의 '생성' 메뉴에서 완료된 것으로 가정)
-// 실 검출 → AI 실내기 배치 → 실외기 배치 → 실외기 조합 → 산출물 생성.
+//
+// 실 검출 → AI 실내기 배치 → 실외기 선정·조합 → 실외기 배치 → 산출물 생성.
+//
+// 순서의 근거: 실내기를 다 배치해야 총 정격용량이 확정되고, 그래야 그 용량을 감당할
+// 실외기를 고를 수 있다(주인님 2026-07-10). 몇 대가 필요한지 정해져야 어디 둘지 정한다.
+// 예전에는 '배치'가 '조합'보다 앞에 있었는데, 실제로는 배치 단계 진입 시 조합을 먼저
+// 돌리고 있었다(라벨과 실행 순서가 반대).
+//
 // (실내기 미세조정은 별도 단계가 아니라 배치 단계 안에서 이동·회전·삭제로 수행한다)
 // 장비선정표 검토는 파이프라인 스텝이 아니라 '새 창'에서 확인·조정한다(도면을 가리지 않기 위해).
 
-export type StepId = 'detect' | 'place' | 'outdoor' | 'combine' | 'output'
+// 단계 식별자와 진행 순서는 도메인 어휘다(StepGuard가 소유). 여기서는 라벨·번호·힌트만 갖는다.
+export type { StepId } from '../../domain/generation/StepGuard'
+import type { StepId } from '../../domain/generation/StepGuard'
 
 export interface StepDef {
   id: StepId
@@ -16,9 +25,9 @@ export interface StepDef {
 export const STEPS: StepDef[] = [
   { id: 'detect', no: 1, label: '실 검출', hint: 'AI가 도면에서 실(공간)을 검출' },
   { id: 'place', no: 2, label: '실내기 배치', hint: 'AI가 실 면적·부하에 맞춰 실내기 자동 배치' },
-  { id: 'outdoor', no: 3, label: '실외기 배치', hint: '조합 그룹별 실외기 심벌을 도면(건물 외부)에 배치' },
-  { id: 'combine', no: 4, label: '실외기 조합', hint: '실외기 선정·조합 매핑 + 장비선정표 확인(새 창)' },
-  { id: 'output', no: 5, label: '산출물 생성', hint: '장비선정표·도면 산출' },
+  { id: 'combine', no: 3, label: '실외기 선정·조합', hint: '확정된 실내기 정격용량으로 실외기를 선정하고 조합을 정한다' },
+  { id: 'outdoor', no: 4, label: '실외기 배치', hint: '선정된 실외기 심벌을 도면(건물 외부)에 배치' },
+  { id: 'output', no: 5, label: '산출물 생성', hint: '장비선정표·장비일람표·도면 산출' },
 ]
 
 export const stepIndex = (id: StepId): number => STEPS.findIndex((s) => s.id === id)

@@ -65,41 +65,9 @@ export const ROOMS: Record<string, Room> = {
   AC_006: { name: '탕비실', floor: '지상1층', usage: '탕비실', area: 12.0, type: '1WAY', cool: roomCoolKw(12.0, DEFAULT_FACILITY, '탕비실'), ...sidesM(12.0, 206, 150), sys: 'EHP', x: 490, y: 196, w: 206, h: 150 },
 }
 
-// 실외기 배치 레이아웃 (어떤 모델을 어느 실외기 위치에 두고 어떤 실내기를 연결하는가).
-// 실외기 스펙(계열·용량·최대연결수·단가 등)의 SSOT는 장비마스터(Equipment Master)이며,
-// 생성 단은 OutdoorModelCatalog 포트로 PUBLISHED 스펙만 참조한다(모델 코드로 조회 — CLAUDE.md §1).
-export interface InitialGroup {
-  key: string
-  label: string
-  model: string
-  items: string[]
-}
-
-// 초기 상태는 "빈/0" — 실외기 그룹(모델)만 제안하고 실내기는 사전배정하지 않는다.
-// 배정은 파이프라인 진행(검출→배치→조합)의 결과로만 생긴다(NEXT #2·#3, CLAUDE.md §1).
-export const INITIAL_GROUPS: InitialGroup[] = [
-  { key: 'ODU1', label: '실외기-1', model: 'RPUW08BX9E', items: [] },
-  { key: 'ODU2', label: '실외기-2', model: 'RPUW12BX9M', items: [] },
-  { key: 'ODU3', label: '실외기-3', model: 'GPUW280C2S', items: [] },
-]
-
-// 초기 미배정 풀도 비어 있다(하드코딩 상수 제거). 실은 실내기 배치 후 풀에 편입된다.
-export const INITIAL_POOL: string[] = []
-
-// combine 단계 진입 시 적용하는 '자동 조합' 기본 매핑(실→실외기 그룹).
-// 사용자가 이후 매핑 팝업에서 조정한다. 전 실을 계열 호환 그룹에 배정(미배정 0).
-//  · ODU1(RPUW08BX9E, EHP 22.4kW): 거실·회의실·탕비실 (설계부하 합 ≈14.0 → 조합비 ≈0.63)
-//  · ODU2(RPUW12BX9M, EHP 34.8kW): 사무실·로비·침실1 (설계부하 합 ≈23.5 → 조합비 ≈0.68)
-//  · ODU3(GPUW280C2S, GHP): 빈 상태(EHP 실과 계열 불일치라 배정 없음)
-export interface Combination {
-  key: string
-  items: string[]
-}
-export const DEFAULT_COMBINATION: Combination[] = [
-  { key: 'ODU1', items: ['AC_001', 'AC_003', 'AC_006'] },
-  { key: 'ODU2', items: ['AC_004', 'AC_005', 'AC_002'] },
-  { key: 'ODU3', items: [] },
-]
+// 실외기 그룹은 상수가 아니다 — 실내기 배치가 끝난 뒤 정격 총용량으로 선정한다
+// (domain/generation/selectOutdoorUnits). 예전 INITIAL_GROUPS·DEFAULT_COMBINATION은
+// 목업 6실에 손으로 맞춘 배열이라 실 검출 결과가 달라지면 무의미했다.
 
 export interface ModelCard {
   mn: string
@@ -129,17 +97,9 @@ export const MODELS: { in: ModelCard[]; out: ModelCard[] } = {
   ],
 }
 
-// 조합비 = 연결 실내기 냉방용량 합 / 실외기 용량.
-// capByRoom(실별 실내기 정격용량 맵)을 주면 그 값으로 합산(B: 선택 장비 기준),
-// 없으면 방 부하(ROOMS.cool)를 프록시로 사용(하위 호환).
-export const ratioOf = (
-  group: { items: string[]; cool: number },
-  capByRoom?: Record<string, number>,
-): number => {
-  const capOf = (id: string) => (capByRoom ? capByRoom[id] ?? 0 : ROOMS[id]?.cool || 0)
-  const sum = group.items.reduce((a, id) => a + capOf(id), 0)
-  return group.cool ? sum / group.cool : 0
-}
+// 조합비는 도메인이 계산한다 — OutdoorGroup.comboRatio() (설치 정격용량 합 ÷ 실외기 용량).
+// 프리젠테이션에서 다시 세지 않는다: 예전 ratioOf는 도메인과 다른 값(설계부하 기준)을 내
+// 리포트·매핑 팝업·선정표의 조합비가 서로 어긋났다. GroupView.ratio/judgement를 쓴다.
 
 // 실내기 모델명 → 정격 냉방용량(kW). 미매칭/미지정은 0.
 export const indoorCoolByModel = (model: string | undefined): number =>

@@ -25,3 +25,26 @@ export class NotFoundError extends DomainError {
     this.name = 'NotFoundError'
   }
 }
+
+// 실외기 선정: 그 계열에 쓸 수 있는 실외기가 카탈로그(게시본)에 없다.
+export class NoCompatibleOutdoorError extends DomainError {
+  readonly energySource: string
+
+  constructor(energySource: string) {
+    super(`${energySource} 계열에 연결할 수 있는 게시된 실외기가 없습니다`)
+    this.name = 'NoCompatibleOutdoorError'
+    this.energySource = energySource
+  }
+}
+
+// 실외기 선정: 한 실의 실내기를 어떤 실외기 조합으로도 감당할 수 없다.
+// (실 하나의 정격 합이 최대 실외기 용량×허용 상한을 넘거나, 대수가 최대 연결 대수를 넘는다)
+export class UnpackableLoadError extends DomainError {
+  readonly roomId: string
+
+  constructor(roomId: string, message: string) {
+    super(message)
+    this.name = 'UnpackableLoadError'
+    this.roomId = roomId
+  }
+}

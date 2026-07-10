@@ -17,9 +17,6 @@ const niceGrid = (w: number): number => {
 }
 interface ViewBox { x: number; y: number; w: number; h: number }
 
-// ＋실내기 수동 추가 시 선택 가능한 실내기 유형(도면 심볼 태그).
-const IDU_KINDS: readonly string[] = ['벽걸이형', '2WAY', '4WAY']
-
 // 단축키 도움말(플로팅 위젯) — 단축키 하나당 한 행.
 const SHORTCUTS: readonly { key: string; desc: string }[] = [
   { key: 'C', desc: '에어컨(실내기) 모드' },
@@ -64,6 +61,10 @@ export interface TileManifest {
   units: string
 }
 
+// 실내기 심볼 이동/회전 커밋 페이로드(드래그 끝에 한 번만 올린다).
+export interface UnitMove { id: string; x: number; y: number }
+export interface UnitRotate { id: string; rot: number }
+
 interface ViewerProps {
   rooms: Record<string, Room>
   selectedIds: string[] // 선택된 실(존) id — ModelPanel 연동
@@ -71,19 +72,31 @@ interface ViewerProps {
   onEscape?: () => void
   tiles?: TileManifest // 딥줌 타일 매니페스트(보이는 타일만 로드)
   tileBase?: string // 타일 URL 베이스(예: /tiles)
+  // 실내기 심볼은 App(Placement)이 소유한다. 심볼 하나 = 실내기 한 대 = 선정표 대수 1.
+  indoorSymbols: UnitSym[]
+  onUnitsMove?: (moves: UnitMove[]) => void
+  onUnitsRotate?: (rots: UnitRotate[]) => void
+  onUnitsDelete?: (ids: string[]) => void
+  onUnitAdd?: (roomId: string) => void // 대표 실에 1대 추가
   indoorInfo?: Record<string, { model: string; kind: string }> // 실별 실내기 모델명·유형(심볼 오버레이)
   outdoorGroups?: OutdoorGroupInfo[] // 실외기 배치 대상 그룹(placeOutdoors)
+  // 실외기 심볼도 App이 소유한다 — 가드가 '몇 대 중 몇 대 배치됐는지' 알아야 하고,
+  // 그 좌표가 산출 도면에 실린다.
+  outdoorSymbols: UnitSym[]
+  onOutdoorsMove?: (moves: UnitMove[]) => void
+  onOutdoorsDelete?: (keys: string[]) => void
+  onOutdoorsAutoPlace?: (positions: Record<string, { x: number; y: number }>) => void
   planW?: number // 도면 정규화 좌표 폭(기본 720 목업 / 실도면은 종횡비 유지 폭)
   planH?: number // 도면 정규화 좌표 높이(기본 470)
   mmPerUnit?: number // 정규화 1단위 = 실 mm (격자 실치수 표기 + DXF 왕복)
   layerFilter?: LayerFilter // 표시 레이어 필터(기본 all)
+  onLayerFilterChange?: (f: LayerFilter) => void // 레이어 셀렉트는 뷰어 도구다(상단 툴바 밴드 제거)
   canAddUnit?: boolean // ＋실내기 수동 추가 허용 — 실검출·AI 배치 완료 전에는 비활성
   canPlaceOutdoors?: boolean // ＋실외기 배치 허용 — '실외기 배치' 단계에서만 활성
 }
 
 // App 버튼에서 호출하는 명령형 핸들.
 export interface ViewerHandle {
-  placeUnits: () => void // 방별로 실내기 심볼을 자동 배치(빈 상태 → 채움)
   placeOutdoors: () => void // 그룹별 실외기 심볼을 도면 하단(건물 외부)에 배치
   captureSvg: () => string | null // 현재 도면 SVG 직렬화(캡처 다운로드용)
 }
@@ -94,7 +107,13 @@ export interface ViewerHandle {
  * 좌표계는 planW×planH(목업 720×470 또는 실도면 DXF 월드 mm) 기준.
  */
 const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
-  { rooms, selectedIds, onSelectionChange, onEscape, tiles, tileBase, indoorInfo, outdoorGroups, planW, planH, mmPerUnit, layerFilter = 'all', canAddUnit = true, canPlaceOutdoors = false }: ViewerProps,
+  {
+    rooms, selectedIds, onSelectionChange, onEscape, tiles, tileBase,
+    indoorSymbols, onUnitsMove, onUnitsRotate, onUnitsDelete, onUnitAdd,
+    outdoorSymbols, onOutdoorsMove, onOutdoorsDelete, onOutdoorsAutoPlace,
+    indoorInfo, outdoorGroups, planW, planH, mmPerUnit, layerFilter = 'all', onLayerFilterChange,
+    canAddUnit = true, canPlaceOutdoors = false,
+  }: ViewerProps,
   ref,
 ) {
   // 도면 좌표계 상수(프롭 기반). 실도면(대형 mm)이면 패딩·격자 간격을 비례 조정.
@@ -118,15 +137,23 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   }, [MIN_W, MAX_W])
   const [view, setView] = useState<ViewBox>(FIT)
   const [mode, setMode] = useState<Mode>('cassette')
-  // 실내기 심볼은 초기엔 '비어 있고', 'AI 실내기 배치' 버튼(placeUnits)으로 채운다.
-  // 심볼 식별자는 담당 실 id와 동일(실내기 = 그 실의 장비). 자유 추가 심볼만 'IDU_' 접두.
-  const [symbols, setSymbols] = useState<UnitSym[]>([])
+  // 실내기 심볼은 App(Placement)이 소유한다. 드래그·회전 중에는 여기 draft로 그리고,
+  // 마우스를 뗄 때 한 번만 커밋한다(60fps마다 App을 리렌더하지 않기 위함).
+  const [draft, setDraft] = useState<Record<string, { x?: number; y?: number; rot?: number }> | null>(null)
+  const symbols = useMemo(
+    () => (draft ? indoorSymbols.map((s) => (draft[s.id] ? { ...s, ...draft[s.id] } : s)) : indoorSymbols),
+    [indoorSymbols, draft],
+  )
   const [zones, setZones] = useState<ZoneBox[]>(() =>
     Object.entries(rooms).map(([id, r]) => ({ id, name: r.name, x: r.x, y: r.y, w: r.w, h: r.h })),
   )
   const [selUnits, setSelUnits] = useState<Set<string>>(() => new Set())
-  // 실외기 심볼: 'AI 실외기 배치'로 채운다. id = 그룹 key(ODU1..).
-  const [outdoors, setOutdoors] = useState<UnitSym[]>([])
+  // 실외기 심볼도 controlled. 드래그 중에는 oduDraft로 그리고 마우스를 뗄 때 커밋한다.
+  const [oduDraft, setOduDraft] = useState<{ id: string; x: number; y: number } | null>(null)
+  const outdoors = useMemo(
+    () => (oduDraft ? outdoorSymbols.map((u) => (u.id === oduDraft.id ? { ...u, x: oduDraft.x, y: oduDraft.y } : u)) : outdoorSymbols),
+    [outdoorSymbols, oduDraft],
+  )
   const [selOdu, setSelOdu] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [rotatingId, setRotatingId] = useState<string | null>(null)
@@ -135,12 +162,10 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const [marquee, setMarquee] = useState<ViewBox | null>(null)
   const [snapOn, setSnapOn] = useState(true)
   const [svgW, setSvgW] = useState(1200) // 화면상 SVG 폭(px) — 타일 레벨 선택용
-  const [hintOpen, setHintOpen] = useState(true)
+  const [hintOpen, setHintOpen] = useState(false) // 도면이 주인공 — 단축키 목록은 필요할 때 펼친다
   const [toolMenuOpen, setToolMenuOpen] = useState(false)
-  const [addMenuOpen, setAddMenuOpen] = useState(false) // ＋실내기 유형 선택 메뉴
 
   const svgRef = useRef<SVGSVGElement | null>(null)
-  const idRef = useRef(Object.keys(rooms).length)
   const panRef = useRef<{ sx: number; sy: number; vx: number; vy: number; a: number; d: number } | null>(null)
   const dragRef = useRef<{ startX: number; startY: number; orig: Record<string, { x: number; y: number }>; moved: boolean } | null>(null)
   const rotRef = useRef<{ startX: number; orig: Record<string, number> } | null>(null)
@@ -149,21 +174,35 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const oduRef = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number } | null>(null)
   const spaceRef = useRef(false)
 
-  // 실외기 배치: 건물 외부(도면 하단)에 그룹당 하나씩 가로로 나열(폭에 비례 배치).
-  // 도면 영역 ＋실외기 배치 버튼과 명령형 핸들이 공유한다(재호출 시 기본 배치로 리셋).
+  // window 리스너(1회 등록)에서 읽는 draft·콜백. 렌더마다 갱신되는 prop을 stale closure 없이 쓴다.
+  const draftRef = useRef<Record<string, { x?: number; y?: number; rot?: number }> | null>(null)
+  const applyDraft = (d: Record<string, { x?: number; y?: number; rot?: number }> | null) => {
+    draftRef.current = d
+    setDraft(d)
+  }
+  const oduDraftRef = useRef<{ id: string; x: number; y: number } | null>(null)
+  const cbRef = useRef({ onUnitsMove, onUnitsRotate, onUnitsDelete, onOutdoorsMove, onOutdoorsDelete })
+  cbRef.current = { onUnitsMove, onUnitsRotate, onUnitsDelete, onOutdoorsMove, onOutdoorsDelete }
+
+  // 실외기 자동 배치: 건물 외부(도면 하단)에 그룹당 하나씩 가로로 나열(폭에 비례 배치).
+  // 좌표는 App이 소유하므로 결과를 콜백으로 올린다(재호출 시 기본 배치로 리셋).
   const placeOutdoorsFn = useCallback(() => {
     const gs = outdoorGroups ?? []
-    setOutdoors(gs.map((g, i) => ({ id: g.key, x: snap(PLAN_W * 0.12 + i * PLAN_W * 0.16), y: snap(PLAN_H + PLAN_H * 0.04), rot: 0 })))
+    const positions: Record<string, { x: number; y: number }> = {}
+    gs.forEach((g, i) => {
+      positions[g.key] = { x: snap(PLAN_W * 0.12 + i * PLAN_W * 0.16), y: snap(PLAN_H + PLAN_H * 0.04) }
+    })
+    onOutdoorsAutoPlace?.(positions)
     setMode('outdoor')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outdoorGroups, PLAN_W, PLAN_H])
 
-  // 명령형 핸들: 실내기/실외기 자동 배치(재호출 시 기본 배치로 리셋).
+  // 명령형 핸들: 실외기 자동 배치(재호출 시 기본 배치로 리셋) + 화면 캡처.
+  // 실내기 배치는 명령형 핸들이 아니다 — App이 Placement를 만들면 심볼이 따라온다.
   useImperativeHandle(ref, () => ({
-    placeUnits: () =>
-      setSymbols(Object.entries(rooms).map(([id, r]) => ({ id, x: snap(r.x + r.w / 2), y: snap(r.y + r.h / 2), rot: 0 }))),
     placeOutdoors: placeOutdoorsFn,
     captureSvg: () => (svgRef.current ? new XMLSerializer().serializeToString(svgRef.current) : null),
-  }), [rooms, placeOutdoorsFn])
+  }), [placeOutdoorsFn])
 
   // window 리스너(1회 등록)에서 읽는 최신 상태 스냅샷. 렌더 중이 아닌 effect에서 갱신(refs 규칙 준수).
   const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu })
@@ -202,18 +241,15 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selUnits, symbols, zones, onSelectionChange])
 
-  // 역방향 동기화: 패널 등에서 실 선택(selectedIds)이 바뀌면 실내기 심볼 선택도 맞춘다.
-  //  · 선택된 장비 목록에서 체크 해제 → 해당 실내기 심볼 선택도 함께 해제(하이라이트 정리)
-  //  · 방-바인딩 심볼(id=실id)은 selectedIds를 따르고, 자유 심볼(IDU_)은 로컬 선택 유지
+  // 역방향 동기화: 패널 등에서 실 선택(selectedIds)이 바뀌면 그 실의 실내기 심볼 선택도 맞춘다.
+  //  · 선택된 장비 목록에서 체크 해제 → 해당 실의 심볼 선택도 함께 해제(하이라이트 정리)
   //  · 이미 일치하면 prev를 그대로 반환해 setState/루프를 막는다
-  //  · 순방향(심볼 클릭)이 발신한 변경이면 스킵 — 클릭한 심볼만 선택 유지(동일 존 심볼 오선택 방지)
+  //  · 순방향(심볼 클릭)이 발신한 변경이면 스킵 — 클릭한 심볼만 선택 유지(같은 실 다른 대수 오선택 방지)
   useEffect(() => {
     if (selFromSymbols.current) { selFromSymbols.current = false; return }
     setSelUnits((prev) => {
-      const zoneIds = new Set(zones.map((z) => z.id))
       const desired = new Set<string>()
-      for (const id of prev) if (!zoneIds.has(id)) desired.add(id) // 자유 심볼 유지
-      for (const s of symbols) if (selectedIds.includes(s.id)) desired.add(s.id)
+      for (const s of symbols) if (s.roomId && selectedIds.includes(s.roomId)) desired.add(s.id)
       const same = prev.size === desired.size && [...prev].every((x) => desired.has(x))
       return same ? prev : desired
     })
@@ -278,7 +314,9 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       const r = rotRef.current
       if (r) {
         const delta = (e.clientX - r.startX) * ROT_SENS
-        setSymbols((prev) => prev.map((s) => (r.orig[s.id] !== undefined ? { ...s, rot: norm(Math.round((r.orig[s.id] + delta) / ROT_STEP) * ROT_STEP) } : s)))
+        const next: Record<string, { rot: number }> = {}
+        for (const id of Object.keys(r.orig)) next[id] = { rot: norm(Math.round((r.orig[id] + delta) / ROT_STEP) * ROT_STEP) }
+        applyDraft(next)
         return
       }
       const d = dragRef.current
@@ -287,7 +325,9 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         let dx = p.x - d.startX, dy = p.y - d.startY
         if (st.current.snapOn) { dx = snap(dx); dy = snap(dy) }
         if (Math.abs(p.x - d.startX) > 3 || Math.abs(p.y - d.startY) > 3) d.moved = true
-        setSymbols((prev) => prev.map((s) => { const o = d.orig[s.id]; return o ? { ...s, x: o.x + dx, y: o.y + dy } : s }))
+        const next: Record<string, { x: number; y: number }> = {}
+        for (const [id, o] of Object.entries(d.orig)) next[id] = { x: o.x + dx, y: o.y + dy }
+        applyDraft(next)
         return
       }
       const od = oduRef.current
@@ -295,7 +335,9 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         const p = toSvg(e.clientX, e.clientY); if (!p) return
         let dx = p.x - od.startX, dy = p.y - od.startY
         if (st.current.snapOn) { dx = snap(dx); dy = snap(dy) }
-        setOutdoors((prev) => prev.map((u) => (u.id === od.id ? { ...u, x: od.ox + dx, y: od.oy + dy } : u)))
+        const next = { id: od.id, x: od.ox + dx, y: od.oy + dy }
+        oduDraftRef.current = next
+        setOduDraft(next)
         return
       }
       const mq = marqRef.current
@@ -304,11 +346,36 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         setMarquee({ x: Math.min(mq.sx, p.x), y: Math.min(mq.sy, p.y), w: Math.abs(p.x - mq.sx), h: Math.abs(p.y - mq.sy) })
       }
     }
+    // 드래그/회전 draft를 App(Placement)에 한 번만 커밋하고 draft를 비운다.
+    const commitDraft = (kind: 'move' | 'rotate') => {
+      const d = draftRef.current
+      draftRef.current = null
+      setDraft(null)
+      if (!d) return
+      if (kind === 'move') {
+        const moves = Object.entries(d)
+          .filter(([, v]) => v.x !== undefined && v.y !== undefined)
+          .map(([id, v]) => ({ id, x: v.x as number, y: v.y as number }))
+        if (moves.length) cbRef.current.onUnitsMove?.(moves)
+      } else {
+        const rots = Object.entries(d)
+          .filter(([, v]) => v.rot !== undefined)
+          .map(([id, v]) => ({ id, rot: v.rot as number }))
+        if (rots.length) cbRef.current.onUnitsRotate?.(rots)
+      }
+    }
     const onUp = () => {
       if (panRef.current) { panRef.current = null; setPanning(false); return }
-      if (oduRef.current) { oduRef.current = null; return }
+      if (oduRef.current) {
+        oduRef.current = null
+        const d = oduDraftRef.current
+        oduDraftRef.current = null
+        setOduDraft(null)
+        if (d) cbRef.current.onOutdoorsMove?.([d])
+        return
+      }
       if (cornerRef.current) { cornerRef.current = null; return }
-      if (rotRef.current) { rotRef.current = null; setRotatingId(null); return }
+      if (rotRef.current) { rotRef.current = null; setRotatingId(null); commitDraft('rotate'); return }
       if (marqRef.current) {
         const m = marqRef.current
         setMarquee((rect) => {
@@ -333,7 +400,10 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         })
         marqRef.current = null
       }
-      dragRef.current = null
+      if (dragRef.current) {
+        dragRef.current = null
+        commitDraft('move')
+      }
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
@@ -359,20 +429,27 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         if (st.current.mode === 'cassette') {
           e.preventDefault()
           const sel = st.current.selUnits
-          if (sel.size) setSymbols((prev) => prev.map((s) => (sel.has(s.id) ? { ...s, rot: norm((Math.floor(s.rot / 90) + 1) * 90) } : s)))
+          if (sel.size) {
+            const rots = st.current.symbols
+              .filter((s) => sel.has(s.id))
+              .map((s) => ({ id: s.id, rot: norm((Math.floor(s.rot / 90) + 1) * 90) }))
+            cbRef.current.onUnitsRotate?.(rots)
+          }
         }
       } else if (k === 'delete' || k === 'backspace') {
         if (st.current.mode === 'cassette') {
           e.preventDefault()
           const sel = st.current.selUnits
-          if (sel.size) { setSymbols((prev) => prev.filter((s) => !sel.has(s.id))); setSelUnits(new Set()) }
+          // 심볼 삭제 = 실내기 대수 감소. 선정표·조합비가 즉시 따라온다.
+          if (sel.size) { cbRef.current.onUnitsDelete?.(Array.from(sel)); setSelUnits(new Set()) }
         } else if (st.current.mode === 'outdoor') {
           e.preventDefault()
           const id = st.current.selOdu
-          if (id) { setOutdoors((prev) => prev.filter((u) => u.id !== id)); setSelOdu(null) }
+          // 실외기 심볼 삭제 = 도면에서 뺀 것. 그룹 자체는 남는다(가드가 '미배치'로 잡는다).
+          if (id) { cbRef.current.onOutdoorsDelete?.([id]); setSelOdu(null) }
         }
       } else if (k === 'escape') {
-        setSelUnits(new Set()); setSelOdu(null); onSelectionChange([]); setToolMenuOpen(false); setAddMenuOpen(false); onEscape?.()
+        setSelUnits(new Set()); setSelOdu(null); onSelectionChange([]); setToolMenuOpen(false); onEscape?.()
       }
     }
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') { spaceRef.current = false; setSpaceDown(false) } }
@@ -451,11 +528,13 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     onSelectionChange([id])
   }
 
-  // 유형(벽걸이형/2WAY/4WAY)을 선택해 자유 심볼을 추가한다(＋실내기 메뉴).
-  const addUnit = (kind: string) => {
-    const id = 'IDU_' + ++idRef.current // 실과 무관한 자유 심볼(위치로 역참조)
-    setSymbols((prev) => [...prev, { id, x: snap(view.x + view.w / 2), y: snap(view.y + view.h / 2), rot: 0, kind }])
-    setSelUnits(new Set([id]))
+  // 선택한 실에 실내기를 한 대 더한다.
+  // 예전에는 실과 무관한 '자유 심볼'(IDU_*)을 아무 데나 놓을 수 있었는데,
+  // 그 심볼은 어느 실에도 속하지 않아 선정표·일람표에 실리지 않았다. 그래서 실에 귀속시킨다.
+  const primaryRoom = selectedIds[0]
+  const addUnitToRoom = () => {
+    if (!primaryRoom) return
+    onUnitAdd?.(primaryRoom)
     setMode('cassette')
   }
 
@@ -496,26 +575,31 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
 
   return (
     <div className="viewer">
-      <div className="vhint">[휠: 확대/축소 · 드래그: 영역선택 · Space/손: 이동 · C·Z·H: 모드 · R: 90° · Del: 삭제]</div>
-
+      {/* 좌상단 뷰어 도구: 레이어 필터 + 격자. (조작 힌트는 우상단 단축키 위젯에 있다 — 중복 제거) */}
       <div className="vtools">
+        {onLayerFilterChange && (
+          <select className="field" value={layerFilter} onChange={(e) => onLayerFilterChange(e.target.value as LayerFilter)} aria-label="레이어 필터">
+            {LAYER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        )}
         <label className="vtoggle"><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> 격자{gridLabel ? ` (${gridLabel})` : ''}</label>
       </div>
       {/* 도면 영역 상단 가운데: 배치 액션 — ＋실내기(실내기 배치 단계), ＋실외기 배치(실외기 배치 단계) */}
       <div className="vtools vtools-center">
         <button
           className="btn sm"
-          onClick={() => setAddMenuOpen((o) => !o)}
-          disabled={!canAddUnit}
-          title={canAddUnit ? '유형을 선택해 실내기를 추가' : '실내기 배치 단계에서 AI 실내기 배치 완료 후 추가할 수 있습니다'}
+          onClick={addUnitToRoom}
+          disabled={!canAddUnit || !primaryRoom}
+          title={
+            !canAddUnit
+              ? '실내기 배치 단계에서 AI 실내기 배치 완료 후 추가할 수 있습니다'
+              : !primaryRoom
+                ? '실내기를 추가할 실을 먼저 선택하세요'
+                : `${primaryRoom}에 실내기 1대를 추가합니다`
+          }
         >＋ 실내기</button>
-        {addMenuOpen && (
-          <div className="addmenu">
-            {IDU_KINDS.map((k) => (
-              <button key={k} onClick={() => { addUnit(k); setAddMenuOpen(false) }}>{k}</button>
-            ))}
-          </div>
-        )}
         <button
           className="btn sm"
           onClick={placeOutdoorsFn}
@@ -566,14 +650,18 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
 
         {/* 실내기(에어컨) 레이어 */}
         <g style={{ pointerEvents: isCassette ? 'auto' : 'none', opacity: isCassette ? 1 : 0.5, display: layerOn('indoor') ? undefined : 'none' }}>
-          {symbols.map((s) => (
-            <ACUnit
-              key={s.id} sym={s} selected={selUnits.has(s.id)} hovered={hoveredId === s.id} rotating={rotatingId === s.id}
-              model={indoorInfo?.[s.id]?.model} kind={indoorInfo?.[s.id]?.kind ?? s.kind}
-              onBodyDown={onUnitDown} onRotateDown={onRotateDown}
-              onEnter={setHoveredId} onLeave={(id) => setHoveredId((h) => (h === id ? null : h))}
-            />
-          ))}
+          {symbols.map((s) => {
+            // 심볼의 모델·유형은 그 심볼이 속한 실의 선정 결과에서 온다.
+            const info = s.roomId ? indoorInfo?.[s.roomId] : undefined
+            return (
+              <ACUnit
+                key={s.id} sym={s} selected={selUnits.has(s.id)} hovered={hoveredId === s.id} rotating={rotatingId === s.id}
+                model={info?.model} kind={info?.kind ?? s.kind}
+                onBodyDown={onUnitDown} onRotateDown={onRotateDown}
+                onEnter={setHoveredId} onLeave={(id) => setHoveredId((h) => (h === id ? null : h))}
+              />
+            )
+          })}
         </g>
 
         {/* 실외기 레이어 */}
@@ -615,7 +703,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         )}
       </div>
       {toolMenuOpen && <div className="figmenu-overlay" onClick={() => setToolMenuOpen(false)} />}
-      {addMenuOpen && <div className="figmenu-overlay" onClick={() => setAddMenuOpen(false)} />}
 
       {/* 우상단 플로팅 힌트 위젯 */}
       <div className={`vwidget${hintOpen ? '' : ' collapsed'}`}>

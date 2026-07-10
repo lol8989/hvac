@@ -1,20 +1,20 @@
-// 프로젝트 설정 — 시설군 선택. 실 검출 전에만 바꿀 수 있다.
+// 프로젝트 설정 — 시설군 선택.
 //
 // 시설군이 있어야 단위부하가 정해진다. 같은 실명도 시설군마다 값이 다르기 때문이다
 // (식당: 주거 120 / 상업 210 kcal/h·㎡). 근거: doc/03_데이터/LG전자_단위부하_참고자료.pdf
 //
-// 검출이 끝난 뒤 시설군을 바꾸면 이미 잡힌 부하·배치·조합이 통째로 흔들린다.
-// 그래서 검출 이후에는 잠근다(바꾸려면 '← 이전'으로 되돌아간다).
+// 검출이 끝난 뒤 바꾸면 이미 잡힌 부하·배치·조합이 통째로 흔들린다.
+// 예전에는 그래서 셀렉트를 잠갔는데, 잠그면 왜 못 바꾸는지·어떻게 바꾸는지 알 수 없었다.
+// 지금은 잠그지 않고 StepGuard(FACILITY_CHANGE)가 무엇을 잃는지 알리고 확인을 받는다.
 
 import { FACILITY_TYPES, type FacilityType } from '../../domain/shared/unitLoadTable'
 
 export interface ProjectSettingsProps {
   facility: FacilityType
-  locked: boolean
   onChange: (f: FacilityType) => void
 }
 
-export default function ProjectSettings({ facility, locked, onChange }: ProjectSettingsProps) {
+export default function ProjectSettings({ facility, onChange }: ProjectSettingsProps) {
   return (
     <label className="proj-set">
       <span>시설</span>
@@ -22,8 +22,6 @@ export default function ProjectSettings({ facility, locked, onChange }: ProjectS
         className="field"
         aria-label="시설군"
         value={facility}
-        disabled={locked}
-        title={locked ? '실 검출 후에는 시설을 바꿀 수 없습니다' : undefined}
         onChange={(e) => onChange(e.target.value as FacilityType)}
       >
         {FACILITY_TYPES.map((f) => (

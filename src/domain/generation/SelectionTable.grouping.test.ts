@@ -8,6 +8,7 @@ import { buildSelectionTable } from './SelectionTable'
 import type { SelectionTableInput } from './SelectionTable'
 import { Room } from './Room'
 import { Placement } from './Placement'
+import { POS } from '../../test/positions'
 import { IndoorModel } from './IndoorModel'
 import { UnitLoad } from '../shared/UnitLoad'
 
@@ -23,10 +24,10 @@ const room = (id: string, floor: string) =>
 const input = (): SelectionTableInput => ({
   rooms: [room('r1', '1층'), room('r2', '1층'), room('r3', '1층'), room('r4', '2층')],
   placements: {
-    r1: Placement.ai('r1', { modelCode: '40C', quantity: 2 }),
-    r2: Placement.ai('r2', { modelCode: '40C', quantity: 1 }),
-    r3: Placement.ai('r3', { modelCode: '40C', quantity: 3 }),
-    r4: Placement.ai('r4', { modelCode: '40C', quantity: 1 }),
+    r1: Placement.ai('r1', { modelCode: '40C', quantity: 2 }, POS(2)),
+    r2: Placement.ai('r2', { modelCode: '40C', quantity: 1 }, POS(1)),
+    r3: Placement.ai('r3', { modelCode: '40C', quantity: 3 }, POS(3)),
+    r4: Placement.ai('r4', { modelCode: '40C', quantity: 1 }, POS(1)),
   },
   groups: [
     { key: 'g1', label: '실외기-1', model: 'ODU-A', items: ['r1', 'r2'] },

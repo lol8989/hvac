@@ -13,7 +13,7 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
-const reportText = (container: HTMLElement) => container.querySelector('.report')!.textContent ?? ''
+const reportText = (container: HTMLElement) => container.querySelector('.statusbar')!.textContent ?? ''
 
 describe('App — 조합 리포트 초기 상태 (NEXT #2·#3)', () => {
   it('검출 전 초기 상태에서 부하·설치용량·실외기·배정·미배정이 모두 0/빈이다', () => {
@@ -40,11 +40,38 @@ describe('App — 조합 리포트 초기 상태 (NEXT #2·#3)', () => {
     expect(reportText(container)).toContain('미배정 6')
     expect(reportText(container)).toContain('실내기 배정 0/6')
 
-    // 실외기 배치 진입 시 자동 조합 기본값 적용 → 전 실 배정(미배정 0), 실외기 2대.
-    fireEvent.click(screen.getByRole('button', { name: '실외기 배치 →' }))
-    fireEvent.click(screen.getByRole('button', { name: '실외기 조합 →' }))
+    // 실외기 단계 진입 시 선정 알고리즘이 돈다 → 전 실 배정(미배정 0).
+    // 정격 37.6kW EHP → 46.4kW 절환형 1대(조합비 0.81). 냉방전용 39.2kW는 난방 요구로 배제된다.
+    // 실외기 대수·모델은 상수가 아니라 이 계산의 결과다.
+    fireEvent.click(screen.getByRole('button', { name: '실외기 선정 →' }))
     expect(reportText(container)).toContain('실내기 배정 6/6')
     expect(reportText(container)).toContain('미배정 0')
-    expect(reportText(container)).toContain('실외기 2대')
+    expect(reportText(container)).toContain('실외기 1대')
+    expect(reportText(container)).toContain('평균 조합비 0.81')
+    expect(reportText(container)).toContain('과부하 0')
+  })
+
+  // 실외기 '모델'이 부하에 따라 달라진다는 것은 어댑터 테스트가 증명한다
+  // (planAdapter.test.ts — '실외기 대수·모델은 상수가 아니라 정격 총용량이 정한다').
+  // 여기서는 시설군을 바꾸면 파이프라인이 다시 돌아 다른 부하·조합비로 수렴하는지만 본다.
+  it('시설군을 바꾸면 부하가 달라지고 조합비도 그에 따라 다시 계산된다', () => {
+    const run = (facility: string) => {
+      const { container, unmount } = render(<App />)
+      fireEvent.change(screen.getByLabelText('시설군'), { target: { value: facility } })
+      fireEvent.click(screen.getByRole('button', { name: '실 검출 실행 →' }))
+      fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
+      fireEvent.click(screen.getByRole('button', { name: '실외기 선정 →' }))
+      const t = reportText(container)
+      unmount()
+      const load = /총 부하 ([\d.]+) kW/.exec(t)![1]
+      const ratio = /평균 조합비 ([\d.]+)/.exec(t)![1]
+      return { load, ratio, t }
+    }
+
+    const office = run('OFFICE')
+    const residential = run('주거시설')
+    expect(office.load).not.toBe(residential.load) // 같은 도면, 다른 단위부하
+    expect(office.ratio).not.toBe(residential.ratio) // 조합비는 그 부하의 결과
+    for (const r of [office, residential]) expect(r.t).toContain('미배정 0')
   })
 })

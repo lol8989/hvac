@@ -22,14 +22,30 @@ button{font-family:inherit;cursor:pointer;}
 .gnb nav a.on{color:#fff;font-weight:700;border-bottom:2px solid #fff;padding-bottom:3px;}
 .gnb .r{display:flex;align-items:center;gap:16px;font-size:13px;color:#CCC;}
 
-.sub{height:44px;background:var(--sub);color:#fff;display:flex;align-items:center;padding:0 18px;gap:12px;}
-.sub .back{color:#CFCFCF;font-size:12px;text-decoration:none;}
-.sub .title{flex:1;text-align:center;font-weight:700;font-size:15px;}
-.sub .b{font-size:12px;border-radius:10px;padding:2px 9px;background:#3A3A3A;color:#fff;border:1px solid #4a4a4a;}
-.sub .b.done{background:#fff;color:#222;}
+/* 작업 바 — 되돌아가기 · 스텝퍼 · 단계 액션을 한 줄에. (구 .sub + .stepper + .report 액션 통합) */
+.workbar{height:48px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 16px;flex-shrink:0;}
+.wb-back{color:#666;font-size:13px;text-decoration:none;white-space:nowrap;flex-shrink:0;}
+.wb-back:hover{color:#111;}
+.wb-steps{flex:1;min-width:0;display:flex;justify-content:center;overflow:hidden;}
+.wb-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
 
-/* 단계 인디케이터(스텝 바) */
-.stepper{background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:4px;padding:9px 16px;flex-wrap:wrap;}
+/* 오버플로(⋯) 메뉴 */
+.ovf{position:relative;}
+.ovf-menu{position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:4px;display:flex;flex-direction:column;min-width:170px;z-index:60;}
+.ovf-menu button{border:none;background:transparent;text-align:left;padding:8px 10px;font-size:14px;font-family:inherit;color:#222;border-radius:6px;cursor:pointer;}
+.ovf-menu button:hover{background:#F2F2F2;}
+.ovf-menu button:disabled{color:#aaa;cursor:not-allowed;}
+
+/* 하단 상태바 — 조합 리포트(읽기 전용) */
+.statusbar{height:28px;background:#fff;border-top:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 16px;flex-shrink:0;font-size:12px;color:#555;overflow-x:auto;white-space:nowrap;}
+.statusbar .sb-lbl{font-weight:700;color:#888;}
+.statusbar .sb-item{font-variant-numeric:tabular-nums;}
+.statusbar .sb-item b{color:#111;font-size:13px;}
+.statusbar .sb-item.warn b{color:#111;text-decoration:underline;}
+.statusbar .sb-dim{color:#999;}
+
+/* 단계 인디케이터(스텝 바) — 워크바 안에 들어간다 */
+.stepper{display:flex;align-items:center;justify-content:center;gap:4px;}
 .stepper .step{display:flex;align-items:center;gap:7px;background:transparent;border:none;padding:2px 6px;color:#999;font-size:14px;}
 .stepper .step:disabled{cursor:default;}
 .stepper .step .step-no{width:20px;height:20px;border-radius:50%;border:1.5px solid #CCC;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#999;background:#fff;flex-shrink:0;}
@@ -41,31 +57,12 @@ button{font-family:inherit;cursor:pointer;}
 .stepper .step-line{width:26px;height:2px;background:#DDD;flex-shrink:0;}
 .stepper .step-line.on{background:#888;}
 
-.stage-overlay{align-items:center;justify-content:center;background:#F7F7F8;border-bottom:1px solid var(--line);}
-.stepcard{width:min(520px,90%);background:#fff;border:1px solid var(--line);border-radius:12px;padding:34px 28px;text-align:center;}
-.stepcard-icon{font-size:34px;color:#666;margin-bottom:10px;}
-.stepcard-title{font-size:16px;font-weight:700;color:#111;margin-bottom:6px;}
-.stepcard-desc{font-size:14px;color:#555;margin-bottom:8px;}
-.stepcard-meta{font-size:12px;color:#999;margin-bottom:16px;}
-.stepcard-actions{display:flex;gap:8px;justify-content:center;}
 
-.report{background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:8px 16px;flex-wrap:wrap;}
-.report .lbl{font-size:13px;font-weight:700;color:#555;margin-right:2px;}
-.kpi{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:16px;padding:4px 11px;background:#FAFAFA;font-size:14px;}
-.kpi b{font-size:15px;}
-.kpi.warn{background:#EDEDED;border-color:#bbb;}
-.kpi.warn b{text-decoration:underline;}
-.report .sp{flex:1;}
-.gauge{width:70px;height:7px;background:#E6E6E6;border-radius:5px;overflow:hidden;display:inline-block;vertical-align:middle;}
-.gauge>i{display:block;height:100%;background:#555;}
 
-.toolbar{background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 16px;}
-.toolbar .sp{flex:1;}
-.tb-actions{display:flex;align-items:center;gap:8px;}
 .field{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 10px;font-size:14px;color:var(--ink2);}
 
 .app{height:100vh;display:flex;flex-direction:column;overflow:hidden;}
-.gnb,.sub,.stepper,.report{flex-shrink:0;}
+.gnb{flex-shrink:0;}
 .stage{display:flex;flex:1;min-height:0;}
 .main-col{flex:1;min-width:0;display:flex;flex-direction:column;}
 .viewer{flex:1;position:relative;background:#F7F7F8;overflow:hidden;}
@@ -80,7 +77,6 @@ button{font-family:inherit;cursor:pointer;}
 .room .ac{position:absolute;top:4px;right:6px;font-size:9px;color:#aaa;}
 .zoom{position:absolute;left:14px;bottom:14px;display:flex;flex-direction:column;gap:6px;}
 .zoom button{width:28px;height:28px;border:1px solid var(--line);background:#fff;border-radius:6px;font-size:15px;}
-.vhint{position:absolute;left:50%;top:8px;transform:translateX(-50%);font-size:11px;color:#aaa;}
 
 .rpanel{width:322px;flex-shrink:0;background:#fff;border-left:1px solid var(--line);display:flex;flex-direction:column;position:relative;}
 .rp-resizer{position:absolute;left:-3px;top:0;bottom:0;width:7px;cursor:col-resize;z-index:5;}
@@ -121,16 +117,33 @@ button{font-family:inherit;cursor:pointer;}
 .rp-foot{padding:10px 14px;border-top:1px solid var(--line);display:flex;gap:8px;}
 .rp-foot .btn{flex:1;}
 
-.bottom{height:44px;background:#fff;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:#666;font-size:13px;}
 
 .overlay{position:fixed;inset:0;background:rgba(20,20,20,.55);display:flex;align-items:center;justify-content:center;z-index:100;}
 .modal{width:min(1180px,94vw);height:min(760px,90vh);background:#fff;border-radius:12px;display:flex;flex-direction:column;overflow:hidden;}
 .modal.confirm{width:min(420px,92vw);height:auto;}
 .confirm-body{padding:20px 18px;font-size:14px;line-height:1.7;color:#222;}
+/* 스텝 가드 팝업 — 사유(굵게)와 해결법(회색)을 나눠 보여준다. */
+.guard-reason{margin:0 0 10px;font-weight:600;color:#111;}
+.guard-remedy{margin:0;color:#555;font-size:13px;}
 .m-h{background:var(--dark);color:#fff;padding:13px 18px;display:flex;justify-content:space-between;align-items:center;}
 .m-h .mt{font-weight:700;font-size:15px;}
 .m-h .x{border:none;background:transparent;color:#fff;font-size:18px;}
 .m-note{background:#F5F5F5;border-bottom:1px solid var(--line);padding:8px 18px;font-size:12px;color:#666;}
+
+/* 실외기 조합 매핑 — 하단 도킹 패널(도면을 가리지 않는다). 도면 컬럼 안에 붙는다. */
+.mapdock{position:relative;flex-shrink:0;background:#fff;border-top:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden;}
+.md-resizer{position:absolute;left:0;right:0;top:-3px;height:7px;cursor:row-resize;z-index:5;}
+.md-resizer:hover{background:linear-gradient(to bottom,transparent 2px,var(--dark) 2px,var(--dark) 5px,transparent 5px);}
+.md-h{background:var(--dark);color:#fff;padding:9px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.md-h .mt{font-weight:700;font-size:14px;}
+.md-h .md-summ,.md-h .md-add{font-size:12px;color:#CFCFCF;}
+.md-h .sp{flex:1;}
+.md-h .field{padding:4px 8px;font-size:12px;max-width:240px;}
+.md-h .x{border:none;background:transparent;color:#fff;font-size:18px;line-height:1;padding:0 2px;}
+.md-body{flex:1;display:flex;gap:14px;padding:12px 14px;overflow:hidden;}
+.mapdock .odus{grid-template-columns:repeat(auto-fill,minmax(290px,1fr));}
+.mapdock .pool{max-width:280px;}
+
 .m-body{flex:1;display:flex;gap:14px;padding:14px 18px;overflow:hidden;}
 /* grid-auto-rows:max-content — auto 트랙은 컨테이너 높이에 맞춰 균등 분배되어 카드가 다음 행을 덮는다 */
 .odus{flex:2;min-width:0;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:max-content;gap:12px;align-content:start;overflow-y:auto;padding-right:4px;}
@@ -197,12 +210,10 @@ button{font-family:inherit;cursor:pointer;}
 .vtools{position:absolute;top:12px;left:12px;z-index:20;display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:calc(100% - 24px);}
 .vtools .btn{background:rgba(255,255,255,0.97);}
 .vtools .btn:disabled{opacity:.45;cursor:not-allowed;}
+.vtools .field{background:rgba(255,255,255,0.97);font-size:13px;padding:5px 8px;}
 /* 배치 액션 버튼: 도면 영역 상단 가운데 정렬 (유형 메뉴가 클릭 차단 오버레이 z29 위에 오도록 z30) */
 .vtools-center{left:50%;transform:translateX(-50%);max-width:none;z-index:30;}
 /* ＋실내기 유형 선택 드롭다운 */
-.addmenu{position:absolute;top:calc(100% + 6px);left:0;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.16);padding:4px;display:flex;flex-direction:column;gap:2px;min-width:110px;}
-.addmenu button{border:none;background:transparent;text-align:left;padding:7px 10px;font-size:14px;font-family:inherit;color:#222;border-radius:6px;cursor:pointer;}
-.addmenu button:hover{background:#F2F2F2;}
 .vlayers{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.97);border:1px solid var(--line);border-radius:6px;padding:4px 8px;flex-wrap:wrap;}
 .vlayers-h{font-size:10px;font-weight:700;color:#888;margin-right:2px;}
 .vlayers .vtoggle{border:none;background:transparent;padding:2px 3px;}
@@ -222,7 +233,11 @@ button{font-family:inherit;cursor:pointer;}
 .rp-search .btn{flex-shrink:0;padding:5px 10px;font-size:13px;}
 .rp-filter .field{min-width:0;font-size:13px;padding:5px 8px;}
 .rp-count{float:right;font-weight:400;color:var(--muted);font-size:12px;}
-.rp-empty{padding:18px 4px;text-align:center;color:#999;font-size:14px;}
+.rp-empty{padding:18px 4px;text-align:center;color:#999;font-size:14px;line-height:1.8;}
+/* 컨텍스트 패널: 이격거리 경고 · 산출물 다운로드 */
+.rp-warn{background:var(--warnbg);border:1px solid #ccc;border-radius:6px;padding:7px 9px;margin-bottom:6px;font-size:12px;color:#222;}
+.out-list{display:flex;flex-direction:column;gap:8px;}
+.out-list .btn{width:100%;text-align:left;}
 
 /* 프로젝트 설정(시설군) — 실 검출 전에만 활성 */
 .proj-set{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#666;}

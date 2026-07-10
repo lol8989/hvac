@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { OutdoorGroup } from './OutdoorGroup'
 import { OutdoorUnit } from './OutdoorUnit'
-import { IndoorUnit } from './IndoorUnit'
+import { IndoorUnit, indoorUnitId } from './IndoorUnit'
 import { ComboRatio } from '../shared/ComboRatio'
 import { ComboRange } from '../shared/ComboRange'
 
@@ -9,7 +9,9 @@ import { ComboRange } from '../shared/ComboRange'
 const odu = (over = {}) =>
   new OutdoorUnit({ model: 'RPUW12BX9M', category: '냉난방 절환형', sys: 'EHP', capacityKw: 34.8, maxConnections: 4, ...over })
 
-const idu = (id: string, coolKw: number, sys = 'EHP') => new IndoorUnit({ id, roomName: id, coolKw, sys })
+// 실내기 1대. n으로 같은 실의 2대째를 만든다.
+const idu = (roomId: string, coolKw: number, sys = 'EHP', n = 1) =>
+  new IndoorUnit({ id: indoorUnitId(roomId, n), roomId, roomName: roomId, coolKw, sys })
 
 const group = (over = {}) => new OutdoorGroup({ key: 'ODU1', label: '실외기-1', outdoorUnit: odu(), indoorUnits: [], ...over })
 
@@ -18,6 +20,12 @@ describe('OutdoorGroup (실외기 조합 애그리거트)', () => {
     const g = group({ indoorUnits: [idu('AC_001', 11.2)] })
     g.indoorUnits.push(idu('AC_099', 1))
     expect(g.indoorUnits).toHaveLength(1)
+  })
+
+  it('roomIds는 연결된 실을 유일하게 반환한다(한 실 2대여도 1개)', () => {
+    const g = group({ indoorUnits: [idu('AC_001', 5, 'EHP', 1), idu('AC_001', 5, 'EHP', 2), idu('AC_002', 5)] })
+    expect(g.roomIds).toEqual(['AC_001', 'AC_002'])
+    expect(g.indoorUnits).toHaveLength(3)
   })
 
   describe('[적대] 생성 시점 구조 불변식', () => {
@@ -35,13 +43,21 @@ describe('OutdoorGroup (실외기 조합 애그리거트)', () => {
       const g0 = group()
       const g1 = g0.assign(idu('AC_001', 11.2, 'EHP'))
       expect(g0.indoorUnits).toHaveLength(0) // 원본 불변
-      expect(g1.indoorUnits.map((i) => i.id)).toEqual(['AC_001'])
+      expect(g1.indoorUnits.map((i) => i.id)).toEqual(['AC_001#1'])
     })
 
     it('계열이 다른 실내기 배정은 거부한다 (SERIES_MISMATCH)', () => {
       const g = group() // EHP 실외기
       expect(g.canAssign(idu('AC_009', 5, 'GHP'))).toMatchObject({ ok: false, reason: 'SERIES_MISMATCH' })
       expect(() => g.assign(idu('AC_009', 5, 'GHP'))).toThrow()
+    })
+
+    it('maxConnections는 실이 아니라 실내기 대수를 센다', () => {
+      // maxConn 2. 한 실(AC_001)에 2대를 넣으면 이미 가득 찬다.
+      let g = group({ outdoorUnit: odu({ maxConnections: 2 }) })
+      g = g.assign(idu('AC_001', 5, 'EHP', 1)).assign(idu('AC_001', 5, 'EHP', 2))
+      expect(g.roomIds).toHaveLength(1) // 실은 1곳뿐인데
+      expect(g.canAssign(idu('AC_002', 5))).toMatchObject({ ok: false, reason: 'MAX_CONNECTIONS' })
     })
 
     it('maxConnections 초과 배정은 거부한다 (MAX_CONNECTIONS)', () => {
@@ -58,25 +74,56 @@ describe('OutdoorGroup (실외기 조합 애그리거트)', () => {
     })
   })
 
+  describe('assignMany — 실 단위 배정(한 실의 모든 대수를 함께)', () => {
+    it('여러 대를 한 번에 배정한다', () => {
+      const g = group().assignMany([idu('AC_001', 5, 'EHP', 1), idu('AC_001', 5, 'EHP', 2)])
+      expect(g.indoorUnits).toHaveLength(2)
+    })
+
+    it('[적대] 합쳐서 maxConnections를 넘으면 한 대도 배정하지 않는다(전부 아니면 전무)', () => {
+      const g = group({ outdoorUnit: odu({ maxConnections: 3 }), indoorUnits: [idu('AC_000', 5)] })
+      const two = [idu('AC_001', 5, 'EHP', 1), idu('AC_001', 5, 'EHP', 2), idu('AC_001', 5, 'EHP', 3)]
+      expect(g.canAssignMany(two)).toMatchObject({ ok: false, reason: 'MAX_CONNECTIONS' })
+      expect(() => g.assignMany(two)).toThrow()
+      expect(g.indoorUnits).toHaveLength(1) // 원본 불변
+    })
+
+    it('[적대] 빈 목록 배정은 무해하다', () => {
+      const g = group({ indoorUnits: [idu('AC_001', 5)] })
+      expect(g.assignMany([]).indoorUnits).toHaveLength(1)
+    })
+  })
+
   describe('unassign — 실내기 해제', () => {
     it('id로 해제하면 목록에서 제거된 새 그룹을 반환한다', () => {
       const g = group({ indoorUnits: [idu('AC_001', 11.2), idu('AC_002', 5.6)] })
-      const g2 = g.unassign('AC_001')
-      expect(g2.indoorUnits.map((i) => i.id)).toEqual(['AC_002'])
+      const g2 = g.unassign('AC_001#1')
+      expect(g2.indoorUnits.map((i) => i.id)).toEqual(['AC_002#1'])
     })
 
     it('없는 id 해제는 무해하다(그대로)', () => {
       const g = group({ indoorUnits: [idu('AC_001', 11.2)] })
       expect(g.unassign('NOPE').indoorUnits).toHaveLength(1)
     })
+
+    it('unassignRoom은 그 실의 모든 대수를 함께 뗀다', () => {
+      const g = group({ indoorUnits: [idu('AC_001', 5, 'EHP', 1), idu('AC_001', 5, 'EHP', 2), idu('AC_002', 5)] })
+      const g2 = g.unassignRoom('AC_001')
+      expect(g2.indoorUnits.map((i) => i.id)).toEqual(['AC_002#1'])
+    })
   })
 
-  describe('comboRatio — 조합비 계산', () => {
+  describe('comboRatio — 조합비 계산 (설치 정격용량 합 기준)', () => {
     it('연결 실내기 합 / 실외기 용량으로 ComboRatio를 만든다', () => {
       const g = group({ indoorUnits: [idu('AC_001', 11.2), idu('AC_003', 9.0), idu('AC_006', 4.5)] })
       const r = g.comboRatio()
       expect(r).toBeInstanceOf(ComboRatio)
       expect(r.toFixed(2)).toBe('0.71') // 24.7 / 34.8
+    })
+
+    it('한 실에 2대면 2대 모두 조합비에 더해진다', () => {
+      const g = group({ indoorUnits: [idu('AC_001', 5.6, 'EHP', 1), idu('AC_001', 5.6, 'EHP', 2)] })
+      expect(g.comboRatio().indoorTotalKw).toBeCloseTo(11.2, 6)
     })
 
     it('실내기가 없으면 조합비 0, 저부하 경고', () => {
@@ -127,26 +174,40 @@ describe('OutdoorGroup (실외기 조합 애그리거트)', () => {
       const g = group({ indoorUnits: [idu('AC_001', 11.2, 'EHP'), idu('AC_003', 9.0, 'EHP')] })
       const { group: g2, ejected } = g.replaceModel(odu({ model: 'GPUW280C2S', sys: 'GHP', category: 'GHP', capacityKw: 28.0 }))
       expect(g2.indoorUnits).toHaveLength(0)
-      expect(ejected.map((i) => i.id).sort()).toEqual(['AC_001', 'AC_003'])
+      expect(ejected.map((i) => i.id).sort()).toEqual(['AC_001#1', 'AC_003#1'])
       expect(g2.outdoorUnit.energySource.code).toBe('GHP')
     })
   })
 
-  describe('split — 그룹 분할', () => {
-    it('실내기 절반을 같은 실외기 모델의 새 그룹으로 옮긴다', () => {
+  describe('split — 그룹 분할 (실 단위)', () => {
+    it('실을 절반으로 나눠 새 그룹으로 옮긴다', () => {
       const g = group({ indoorUnits: [idu('AC_001', 5), idu('AC_002', 5), idu('AC_003', 5), idu('AC_004', 5)] })
       const { group: kept, newGroup } = g.split({ key: 'ODU2', label: '실외기-2' })
-      expect(kept.indoorUnits).toHaveLength(2)
-      expect(newGroup.indoorUnits).toHaveLength(2)
+      expect(kept.roomIds).toHaveLength(2)
+      expect(newGroup.roomIds).toHaveLength(2)
       expect(newGroup.outdoorUnit.model.value).toBe(kept.outdoorUnit.model.value)
       // 원본 실내기 집합이 보존된다(중복/유실 없음)
       const all = [...kept.indoorUnits, ...newGroup.indoorUnits].map((i) => i.id).sort()
-      expect(all).toEqual(['AC_001', 'AC_002', 'AC_003', 'AC_004'])
+      expect(all).toEqual(['AC_001#1', 'AC_002#1', 'AC_003#1', 'AC_004#1'])
     })
 
-    it('[적대] 실내기가 2개 미만이면 분할할 수 없다', () => {
-      const g = group({ indoorUnits: [idu('AC_001', 5)] })
-      expect(() => g.split({ key: 'ODU2', label: '실외기-2' })).toThrow()
+    it('한 실의 여러 대수는 쪼개지지 않고 같은 그룹에 남는다', () => {
+      const g = group({
+        outdoorUnit: odu({ maxConnections: 9 }),
+        indoorUnits: [idu('AC_001', 5, 'EHP', 1), idu('AC_001', 5, 'EHP', 2), idu('AC_002', 5), idu('AC_003', 5)],
+      })
+      const { group: kept, newGroup } = g.split({ key: 'ODU2', label: '실외기-2' })
+      const roomOf = (grp: OutdoorGroup, rid: string) => grp.indoorUnits.filter((u) => u.roomId === rid).length
+      // AC_001의 2대는 한쪽에 온전히 몰려 있어야 한다
+      expect(roomOf(kept, 'AC_001') + roomOf(newGroup, 'AC_001')).toBe(2)
+      expect(roomOf(kept, 'AC_001') === 2 || roomOf(newGroup, 'AC_001') === 2).toBe(true)
+    })
+
+    it('[적대] 실이 2곳 미만이면 분할할 수 없다 (한 실 2대여도 마찬가지)', () => {
+      const one = group({ indoorUnits: [idu('AC_001', 5)] })
+      expect(() => one.split({ key: 'ODU2', label: '실외기-2' })).toThrow()
+      const twoUnitsOneRoom = group({ indoorUnits: [idu('AC_001', 5, 'EHP', 1), idu('AC_001', 5, 'EHP', 2)] })
+      expect(() => twoUnitsOneRoom.split({ key: 'ODU2', label: '실외기-2' })).toThrow()
     })
   })
 })

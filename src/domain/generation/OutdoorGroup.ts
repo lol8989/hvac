@@ -10,6 +10,7 @@
 import { ComboRatio } from '../shared/ComboRatio'
 import { AssignmentRejected } from './errors'
 import type { AssignReason } from './errors'
+import { roomIdsOf } from './IndoorUnit'
 import type { IndoorUnit } from './IndoorUnit'
 import type { OutdoorUnit } from './OutdoorUnit'
 
@@ -63,15 +64,31 @@ export class OutdoorGroup {
     return [...this._indoorUnits]
   }
 
+  // 연결된 실(등장 순서, 유일). 한 실에 2대가 붙어도 1개로 센다.
+  get roomIds(): string[] {
+    return roomIdsOf(this._indoorUnits)
+  }
+
   // 배정 가능 여부와 불가 사유를 반환한다(부작용 없음).
+  // maxConnections는 실이 아니라 실내기 '대수'를 센다(IndoorUnit 1개 = 1대).
   canAssign(indoor: IndoorUnit): CanAssignResult {
-    if (!this.outdoorUnit.energySource.equals(indoor.energySource)) {
-      return { ok: false, reason: ASSIGN_REASON.SERIES_MISMATCH }
+    return this.canAssignMany([indoor])
+  }
+
+  // 여러 대를 한 번에 배정할 수 있는지(실 단위 배정용). 전부 아니면 전무.
+  canAssignMany(indoors: readonly IndoorUnit[]): CanAssignResult {
+    if (indoors.length === 0) return { ok: true }
+    const seen = new Set(this._indoorUnits.map((i) => i.id))
+    for (const indoor of indoors) {
+      if (!this.outdoorUnit.energySource.equals(indoor.energySource)) {
+        return { ok: false, reason: ASSIGN_REASON.SERIES_MISMATCH }
+      }
+      if (seen.has(indoor.id)) {
+        return { ok: false, reason: ASSIGN_REASON.DUPLICATE }
+      }
+      seen.add(indoor.id)
     }
-    if (this._indoorUnits.some((i) => i.id === indoor.id)) {
-      return { ok: false, reason: ASSIGN_REASON.DUPLICATE }
-    }
-    if (this._indoorUnits.length >= this.outdoorUnit.maxConnections) {
+    if (this._indoorUnits.length + indoors.length > this.outdoorUnit.maxConnections) {
       return { ok: false, reason: ASSIGN_REASON.MAX_CONNECTIONS }
     }
     return { ok: true }
@@ -79,16 +96,27 @@ export class OutdoorGroup {
 
   // 실내기 배정. 불변식 위반 시 예외. 성공 시 새 그룹 반환.
   assign(indoor: IndoorUnit): OutdoorGroup {
-    const check = this.canAssign(indoor)
-    if (!check.ok) {
-      throw new AssignmentRejected(indoor.id, check.reason)
-    }
-    return this._with([...this._indoorUnits, indoor])
+    return this.assignMany([indoor])
   }
 
-  // 실내기 해제(id). 없는 id는 무해.
+  // 실 단위 배정 — 한 실의 모든 대수를 함께 넣는다. 하나라도 못 넣으면 아무것도 넣지 않는다.
+  assignMany(indoors: readonly IndoorUnit[]): OutdoorGroup {
+    if (indoors.length === 0) return this
+    const check = this.canAssignMany(indoors)
+    if (!check.ok) {
+      throw new AssignmentRejected(indoors[0].id, check.reason)
+    }
+    return this._with([...this._indoorUnits, ...indoors])
+  }
+
+  // 실내기 해제(유닛 id). 없는 id는 무해.
   unassign(id: string): OutdoorGroup {
     return this._with(this._indoorUnits.filter((i) => i.id !== id))
+  }
+
+  // 실 해제 — 그 실의 모든 대수를 함께 뗀다.
+  unassignRoom(roomId: string): OutdoorGroup {
+    return this._with(this._indoorUnits.filter((i) => i.roomId !== roomId))
   }
 
   // 조합비 = Σ(연결 실내기 냉방용량) / 실외기 용량.
@@ -119,14 +147,16 @@ export class OutdoorGroup {
     return { group, ejected }
   }
 
-  // 그룹 분할: 실내기 절반을 같은 실외기 모델의 새 그룹으로 옮긴다.
+  // 그룹 분할: 실 절반을 같은 실외기 모델의 새 그룹으로 옮긴다.
+  // 한 실의 여러 대수는 쪼개지 않는다 — 선정표의 실 행이 실외기 1대를 가리켜야 하기 때문이다.
   split(nextMeta: GroupMeta): { group: OutdoorGroup; newGroup: OutdoorGroup } {
-    if (this._indoorUnits.length < 2) {
-      throw new Error('실내기가 2개 미만이면 분할할 수 없습니다')
+    const rooms = this.roomIds
+    if (rooms.length < 2) {
+      throw new Error('연결된 실이 2곳 미만이면 분할할 수 없습니다')
     }
-    const half = Math.ceil(this._indoorUnits.length / 2)
-    const kept = this._indoorUnits.slice(0, half)
-    const moved = this._indoorUnits.slice(half)
+    const movedRooms = new Set(rooms.slice(Math.ceil(rooms.length / 2)))
+    const kept = this._indoorUnits.filter((u) => !movedRooms.has(u.roomId))
+    const moved = this._indoorUnits.filter((u) => movedRooms.has(u.roomId))
     const group = this._with(kept)
     const newGroup = new OutdoorGroup({
       key: nextMeta.key,

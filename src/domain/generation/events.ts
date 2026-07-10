@@ -1,9 +1,10 @@
 // Generation 컨텍스트 도메인 이벤트. 순수 팩토리(부작용 없음).
 // 애플리케이션 유즈케이스가 상태 변경 성공 후 발행하며, 프리젠테이션/로깅/후속 처리의 근거가 된다.
 
-export interface IndoorUnitReassigned {
-  type: 'IndoorUnitReassigned'
-  indoorId: string
+// 재배정 단위는 실(room)이다 — 한 실의 모든 대수가 함께 움직인다(AssignmentPlan 불변식 ②).
+export interface RoomReassigned {
+  type: 'RoomReassigned'
+  roomId: string
   from: string | null
   to: string
 }
@@ -33,11 +34,11 @@ export interface GroupSplit {
   newKey: string
 }
 
-export type DomainEvent = IndoorUnitReassigned | OutdoorModelReplaced | GroupAdded | GroupRemoved | GroupSplit
+export type DomainEvent = RoomReassigned | OutdoorModelReplaced | GroupAdded | GroupRemoved | GroupSplit
 
-export const indoorUnitReassigned = (p: { indoorId: string; from: string | null; to: string }): IndoorUnitReassigned => ({
-  type: 'IndoorUnitReassigned',
-  indoorId: p.indoorId,
+export const roomReassigned = (p: { roomId: string; from: string | null; to: string }): RoomReassigned => ({
+  type: 'RoomReassigned',
+  roomId: p.roomId,
   from: p.from,
   to: p.to,
 })

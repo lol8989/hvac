@@ -6,7 +6,12 @@
 import type { Room } from './Room'
 import type { IndoorModel, IndoorSelection } from './IndoorModel'
 import { Placement } from './Placement'
+import type { UnitPosition } from './layoutPositions'
 import { selectIndoorModel } from './selectIndoorModel'
+
+// 실 안에 N대를 놓을 좌표를 만드는 함수. 실의 도면 사각형을 아는 쪽(어댑터)이 주입한다.
+// 도메인은 "대수만큼 좌표가 있어야 한다"만 알면 된다(Placement 불변식).
+export type LayoutFor = (roomId: string, count: number) => UnitPosition[]
 
 // 실 하나에 대한 AI 선정 결과. 배치·심볼표시·오버라이드 해제가 모두 이 함수를 지나야
 // 같은 규칙을 본다(규칙이 호출부마다 흩어지지 않는다).
@@ -22,22 +27,25 @@ export const aiSelectionFor = (room: Room, models: readonly IndoorModel[]): Indo
 
 // AI 배치 (재)실행: 각 실의 형상·부하로 selectIndoorModel을 돌려 Placement의 AI값을 갱신.
 // 타입(1/2/4WAY)은 실 형상이 정하고, 대수는 부하와 확산범위 중 큰 쪽이 정한다.
-// - 기존 placement가 있으면 withAiSelection(user 오버라이드 보존), 없으면 Placement.ai로 생성.
+// - 기존 placement가 있으면 withAiSelection(user 오버라이드·좌표 보존), 없으면 Placement.ai로 생성.
 // - rooms 목록에 없는 실의 기존 placement는 그대로 유지한다.
+// - 좌표는 layoutFor가 만든다(대수만큼). 사용자가 조정한 실은 좌표도 그대로 둔다.
 // - 반환은 roomId → Placement의 새 Record(원본 비파괴).
 export const applyAiPlacement = (
   rooms: readonly Room[],
   placements: Readonly<Record<string, Placement>>,
   models: readonly IndoorModel[],
+  layoutFor: LayoutFor,
 ): Record<string, Placement> => {
   const next: Record<string, Placement> = { ...placements }
   for (const room of rooms) {
     const recommended = aiSelectionFor(room, models)
+    const positions = layoutFor(room.id, recommended.quantity)
     const existing = placements[room.id]
     next[room.id] =
       existing !== undefined
-        ? existing.withAiSelection(recommended)
-        : Placement.ai(room.id, recommended)
+        ? existing.withAiSelection(recommended, positions)
+        : Placement.ai(room.id, recommended, positions)
   }
   return next
 }

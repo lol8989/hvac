@@ -1,6 +1,5 @@
-import { ComboRange } from './domain/shared/ComboRange'
 import { describe, it, expect } from 'vitest'
-import { recommendedIndoorIdx, outdoorIdxByModel, ratioOf, indoorCoolByModel, MODELS, ROOMS, INITIAL_GROUPS, INITIAL_POOL, DEFAULT_COMBINATION, DEFAULT_FACILITY } from './data'
+import { recommendedIndoorIdx, outdoorIdxByModel, indoorCoolByModel, MODELS, ROOMS, DEFAULT_FACILITY } from './data'
 import type { ModelCard } from './data'
 import { lookupUnitLoadKcal } from './domain/shared/unitLoadTable'
 import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemoryOutdoorModelCatalog'
@@ -49,19 +48,6 @@ describe('indoorCoolByModel (모델명 → 정격 냉방용량)', () => {
   })
 })
 
-describe('ratioOf (조합비 = Σ실내기 정격 ÷ 실외기 용량)', () => {
-  const group = { items: ['R1', 'R2'], cool: 20 }
-  it('capByRoom(B: 선택 장비 기준)로 합산한다', () => {
-    expect(ratioOf(group, { R1: 6, R2: 4 })).toBeCloseTo(0.5) // (6+4)/20
-  })
-  it('capByRoom에 없는 실은 0으로 취급(미설치)', () => {
-    expect(ratioOf(group, { R1: 6 })).toBeCloseTo(0.3) // (6+0)/20
-  })
-  it('실외기 용량 0이면 0(division 방지)', () => {
-    expect(ratioOf({ items: ['R1'], cool: 0 }, { R1: 6 })).toBe(0)
-  })
-})
-
 describe('ROOMS 부하 파생 (부하 = 면적 × 용도별 단위부하 × 1.163)', () => {
   it('전 실에 층·용도 메타가 있다 (지상1층, 용도 지정)', () => {
     const usages: Record<string, string> = {
@@ -95,47 +81,21 @@ describe('ROOMS 부하 파생 (부하 = 면적 × 용도별 단위부하 × 1.16
 // 실외기 스펙(heatKw/hp/comboMin 등) 데이터 검증은 SSOT인 장비마스터로 이관됨:
 // → src/infrastructure/equipment/InMemoryEquipmentMaster.test.ts
 
-describe('초기 배정 시드 제거 (초기 상태는 빈/0 — NEXT #2·#3)', () => {
-  it('INITIAL_GROUPS는 실외기 그룹만 제안하고 실내기를 사전배정하지 않는다(items 전부 빈 배열)', () => {
-    for (const g of INITIAL_GROUPS) expect(g.items).toEqual([])
+// 실외기 그룹·조합 상수(INITIAL_GROUPS / DEFAULT_COMBINATION / INITIAL_POOL)는 제거됐다.
+// 실외기 대수·모델·매핑은 목업 배열이 아니라 selectOutdoorUnits(정격 총용량 기반)의 결과다.
+// → src/domain/generation/selectOutdoorUnits.test.ts
+
+describe('생성단 실외기 카탈로그 (장비마스터 PUBLISHED 참조)', () => {
+  it('게시된 실외기만 노출하고, 최소 한 종의 EHP 후보가 있다', () => {
+    const specs = new InMemoryOutdoorModelCatalog().list()
+    expect(specs.length).toBeGreaterThan(0)
+    expect(specs.some((s) => s.energySource === 'EHP')).toBe(true)
   })
 
-  it('INITIAL_POOL은 비어 있다 (미배정 상수 1 제거)', () => {
-    expect(INITIAL_POOL).toEqual([])
-  })
-})
-
-describe('DEFAULT_COMBINATION (combine 진입 시 자동 조합 기본값)', () => {
-  // 실외기 스펙은 장비마스터 참조 카탈로그(PUBLISHED)로 조회한다.
-  const outdoor = new InMemoryOutdoorModelCatalog()
-  const specOfGroup = (key: string) => {
-    const model = INITIAL_GROUPS.find((g) => g.key === key)!.model
-    return outdoor.findByModel(model)!
-  }
-
-  it('전 실을 빠짐없이 배정한다(미배정 없음)', () => {
-    const assigned = DEFAULT_COMBINATION.flatMap((c) => c.items).sort()
-    expect(assigned).toEqual(Object.keys(ROOMS).sort())
-  })
-
-  it('실은 정확히 한 그룹에만 배정된다(중복 금지)', () => {
-    const assigned = DEFAULT_COMBINATION.flatMap((c) => c.items)
-    expect(new Set(assigned).size).toBe(assigned.length)
-  })
-
-  it('실의 계열이 배정 그룹 실외기 계열과 일치한다(계열 호환)', () => {
-    for (const c of DEFAULT_COMBINATION) {
-      const spec = specOfGroup(c.key)
-      for (const id of c.items) expect(ROOMS[id].sys).toBe(spec.energySource)
-    }
-  })
-
-  it('각 그룹의 설계부하 기준 조합비가 전역 기본 허용범위(0.5~1.03) 안이다', () => {
-    for (const c of DEFAULT_COMBINATION) {
-      if (!c.items.length) continue
-      const spec = specOfGroup(c.key)
-      const r = ratioOf({ items: c.items, cool: spec.capacityKw })
-      expect(ComboRange.DEFAULT.contains(r)).toBe(true)
+  it('모든 후보가 조합비 허용범위를 갖는다(정책 미지정 시 기본값)', () => {
+    for (const s of new InMemoryOutdoorModelCatalog().list()) {
+      expect(s.comboRange.min).toBeGreaterThan(0)
+      expect(s.comboRange.max).toBeGreaterThanOrEqual(s.comboRange.min)
     }
   })
 })

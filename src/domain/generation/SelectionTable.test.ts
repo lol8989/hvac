@@ -6,6 +6,7 @@ import { buildSelectionTable } from './SelectionTable'
 import type { SelectionTable, SelectionTableInput } from './SelectionTable'
 import { Room } from './Room'
 import { Placement } from './Placement'
+import { POS } from '../../test/positions'
 import { IndoorModel } from './IndoorModel'
 import { ComboRange } from '../shared/ComboRange'
 import { UnitLoad } from '../shared/UnitLoad'
@@ -29,8 +30,8 @@ const roomPrep = Room.create({ id: 'r2', floor: '지하1층', name: '준비실',
 const excelInput = (): SelectionTableInput => ({
   rooms: [roomAv, roomPrep],
   placements: {
-    r1: Placement.ai('r1', { modelCode: '40C', quantity: 3 }),
-    r2: Placement.ai('r2', { modelCode: '20C', quantity: 3 }),
+    r1: Placement.ai('r1', { modelCode: '40C', quantity: 3 }, POS(3)),
+    r2: Placement.ai('r2', { modelCode: '20C', quantity: 3 }, POS(3)),
   },
   groups: [{ key: 'g1', label: '실외기 1', model: 'ARUM080LTE5', items: ['r1', 'r2'] }],
   indoorModels: [IDU_40C, IDU_20C],
@@ -40,7 +41,7 @@ const excelInput = (): SelectionTableInput => ({
 // 조합비 판정 시나리오: 실내기 coolW×qty ÷ 10kW 실외기
 const ratioInput = (coolW: number, comboRange?: ComboRange): SelectionTableInput => ({
   rooms: [Room.create({ id: 'rx', floor: '1층', name: '실X', areaM2: 10, usage: '사무실', facility: 'OFFICE', shortSideM: 2.5, longSideM: 4 })],
-  placements: { rx: Placement.ai('rx', { modelCode: 'X', quantity: 1 }) },
+  placements: { rx: Placement.ai('rx', { modelCode: 'X', quantity: 1 }, POS(1)) },
   groups: [{ key: 'gx', label: '실외기 X', model: 'ODU-10', items: ['rx'] }],
   indoorModels: [new IndoorModel({ code: 'X', model: 'X-M', coolW, heatW: coolW, type: '덕트', energySource: 'EHP' })],
   outdoorSpecs: [{ model: 'ODU-10', coolKw: 10, heatKw: null, hp: 10, comboRange }],
@@ -98,9 +99,9 @@ describe('buildSelectionTable — 층 섹션', () => {
   const input = (): SelectionTableInput => ({
     rooms: [roomB1a, room1Fb, roomB1c],
     placements: {
-      r1: Placement.ai('r1', { modelCode: '40C', quantity: 3 }),
-      b: Placement.ai('b', { modelCode: '20C', quantity: 3 }),
-      c: Placement.ai('c', { modelCode: '20C', quantity: 3 }),
+      r1: Placement.ai('r1', { modelCode: '40C', quantity: 3 }, POS(3)),
+      b: Placement.ai('b', { modelCode: '20C', quantity: 3 }, POS(3)),
+      c: Placement.ai('c', { modelCode: '20C', quantity: 3 }, POS(3)),
     },
     groups: [{ key: 'g1', label: '실외기 1', model: 'ARUM080LTE5', items: ['r1', 'b'] }],
     indoorModels: [IDU_40C, IDU_20C],
@@ -158,7 +159,7 @@ describe('buildSelectionTable — 오버라이드 플래그 전파', () => {
     const input = excelInput()
     input.placements = {
       ...input.placements,
-      r1: input.placements['r1'].overrideSelection({ modelCode: '20C', quantity: 5 }),
+      r1: input.placements['r1'].overrideSelection({ modelCode: '20C', quantity: 5 }, POS(5)),
     }
     const row = buildSelectionTable(input).floors[0].rows[0]
     expect(row.indoor).toMatchObject({ code: '20C', quantity: 5, totalCoolW: 10000, overridden: true })
@@ -170,7 +171,7 @@ describe('buildSelectionTable — BOM', () => {
     const roomC = Room.create({ id: 'r3', floor: '1층', name: '교장실', areaM2: 15, usage: '교장실', facility: 'OFFICE', shortSideM: 3, longSideM: 5 })
     const input = excelInput()
     input.rooms = [...input.rooms, roomC]
-    input.placements = { ...input.placements, r3: Placement.ai('r3', { modelCode: '40C', quantity: 2 }) }
+    input.placements = { ...input.placements, r3: Placement.ai('r3', { modelCode: '40C', quantity: 2 }, POS(2)) }
     input.groups = [
       { key: 'g1', label: '실외기 1', model: 'ARUM080LTE5', items: ['r1'] },
       { key: 'g2', label: '실외기 2', model: 'ARUM080LTE5', items: ['r2'] },
@@ -195,7 +196,7 @@ describe('buildSelectionTable — BOM', () => {
 describe('buildSelectionTable — 예외', () => {
   it('카탈로그에 없는 modelCode를 선정한 배치가 있으면 throw한다', () => {
     const input = excelInput()
-    input.placements = { ...input.placements, r1: Placement.ai('r1', { modelCode: 'ZZZ', quantity: 1 }) }
+    input.placements = { ...input.placements, r1: Placement.ai('r1', { modelCode: 'ZZZ', quantity: 1 }, POS(1)) }
     expect(() => buildSelectionTable(input)).toThrow('ZZZ')
   })
 
