@@ -4,6 +4,7 @@ import type { PublishStatus } from '../../domain/equipment/PublishStatus'
 import ProductFormModal from './ProductFormModal'
 import SpecSheetUploadModal from './SpecSheetUploadModal'
 import BulkActionBar from './BulkActionBar'
+import AdminShell from './AdminShell'
 import { useSubmitGuard } from './useSubmitGuard'
 import { formatDateTime } from '../../presentation/formatDateTime'
 
@@ -116,28 +117,11 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
   }, [all])
 
   return (
-    <div className="app">
-      <div className="gnb">
-        <div className="l">
-          <span className="logo">LG 전자 HVAC 포털</span>
-          <nav>
-            <a href="./">생성</a>
-            <a href="?view=equipment" className="on">장비마스터</a>
-          </nav>
-        </div>
-        <div className="r">
-          <span>관리자 / 홍길동</span>
-          <a href="./">← 생성으로</a>
-        </div>
-      </div>
-
-      <div className="sub">
-        <div className="title">장비마스터 — 제품 목록</div>
-        <span className="b">
-          게시 {counts.PUBLISHED} · 작성중 {counts.DRAFT} · 단종 {counts.ARCHIVED}
-        </span>
-      </div>
-
+    <AdminShell
+      active="products"
+      title="장비 목록관리"
+      badge={`게시 ${counts.PUBLISHED} · 작성중 ${counts.DRAFT} · 단종 ${counts.ARCHIVED}`}
+    >
       <div className="eq-toolbar">
         <select className="field" aria-label="분류 필터" value={cat} onChange={(e) => resetPage(setCat)(e.target.value as typeof cat)}>
           <option value="ALL">전체 분류</option>
@@ -295,6 +279,6 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
       )}
 
       <div className={'toast' + (toast ? ' show' : '')} role="status">{toast}</div>
-    </div>
+    </AdminShell>
   )
 }
