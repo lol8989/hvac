@@ -39,7 +39,8 @@ export default function BulkActionBar({
 
   return (
     <div className="eq-bulk" role="region" aria-label="일괄 작업">
-      <span className="eq-bulk-count">
+      {/* 선택이 있을 때만 건수를 강조한다 — 0건을 브랜드 색으로 외치면 거짓 신호가 된다. */}
+      <span className={'eq-bulk-count' + (selectedCount > 0 ? ' has-sel' : '')}>
         <b>{selectedCount}</b>건 선택
       </span>
       {!allFilteredSelected && filteredCount > selectedCount && (

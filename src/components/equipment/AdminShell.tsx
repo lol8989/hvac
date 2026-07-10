@@ -25,7 +25,8 @@ interface AdminShellProps {
 
 export default function AdminShell({ active, title, badge, children }: AdminShellProps) {
   return (
-    <div className="app">
+    // adm-root: LG 디자인 시스템 적용 스코프. 생성·검도 화면은 무채색을 유지한다.
+    <div className="app adm-root">
       <div className="gnb">
         <div className="l">
           <span className="logo">LG 전자 HVAC 포털</span>

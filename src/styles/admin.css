@@ -1,0 +1,553 @@
+/* ─────────────────────────────────────────────────────────────
+   관리자 영역 스타일 — LG 디자인 시스템 적용 (.adm-root 스코프)
+
+   생성·검도 화면(styles.css)은 무채색을 유지한다. 여기서만 브랜드 색을 쓴다.
+   토큰: styles/tokens.css · 설계: doc/05_설계결정/디자인시스템_v1.md
+   ───────────────────────────────────────────────────────────── */
+
+.adm-root {
+  background: var(--n-50);
+  color: var(--n-900);
+}
+
+/* 키보드 포커스는 브랜드 링으로 항상 보이게 한다. */
+.adm-root :focus-visible {
+  outline: 2px solid var(--lg-red);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-root * {
+    transition: none !important;
+  }
+}
+
+/* ── GNB ── */
+.adm-root .gnb {
+  background: var(--lg-black);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.adm-root .gnb nav a {
+  color: #b3a9ad;
+  padding-bottom: 3px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s ease;
+}
+.adm-root .gnb nav a:hover {
+  color: #fff;
+}
+/* 활성 메뉴만 브랜드 레드 밑줄 — 상단 바 전체를 붉게 칠하지 않는다. */
+.adm-root .gnb nav a.on {
+  color: #fff;
+  font-weight: 700;
+  border-bottom-color: var(--lg-red);
+}
+
+/* ── 서브 헤더 ── */
+.adm-root .sub {
+  background: var(--n-0);
+  color: var(--n-900);
+  border-bottom: 1px solid var(--n-200);
+  height: 52px;
+  padding: 0 var(--sp-5);
+}
+.adm-root .sub .title {
+  text-align: left;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.adm-root .sub .b {
+  background: var(--n-100);
+  color: var(--n-700);
+  border: 1px solid var(--n-200);
+  font-size: var(--fs-sm);
+  border-radius: var(--r-pill);
+  padding: 3px 11px;
+}
+
+/* ── 버튼 ── */
+.adm-root .btn {
+  border: 1px solid var(--n-300);
+  background: var(--n-0);
+  color: var(--n-800);
+  border-radius: var(--r-md);
+  font-size: var(--fs-md);
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.adm-root .btn:hover:not(:disabled) {
+  background: var(--n-100);
+  border-color: var(--n-500);
+}
+.adm-root .btn.primary {
+  background: var(--lg-red);
+  border-color: var(--lg-red);
+  color: #fff;
+  font-weight: 700;
+}
+.adm-root .btn.primary:hover:not(:disabled) {
+  background: var(--lg-red-deep);
+  border-color: var(--lg-red-deep);
+}
+.adm-root .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.adm-root .field {
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-md);
+  font-size: var(--fs-md);
+  color: var(--n-900);
+  background: var(--n-0);
+}
+.adm-root .field:focus {
+  border-color: var(--lg-red);
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+/* ── 셸: 좌측 사이드 메뉴 + 본문 ── */
+/* 페이지는 뷰포트에 고정하고 테이블만 스크롤한다.
+   툴바·일괄 바·페이저를 항상 손 닿는 곳에 두고, sticky 헤더가 뷰포트가 아니라
+   테이블 스크롤 컨테이너를 기준으로 붙게 하려면 스크롤 주체가 테이블이어야 한다. */
+.adm {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+.adm-side {
+  flex: 0 0 208px;
+  background: var(--n-0);
+  border-right: 1px solid var(--n-200);
+  overflow-y: auto;
+}
+.adm-side-h {
+  padding: var(--sp-4) var(--sp-5) var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--n-500);
+  letter-spacing: var(--tracking-label);
+}
+.adm-side nav {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--sp-2);
+}
+.adm-side nav a {
+  padding: 10px var(--sp-5);
+  font-size: var(--fs-md);
+  color: var(--n-700);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: background 0.12s ease;
+}
+.adm-side nav a:hover {
+  background: var(--n-50);
+}
+/* 활성 항목: 브랜드 레드 레일 + 옅은 wash */
+.adm-side nav a.on {
+  color: var(--lg-red);
+  font-weight: 700;
+  background: var(--lg-red-wash);
+  border-left-color: var(--lg-red);
+}
+.adm-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.adm-main > .sub,
+.adm-main > .eq-toolbar,
+.adm-main > .eq-bulk,
+.adm-main > .eq-pager {
+  flex-shrink: 0;
+}
+
+/* ── 툴바 ── */
+.eq-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--n-0);
+  border-bottom: 1px solid var(--n-200);
+}
+.eq-toolbar .sp {
+  flex: 1;
+}
+.eq-toolbar input.field {
+  min-width: 240px;
+}
+.eq-count {
+  font-size: var(--fs-md);
+  color: var(--n-500);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 일괄 작업 바 ── */
+.eq-bulk {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 10px var(--sp-5);
+  background: var(--n-100);
+  border-bottom: 1px solid var(--n-200);
+}
+.eq-bulk .sp {
+  flex: 1;
+}
+.eq-bulk-count {
+  font-size: var(--fs-md);
+  color: var(--n-500);
+}
+.eq-bulk-count b {
+  font-size: var(--fs-lg);
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.eq-bulk-count.has-sel {
+  color: var(--n-800);
+}
+.eq-bulk-count.has-sel b {
+  color: var(--lg-red);
+}
+.eq-bulk-note {
+  font-size: var(--fs-xs);
+  color: var(--n-500);
+}
+
+/* ── 테이블 ── */
+.eq-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--sp-5) var(--sp-5);
+  background: var(--n-50);
+}
+.eq-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--n-0);
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-lg);
+  font-size: var(--fs-md);
+  margin-top: var(--sp-3);
+  box-shadow: var(--shadow-1);
+}
+/* overflow:hidden으로 모서리를 깎으면 테이블이 스크롤 컨테이너가 되어 sticky 헤더가 멎는다.
+   모서리 셀에 반경을 직접 준다. */
+.eq-table thead th:first-child {
+  border-top-left-radius: var(--r-lg);
+}
+.eq-table thead th:last-child {
+  border-top-right-radius: var(--r-lg);
+}
+.eq-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: var(--r-lg);
+}
+.eq-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: var(--r-lg);
+}
+.eq-table th,
+.eq-table td {
+  text-align: left;
+  padding: 10px var(--sp-3);
+  border-bottom: 1px solid var(--n-150);
+  white-space: nowrap;
+}
+.eq-table thead th {
+  background: var(--n-100);
+  color: var(--n-700);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  letter-spacing: var(--tracking-label);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--n-200);
+}
+.eq-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.eq-table tbody tr:hover {
+  background: var(--n-50);
+}
+.eq-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.eq-table .mono {
+  font-family: var(--font-data);
+  color: var(--n-800);
+}
+.eq-table td.dt {
+  color: var(--n-500);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.eq-empty {
+  text-align: center;
+  color: var(--n-500);
+  padding: 32px 0;
+}
+/* 환산 추정 마력 — 실측과 구분되는 보조 표기 */
+.eq-est {
+  font-size: var(--fs-xs);
+  color: var(--n-500);
+}
+
+.eq-table th.chk,
+.eq-table td.chk {
+  width: 36px;
+  padding-left: var(--sp-4);
+  padding-right: 0;
+}
+/* 선택 행: wash + 좌측 브랜드 레일 */
+.eq-table tbody tr.sel {
+  background: var(--lg-red-wash);
+}
+.eq-table tbody tr.sel td.chk {
+  box-shadow: inset 3px 0 0 var(--lg-red);
+}
+
+/* ── 상태 뱃지 (의미색) ──
+   1,206행을 훑을 때 상태가 한눈에 잡히도록 색 + 점 두 채널로 인코딩한다. */
+.eq-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+  border: 1px solid transparent;
+}
+.eq-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.eq-badge.published {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: var(--ok-line);
+}
+.eq-badge.draft {
+  background: var(--idle-bg);
+  color: var(--idle);
+  border-color: var(--idle-line);
+}
+.eq-badge.archived {
+  background: var(--stop-bg);
+  color: var(--stop);
+  border-color: var(--stop-line);
+}
+
+/* ── 페이저 ── */
+.eq-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  font-size: var(--fs-md);
+  color: var(--n-700);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 행 액션 ── */
+.eq-actions {
+  display: flex;
+  gap: var(--sp-1);
+}
+.eq-actions .btn {
+  padding: 4px 9px;
+  font-size: var(--fs-sm);
+}
+
+/* ── 등록/수정 폼 모달 ── */
+.modal.eq-form {
+  width: min(520px, 94vw);
+  height: auto;
+}
+.eq-form-body {
+  padding: var(--sp-4) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.eq-f {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: var(--fs-md);
+  color: var(--n-800);
+}
+.eq-f > span {
+  font-weight: 500;
+}
+.eq-f .field {
+  width: 100%;
+}
+/* 폼 오류는 브랜드 레드가 아니라 의미색(정지 계열)으로 — 액션과 혼동하지 않도록. */
+.eq-form-err {
+  background: var(--stop-bg);
+  border: 1px solid var(--stop-line);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  font-size: var(--fs-sm);
+  color: var(--stop);
+}
+.eq-form-foot {
+  border-top: 1px solid var(--n-200);
+  padding: var(--sp-3) var(--sp-5);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+/* ── 스펙시트 업로드 모달 ── */
+.modal.eq-upload {
+  width: min(620px, 94vw);
+  height: auto;
+}
+.up-sec {
+  border-top: 1px solid var(--n-150);
+  padding-top: var(--sp-3);
+}
+.up-sec:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.up-sec h4 {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--n-900);
+}
+.up-help {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--n-500);
+  line-height: 1.6;
+}
+.up-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 84px;
+  border: 1px dashed var(--n-300);
+  border-radius: var(--r-lg);
+  background: var(--n-50);
+  font-size: var(--fs-md);
+  color: var(--n-700);
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.up-drop:hover {
+  border-color: var(--lg-red);
+  background: var(--lg-red-wash);
+}
+.up-drop input {
+  display: none;
+}
+.up-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-lg);
+  padding: 10px var(--sp-3);
+  background: var(--n-50);
+}
+.up-ext {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--n-150);
+  border-radius: var(--r-md);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--n-700);
+}
+.up-meta {
+  flex: 1;
+  min-width: 0;
+}
+.up-name {
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--n-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.up-sub {
+  font-size: var(--fs-xs);
+  color: var(--n-500);
+  margin-top: 2px;
+}
+.up-repick {
+  display: inline-block;
+  margin-top: var(--sp-2);
+}
+.up-repick input {
+  display: none;
+}
+.up-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.up-summary > div {
+  padding: 10px var(--sp-3);
+  border-left: 1px solid var(--n-150);
+  background: var(--n-50);
+}
+.up-summary > div:first-child {
+  border-left: none;
+}
+.up-summary span {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--n-500);
+}
+.up-summary b {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--fs-xl);
+  color: var(--n-900);
+  font-variant-numeric: tabular-nums;
+}
+.up-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--n-500);
+}
+.up-reasons {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-4);
+  font-size: var(--fs-xs);
+  color: var(--n-800);
+  line-height: 1.8;
+}
