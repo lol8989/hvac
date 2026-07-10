@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildDrawingSvg } from './drawingSvg'
 import type { Room } from '../../data'
 
-const room = (name: string, x: number, y: number): Room => ({ name, floor: '지상1층', usage: '거실', area: 20, type: '4WAY', cool: 9.0, sys: 'EHP', x, y, w: 200, h: 120 })
+const room = (name: string, x: number, y: number): Room => ({ name, floor: '지상1층', usage: '거실', area: 20, type: '4WAY', cool: 9.0, shortSideM: 3.5, longSideM: 5.8, sys: 'EHP', x, y, w: 200, h: 120 })
 const ROOMS_FX: Record<string, Room> = {
   AC_001: room('거실', 24, 24),
   AC_002: room('침실', 260, 24),

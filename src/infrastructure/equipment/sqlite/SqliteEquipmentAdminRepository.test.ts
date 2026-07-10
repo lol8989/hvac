@@ -24,12 +24,13 @@ describe('SqliteEquipmentAdminRepository (관리 조회 — 전 상태)', () => 
     expect(archived?.status).toBe('ARCHIVED')
   })
 
-  it('상태 분포: 게시본은 큐레이션 23종뿐이고 나머지 스펙시트 모델은 DRAFT다', async () => {
+  // 26 = 실내기 19(1WAY 7 · 2WAY 3 · 4WAY 9) + 실외기 7. 2WAY 3종은 2026-07-10에 게시본으로 올렸다.
+  it('상태 분포: 게시본은 큐레이션 26종뿐이고 나머지 스펙시트 모델은 DRAFT다', async () => {
     const rows = (await makeAdmin()).listProducts()
     const count = (s: string) => rows.filter((r) => r.status === s).length
-    expect(count('PUBLISHED')).toBe(23)
+    expect(count('PUBLISHED')).toBe(26)
     expect(count('ARCHIVED')).toBe(1)
-    expect(count('DRAFT')).toBe(SEED_COUNTS.products - 24)
+    expect(count('DRAFT')).toBe(SEED_COUNTS.products - 27)
   })
 
   it('스펙시트 실모델(칠러·CDU·환기)도 분류와 함께 조회된다', async () => {
@@ -51,7 +52,7 @@ describe('SqliteEquipmentAdminRepository (관리 조회 — 전 상태)', () => 
   it('큐레이션 게시본 실내기는 장비번호(equipmentCode)를 갖고, 스펙시트 모델은 갖지 않는다', async () => {
     const rows = (await makeAdmin()).listProducts()
     const idu = rows.find((r) => r.modelCode === 'RNW0401C2S')!
-    expect(idu).toMatchObject({ categoryCode: 'INDOOR', subcategoryName: '4WAY 카세트', equipmentCode: '40C' })
+    expect(idu).toMatchObject({ categoryCode: 'INDOOR', subcategoryName: '1WAY 카세트', equipmentCode: '40C' })
     expect(rows.find((r) => r.modelCode === 'RPUW281X9P')!.equipmentCode).toBeNull()
   })
 })

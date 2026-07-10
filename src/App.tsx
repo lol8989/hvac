@@ -28,8 +28,7 @@ import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, ensureR
 import { NotFoundError } from './domain/generation/errors'
 import { Room as DomainRoom } from './domain/generation/Room'
 import { Placement } from './domain/generation/Placement'
-import { applyAiPlacement, placementTotalsW } from './domain/generation/recalc'
-import { recommendIndoor } from './domain/generation/recommendIndoor'
+import { applyAiPlacement, placementTotalsW, aiSelectionFor } from './domain/generation/recalc'
 import { UnitLoad } from './domain/shared/UnitLoad'
 import { InMemoryIndoorModelCatalog } from './infrastructure/generation/InMemoryIndoorModelCatalog'
 import { defaultEquipmentMaster } from './infrastructure/equipment/InMemoryEquipmentMaster'
@@ -138,7 +137,7 @@ export default function App({
   const indoorInfo = useMemo(() => {
     const map: Record<string, { model: string; kind: string }> = {}
     for (const id of Object.keys(domainRooms)) {
-      const code = placements[id]?.effectiveSelection.modelCode ?? recommendIndoor(domainRooms[id].requiredLoadW.cool, indoorModels).modelCode
+      const code = placements[id]?.effectiveSelection.modelCode ?? aiSelectionFor(domainRooms[id], indoorModels).modelCode
       const m = indoorCatalog.byCode(code)
       map[id] = m ? { model: m.model, kind: m.type } : { model: code, kind: '' }
     }
@@ -268,7 +267,7 @@ export default function App({
   const derivedInIdx = appliedCode
     ? Math.max(0, indoorModels.findIndex((m) => m.code === appliedCode))
     : primary
-      ? indoorModels.findIndex((m) => m.code === recommendIndoor(domainRooms[primary].requiredLoadW.cool, indoorModels).modelCode)
+      ? indoorModels.findIndex((m) => m.code === aiSelectionFor(domainRooms[primary], indoorModels).modelCode)
       : -1 // 선택 실 없으면 아무 카드도 선택 안 함
   const effIn = pick.in ?? derivedInIdx
   const effOut = pick.out ?? derivedOutIdx
@@ -426,7 +425,7 @@ export default function App({
     setPlacements((prev) => {
       if (!prev[id]) return prev
       // 오버라이드 해제 + 최신 부하 기준 AI 추천으로 갱신.
-      const ai = recommendIndoor(domainRooms[id].requiredLoadW.cool, indoorModels)
+      const ai = aiSelectionFor(domainRooms[id], indoorModels)
       return { ...prev, [id]: prev[id].clearOverride().withAiSelection(ai) }
     })
   }
@@ -555,7 +554,10 @@ export default function App({
   // 검출: 도면에서 실을 찾아 도메인 Room으로 채운다(초기 빈 상태 → 6실). 이후 부하·선정표가 채워진다.
   const doDetect = () => {
     const detected = Object.fromEntries(
-      Object.entries(ROOMS).map(([id, r]) => [id, DomainRoom.create({ id, floor: r.floor, name: r.name, areaM2: r.area, usage: r.usage, facility })]),
+      Object.entries(ROOMS).map(([id, r]) => [
+        id,
+        DomainRoom.create({ id, floor: r.floor, name: r.name, areaM2: r.area, usage: r.usage, facility, shortSideM: r.shortSideM, longSideM: r.longSideM }),
+      ]),
     )
     setDomainRooms(detected)
     setStep('place')

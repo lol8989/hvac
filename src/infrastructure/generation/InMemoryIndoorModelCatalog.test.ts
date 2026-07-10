@@ -8,18 +8,21 @@ describe('InMemoryIndoorModelCatalog', () => {
   const catalog = new InMemoryIndoorModelCatalog()
 
   describe('list', () => {
-    it('시드 16종을 전부 반환한다', () => {
-      expect(catalog.list()).toHaveLength(16)
+    it('시드 19종을 전부 반환한다', () => {
+      expect(catalog.list()).toHaveLength(19)
     })
 
     it('전 모델의 계열은 EHP이다', () => {
       expect(catalog.list().every((m) => m.energySource === 'EHP')).toBe(true)
     })
 
-    it('C시리즈 7종은 4WAY 카세트, T시리즈 9종은 덕트 타입이다', () => {
+    // 유형 라벨은 장비번호 접미문자와 일치한다(1WAY=C · 2WAY=G · 4WAY=T). 2026-07-10 정정.
+    // 자동배치 룰이 세 타입을 모두 고를 수 있으려면 카탈로그가 셋을 다 담아야 한다.
+    it('C시리즈 7종은 1WAY, G시리즈 3종은 2WAY, T시리즈 9종은 4WAY 카세트다', () => {
       const list = catalog.list()
-      expect(list.filter((m) => m.type === '4WAY 카세트')).toHaveLength(7)
-      expect(list.filter((m) => m.type === '덕트')).toHaveLength(9)
+      expect(list.filter((m) => m.type === '1WAY 카세트')).toHaveLength(7)
+      expect(list.filter((m) => m.type === '2WAY 카세트')).toHaveLength(3)
+      expect(list.filter((m) => m.type === '4WAY 카세트')).toHaveLength(9)
     })
 
     it('반환 목록은 불변이다 (push 시 throw)', () => {

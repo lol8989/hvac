@@ -71,7 +71,10 @@
       "Bash(curl -sL -o eqp_upload_spec.png \"https://www.figma.com/api/mcp/asset/ccb7e436-8c81-4c71-a83f-584a76a934f5\")",
       "Bash(cp \"C:/Users/lolfr/Desktop/도면검도시스템/03_참고자료/LG전자 스펙시트 모음/KR_MV Super 5\\(고급형\\)_ODU_R410A_60Hz_HP_Domestic_MFL62319231_20260114_spec.xlsx\" src/test/fixtures/mv_super5_odu.xlsx)",
       "Bash(cp \"C:/Users/lolfr/Desktop/도면검도시스템/03_참고자료/LG전자 스펙시트 모음/GHP Super III\\(LNG_LPG\\)_ODU_R410A_60Hz_HP_Domestic_MFL68067103_5CGL0-01Q\\(Mar.2026\\)_spec.xlsx\" src/test/fixtures/ghp_super3_odu.xlsx)",
-      "Bash(awk '{print \"seed:\", $1}')"
+      "Bash(awk '{print \"seed:\", $1}')",
+      "Bash(git stash *)",
+      "Bash(ngrok config *)",
+      "Bash(ngrok http *)"
     ]
   },
   "prefersReducedMotion": true

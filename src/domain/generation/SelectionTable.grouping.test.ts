@@ -16,7 +16,7 @@ const ODU_A = { model: 'ODU-A', coolKw: 23.3, heatKw: 26.3, hp: 8 }
 const ODU_B = { model: 'ODU-B', coolKw: 29.0, heatKw: 32.0, hp: 10 }
 
 const room = (id: string, floor: string) =>
-  Room.create({ id, floor, name: id, areaM2: 20, usage: '사무실', facility: 'OFFICE', aiUnitLoad: new UnitLoad(150, 150) })
+  Room.create({ id, floor, name: id, areaM2: 20, usage: '사무실', facility: 'OFFICE', shortSideM: 4, longSideM: 5, aiUnitLoad: new UnitLoad(150, 150) })
 
 // 1층: r1·r2 → g1(ODU-A) · r3 → g2(ODU-B)
 // 2층: r4 → g3(ODU-A)

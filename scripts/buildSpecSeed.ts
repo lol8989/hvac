@@ -29,7 +29,9 @@ const OUT_META = resolve('src/infrastructure/equipment/seed/seedMeta.ts')
 
 // 큐레이션 게시본이 속할 중분류. 라벨은 InMemory 시드(seedData.ts)의 type과 정확히 일치해야 한다
 // — 생성/검도가 그 문자열을 실내기 유형으로 표시하고, 동치 테스트가 이를 고정한다.
-const curatedIndoorSub = (type: string) => (type === '덕트' ? 'IN_DUCT_CURATED' : 'IN_4WAY')
+// 큐레이션 실내기의 중분류는 유형 라벨에서 나온다(1WAY=C · 2WAY=G · 4WAY=T 계열).
+const curatedIndoorSub = (type: string) =>
+  type.startsWith('1WAY') ? 'IN_1WAY' : type.startsWith('2WAY') ? 'IN_2WAY' : type === '덕트' ? 'IN_DUCT_CURATED' : 'IN_4WAY'
 const curatedOutdoorSub = (cat: string) => (cat === 'GHP' ? 'OUT_GHP' : cat === '냉방전용' ? 'OUT_CO' : 'OUT_HR')
 const kwToW = (kw: number) => Math.round(kw * 1000)
 
@@ -128,12 +130,10 @@ async function main() {
 
     // 스펙시트에 있는 모델은 hot 필드(용량·HP·최대연결수)를 시트에서 취한다(주인님 결정 2026-07-09).
     //
-    // 분류는 다르다. 목업 큐레이션의 장비번호 접미문자가 실제 유형과 어긋난다
-    // (20C~72C는 '4WAY 카세트' 표기지만 시트상 프리미엄 1WAY, 40T~145T는 '덕트' 표기지만 4WAY 듀얼베인).
-    // 생성·검도가 보는 유형 라벨을 바꾸지 않기 위해, 시트 중분류가 큐레이션과 다르면 큐레이션 시리즈에 붙인다.
-    // (실외기는 시트와 큐레이션 중분류가 일치하므로 시트 시리즈를 그대로 쓴다.)
+    // 분류는 다르다. 큐레이션 실내기는 항상 큐레이션 시리즈에 둔다 — 인메모리 시드(seedData.ts)가
+    // 같은 시리즈명을 쓰고 동치 테스트가 이를 고정하기 때문이다. 실외기만 시트 시리즈를 그대로 쓴다.
     const sheetSub = existing ? series.get(existing.seriesCode)!.subcategoryCode : null
-    const keepSheetSeries = existing !== undefined && sheetSub === subCode
+    const keepSheetSeries = existing !== undefined && sheetSub === subCode && subCode.startsWith('OUT_')
 
     products.set(modelCode, {
       seriesCode: keepSheetSeries ? existing.seriesCode : seriesCode,

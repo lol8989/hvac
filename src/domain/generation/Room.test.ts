@@ -12,6 +12,8 @@ const baseProps = {
   areaM2: 20,
   usage: '시청각실',
   facility: 'OFFICE' as const,
+  shortSideM: 4.5,
+  longSideM: 6.0,
 }
 
 describe('Room', () => {
@@ -162,6 +164,47 @@ describe('Room', () => {
         ;(r as { name: string }).name = '변조'
       }).toThrow()
       expect(r.name).toBe('시청각실101')
+    })
+  })
+
+  // 실내기 타입 결정(짧은 폭 경계)과 확산범위 대수 계산이 실측 치수를 요구한다.
+  describe('실측 치수(m)', () => {
+    it('짧은 변·긴 변을 뒤집어 넣어도 정규화된다', () => {
+      const r = Room.create({ ...baseProps, shortSideM: 6.0, longSideM: 4.5 })
+      expect(r.shortSideM).toBe(4.5)
+      expect(r.longSideM).toBe(6.0)
+    })
+
+    it('변 길이가 0 이하면 throw한다', () => {
+      expect(() => Room.create({ ...baseProps, shortSideM: 0 })).toThrow()
+      expect(() => Room.create({ ...baseProps, longSideM: -1 })).toThrow()
+    })
+
+    it('shape은 타입 결정에 필요한 형상·부하를 함께 담는다', () => {
+      const r = Room.create(baseProps)
+      expect(r.shape).toEqual({
+        shortSideM: 4.5,
+        longSideM: 6.0,
+        residential: false,
+        corridor: false,
+      })
+    })
+
+    // 단위세대(주거시설)는 무조건 1WAY — 시설군에서 파생한다
+    it('주거시설이면 residential이다', () => {
+      expect(Room.create({ ...baseProps, facility: '주거시설' }).shape.residential).toBe(true)
+    })
+
+    // 복도는 '4kW 이상 4WAY 기본' 규칙에서 빠진다 — 용도에서 파생한다
+    it('용도가 복도면 corridor다', () => {
+      expect(Room.create({ ...baseProps, usage: '복도' }).shape.corridor).toBe(true)
+      expect(Room.create({ ...baseProps, usage: '중앙복도' }).shape.corridor).toBe(true)
+    })
+
+    it('면적 변경은 치수를 보존한다', () => {
+      const r = Room.create(baseProps).withArea(30)
+      expect(r.shortSideM).toBe(4.5)
+      expect(r.longSideM).toBe(6.0)
     })
   })
 })

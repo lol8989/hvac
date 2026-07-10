@@ -14,8 +14,8 @@ const models = [
   new IndoorModel({ code: '40C', model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP' }),
 ]
 const rooms = [
-  Room.create({ id: 'R1', floor: '지하1층', name: '시청각실', areaM2: 20, usage: '시청각실', facility: 'OFFICE' }),
-  Room.create({ id: 'R2', floor: '지하1층', name: '준비실', areaM2: 5.4, usage: '준비실', facility: 'OFFICE' }),
+  Room.create({ id: 'R1', floor: '지하1층', name: '시청각실', areaM2: 20, usage: '시청각실', facility: 'OFFICE', shortSideM: 4, longSideM: 5 }),
+  Room.create({ id: 'R2', floor: '지하1층', name: '준비실', areaM2: 5.4, usage: '준비실', facility: 'OFFICE', shortSideM: 2, longSideM: 2.7 }),
 ]
 const placements = {
   R1: Placement.ai('R1', { modelCode: '40C', quantity: 3 }),

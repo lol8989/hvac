@@ -10,8 +10,8 @@ describe('InMemoryEquipmentMaster (게시 SSOT + 게이트)', () => {
   describe('publishedIndoor', () => {
     const pub = master.publishedIndoor()
 
-    it('게시(PUBLISHED) 실내기 16종을 반환한다', () => {
-      expect(pub).toHaveLength(16)
+    it('게시(PUBLISHED) 실내기 19종을 반환한다', () => {
+      expect(pub).toHaveLength(19)
     })
 
     it('전 모델 계열은 EHP이다', () => {

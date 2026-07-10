@@ -7,8 +7,7 @@ import { IndoorModel } from './IndoorModel'
 import { Placement } from './Placement'
 import { Room } from './Room'
 import { UnitLoad } from '../shared/UnitLoad'
-import { recommendIndoor } from './recommendIndoor'
-import { applyAiPlacement, placementTotalsW, groupIndoorTotalsW } from './recalc'
+import { applyAiPlacement, aiSelectionFor, placementTotalsW, groupIndoorTotalsW } from './recalc'
 
 // 테스트 카탈로그: 40C(4000/4500) — 엑셀 실측, 70C(7000/8000) — 배수 충돌 없는 대조 모델
 const model40C = new IndoorModel({
@@ -30,7 +29,7 @@ const model70C = new IndoorModel({
 const models = [model40C, model70C]
 
 // 시청각실(140kcal → 162.82W/㎡) 24㎡ → 필요냉방 3907.68W → 40C×1 추천
-const roomA = Room.create({ id: 'r-a', floor: '1F', name: '시청각실', areaM2: 24, usage: '시청각실', facility: 'OFFICE', aiUnitLoad: new UnitLoad(140, 140) })
+const roomA = Room.create({ id: 'r-a', floor: '1F', name: '시청각실', areaM2: 24, usage: '시청각실', facility: 'OFFICE', shortSideM: 4, longSideM: 6, aiUnitLoad: new UnitLoad(140, 140) })
 
 describe('applyAiPlacement', () => {
   it('placement가 없는 실이면 Placement.ai로 새로 생성한다', () => {
@@ -66,8 +65,9 @@ describe('applyAiPlacement', () => {
     const before = applyAiPlacement([roomA], {}, models)
     expect(before['r-a'].effectiveSelection).toEqual({ modelCode: '40C', quantity: 1 })
 
-    // 45㎡ → 필요냉방 7326.9W → 70C×1(오차 326.9) < 40C×2(오차 673.1)
-    const enlarged = roomA.withArea(45)
+    // 44㎡ → 필요냉방 7164.1W. 70C×1(7000W)은 2.3% 부족 → 허용폭 3% 안이라 인정된다.
+    // 40C는 2대(8000W)여야 하므로 총용량 최소인 70C×1이 선정된다.
+    const enlarged = roomA.withArea(44)
     const after = applyAiPlacement([enlarged], before, models)
 
     expect(after['r-a'].effectiveSelection).toEqual({ modelCode: '70C', quantity: 1 })
@@ -92,12 +92,10 @@ describe('applyAiPlacement', () => {
     expect(result['r-other']).toBe(other)
   })
 
-  it('추천 결과는 recommendIndoor(필요냉방부하)와 일치한다 (규칙 위임 검증)', () => {
+  it('추천 결과는 aiSelectionFor(실)와 일치한다 (규칙 위임 검증)', () => {
     const result = applyAiPlacement([roomA], {}, models)
 
-    expect(result['r-a'].effectiveSelection).toEqual(
-      recommendIndoor(roomA.requiredLoadW.cool, models),
-    )
+    expect(result['r-a'].effectiveSelection).toEqual(aiSelectionFor(roomA, models))
   })
 })
 

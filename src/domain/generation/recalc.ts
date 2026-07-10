@@ -4,11 +4,24 @@
 // Clean Architecture: 프레임워크(React/DB)에 의존하지 않는 순수 도메인.
 
 import type { Room } from './Room'
-import type { IndoorModel } from './IndoorModel'
+import type { IndoorModel, IndoorSelection } from './IndoorModel'
 import { Placement } from './Placement'
-import { recommendIndoor } from './recommendIndoor'
+import { selectIndoorModel } from './selectIndoorModel'
 
-// AI 배치 (재)실행: 각 실의 필요 냉방부하로 recommendIndoor를 돌려 Placement의 AI값을 갱신.
+// 실 하나에 대한 AI 선정 결과. 배치·심볼표시·오버라이드 해제가 모두 이 함수를 지나야
+// 같은 규칙을 본다(규칙이 호출부마다 흩어지지 않는다).
+export const aiSelectionFor = (room: Room, models: readonly IndoorModel[]): IndoorSelection => {
+  const selected = selectIndoorModel({
+    requiredCoolW: room.requiredLoadW.cool,
+    areaM2: room.areaM2,
+    shape: room.shape,
+    models,
+  })
+  return Object.freeze({ modelCode: selected.model.code, quantity: selected.quantity })
+}
+
+// AI 배치 (재)실행: 각 실의 형상·부하로 selectIndoorModel을 돌려 Placement의 AI값을 갱신.
+// 타입(1/2/4WAY)은 실 형상이 정하고, 대수는 부하와 확산범위 중 큰 쪽이 정한다.
 // - 기존 placement가 있으면 withAiSelection(user 오버라이드 보존), 없으면 Placement.ai로 생성.
 // - rooms 목록에 없는 실의 기존 placement는 그대로 유지한다.
 // - 반환은 roomId → Placement의 새 Record(원본 비파괴).
@@ -19,7 +32,7 @@ export const applyAiPlacement = (
 ): Record<string, Placement> => {
   const next: Record<string, Placement> = { ...placements }
   for (const room of rooms) {
-    const recommended = recommendIndoor(room.requiredLoadW.cool, models)
+    const recommended = aiSelectionFor(room, models)
     const existing = placements[room.id]
     next[room.id] =
       existing !== undefined

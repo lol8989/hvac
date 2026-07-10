@@ -32,9 +32,9 @@ describe('SqliteEquipmentMaster (SQLite 백엔드)', () => {
     expect(sq.publishedOutdoor()).toEqual(mem.publishedOutdoor())
   })
 
-  it('[게이트] 게시된 실내기 16·실외기 7만 노출(DRAFT/ARCHIVED 제외)', async () => {
+  it('[게이트] 게시된 실내기 19·실외기 7만 노출(DRAFT/ARCHIVED 제외)', async () => {
     const sq = await createSqliteEquipmentMaster({ initSql: nodeInit, loadSeed: loadNodeSeed })
-    expect(sq.publishedIndoor()).toHaveLength(16)
+    expect(sq.publishedIndoor()).toHaveLength(19)
     expect(sq.publishedOutdoor()).toHaveLength(7)
     expect(sq.publishedIndoor().some((m) => m.code === 'DRAFT99')).toBe(false)
     expect(sq.publishedOutdoor().some((m) => m.model === 'RPUW-ARCHIVED')).toBe(false)
