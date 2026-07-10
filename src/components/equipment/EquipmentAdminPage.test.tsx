@@ -142,6 +142,77 @@ describe('EquipmentAdminPage (관리 목록)', () => {
     expect(within(pubRow).getByText('2026-07-01 12:00:00')).toBeInTheDocument() // 게시일
   })
 
+  describe('컬럼 정렬', () => {
+    const sortable = [
+      { header: '상태', label: '상태' },
+      { header: 'HP', label: 'HP' },
+      { header: '냉방(kW)', label: '냉방(kW)' },
+      { header: '등록일', label: '등록일' },
+      { header: '수정일', label: '수정일' },
+      { header: '게시일', label: '게시일' },
+    ]
+    const modelsOf = () => bodyRows().map((r) => within(r).getAllByRole('cell')[5].textContent)
+    const th = (label: string) => screen.getByRole('columnheader', { name: new RegExp(`^${label.replace(/[()]/g, '\\$&')}`) })
+
+    it('상태·HP·냉방·등록일·수정일·게시일에만 정렬 버튼이 있다', () => {
+      render(<EquipmentAdminPage admin={makeAdmin()} />)
+      for (const s of sortable) {
+        expect(screen.getByRole('button', { name: `${s.label} 오름차순 정렬` })).toBeInTheDocument()
+      }
+      // 분류·계열·시리즈·모델명은 정렬 대상이 아니다.
+      expect(screen.queryByRole('button', { name: /모델명 .*정렬/ })).toBeNull()
+    })
+
+    it('헤더를 누르면 오름 → 내림 → 해제로 순환하고 aria-sort가 따라간다', () => {
+      const many = [mk({ id: 1, modelCode: 'A', horsepower: 28 }), mk({ id: 2, modelCode: 'B', horsepower: 8 }), mk({ id: 3, modelCode: 'C', horsepower: 104 })]
+      render(<EquipmentAdminPage admin={makeAdmin({ listProducts: () => many })} />)
+      expect(th('HP')).toHaveAttribute('aria-sort', 'none')
+
+      fireEvent.click(screen.getByRole('button', { name: 'HP 오름차순 정렬' }))
+      expect(modelsOf()).toEqual(['B', 'A', 'C'])
+      expect(th('HP')).toHaveAttribute('aria-sort', 'ascending')
+
+      fireEvent.click(screen.getByRole('button', { name: 'HP 내림차순 정렬' }))
+      expect(modelsOf()).toEqual(['C', 'A', 'B'])
+      expect(th('HP')).toHaveAttribute('aria-sort', 'descending')
+
+      fireEvent.click(screen.getByRole('button', { name: 'HP 정렬 해제' }))
+      expect(modelsOf()).toEqual(['A', 'B', 'C']) // 원본 순서
+      expect(th('HP')).toHaveAttribute('aria-sort', 'none')
+    })
+
+    it('정렬은 필터 결과 전체를 기준으로 하고, 첫 페이지로 되돌린다', () => {
+      // 25행: HP가 24..0. 20건씩 → 2페이지.
+      const many = Array.from({ length: 25 }, (_, i) => mk({ id: i + 1, modelCode: `M${i}`, horsepower: 24 - i }))
+      render(<EquipmentAdminPage admin={makeAdmin({ listProducts: () => many })} />)
+      fireEvent.click(screen.getByRole('button', { name: '다음 →' }))
+      expect(screen.getByText('2 / 2')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'HP 오름차순 정렬' }))
+      expect(screen.getByText('1 / 2')).toBeInTheDocument()
+      // 마지막 행(HP 0)이 2페이지가 아니라 1페이지 첫 줄로 온다 = 페이지 안이 아닌 전체를 정렬했다.
+      expect(modelsOf()[0]).toBe('M24')
+    })
+
+    it('상태 정렬은 게시 → 작성중 → 단종 순이다(사전순 아님)', () => {
+      render(<EquipmentAdminPage admin={makeAdmin()} />)
+      fireEvent.click(screen.getByRole('button', { name: '상태 오름차순 정렬' }))
+      const badges = bodyRows().map((r) => within(r).getAllByRole('cell')[1].textContent)
+      expect(badges[0]).toBe('게시')
+      expect(badges[badges.length - 1]).toBe('단종')
+    })
+
+    it('게시일 없는 행(작성중·단종)은 방향과 무관하게 뒤로 간다', () => {
+      render(<EquipmentAdminPage admin={makeAdmin()} />)
+      // 픽스처에서 게시일이 없는 건 DRAFTX·ARCHX 둘뿐이다. 동값이므로 원본 순서를 유지한 채 맨 뒤로 간다.
+      const tail = () => modelsOf().slice(-2)
+      fireEvent.click(screen.getByRole('button', { name: '게시일 오름차순 정렬' }))
+      expect(tail()).toEqual(['DRAFTX', 'ARCHX'])
+      fireEvent.click(screen.getByRole('button', { name: '게시일 내림차순 정렬' }))
+      expect(tail()).toEqual(['DRAFTX', 'ARCHX'])
+    })
+  })
+
   it('검색으로 모델명 필터, 0건이면 빈 상태 안내', () => {
     render(<EquipmentAdminPage admin={makeAdmin()} />)
     const search = screen.getByPlaceholderText('모델명·장비번호 검색')

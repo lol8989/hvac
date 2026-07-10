@@ -6,6 +6,8 @@ import SpecSheetUploadModal from './SpecSheetUploadModal'
 import BulkActionBar from './BulkActionBar'
 import AdminShell from './AdminShell'
 import StatusFilterChips from './StatusFilterChips'
+import SortableTh from './SortableTh'
+import { sortRows, nextSortDirection, type SortKey, type SortState } from '../../presentation/equipment/sortRows'
 import { useSubmitGuard } from './useSubmitGuard'
 import { formatDateTime } from '../../presentation/formatDateTime'
 
@@ -40,6 +42,7 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0])
+  const [sort, setSort] = useState<SortState>(null)
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
   const [editing, setEditing] = useState<Editing>(null)
   const [uploading, setUploading] = useState(false)
@@ -76,10 +79,19 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
     )
   }, [all, cat, status, seriesCode, q])
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
+  // 정렬은 필터 다음, 페이지 나누기 앞이다 — 전체 결과를 기준으로 줄을 세운 뒤 잘라야 한다.
+  const ordered = useMemo(() => sortRows(filtered, sort), [filtered, sort])
+
+  const pageCount = Math.max(1, Math.ceil(ordered.length / pageSize))
   const cur = Math.min(page, pageCount - 1)
-  const rows = filtered.slice(cur * pageSize, cur * pageSize + pageSize)
+  const rows = ordered.slice(cur * pageSize, cur * pageSize + pageSize)
   const resetPage = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(0) }
+
+  // 정렬을 바꾸면 보고 있던 페이지의 내용이 완전히 달라진다 → 첫 페이지로.
+  const onSort = (key: SortKey) => {
+    setSort((curSort) => nextSortDirection(curSort, key))
+    setPage(0)
+  }
 
   // 선택은 필터 결과 안에서만 유효하다(필터를 바꾸면 보이지 않는 선택이 남지 않도록 정리).
   const visibleSelected = useMemo(() => filtered.filter((r) => selected.has(r.id)).map((r) => r.id), [filtered, selected])
@@ -161,9 +173,8 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
               </option>
             ))}
         </select>
+        {/* 건수는 상태 칩(전체 기준)과 하단 표기(현재 범위)가 이미 말한다 — 여기서 세 번째로 반복하지 않는다. */}
         <button className="btn sm" onClick={resetFilters} disabled={!filterOn}>초기화</button>
-        <div className="sp" />
-        <span className="eq-count">{filtered.length.toLocaleString()}건</span>
       </div>
 
       <BulkActionBar
@@ -183,9 +194,14 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
               <th className="chk">
                 <input type="checkbox" checked={pageAllSelected} onChange={togglePage} aria-label="이 페이지 전체 선택" />
               </th>
-              <th>상태</th><th>분류</th><th>계열</th><th>시리즈</th><th>모델명</th><th>장비번호</th>
-              <th className="num">HP</th><th className="num">냉방(kW)</th><th className="num">난방(kW)</th>
-              <th>등록일</th><th>수정일</th><th>게시일</th>
+              <SortableTh label="상태" sortKey="status" sort={sort} onSort={onSort} />
+              <th>분류</th><th>계열</th><th>시리즈</th><th>모델명</th><th>장비번호</th>
+              <SortableTh label="HP" sortKey="horsepower" sort={sort} onSort={onSort} numeric />
+              <SortableTh label="냉방(kW)" sortKey="coolingW" sort={sort} onSort={onSort} numeric />
+              <th className="num">난방(kW)</th>
+              <SortableTh label="등록일" sortKey="createdAt" sort={sort} onSort={onSort} />
+              <SortableTh label="수정일" sortKey="updatedAt" sort={sort} onSort={onSort} />
+              <SortableTh label="게시일" sortKey="publishedAt" sort={sort} onSort={onSort} />
               <th>관리</th>
             </tr>
           </thead>

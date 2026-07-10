@@ -274,16 +274,8 @@
   background: var(--n-0);
   border-bottom: 1px solid var(--n-200);
 }
-.eq-toolbar .sp {
-  flex: 1;
-}
 .eq-toolbar .eq-search {
   min-width: 280px;
-}
-.eq-count {
-  font-size: var(--fs-md);
-  color: var(--n-500);
-  font-variant-numeric: tabular-nums;
 }
 
 /* ── 일괄 작업 바 ── */
@@ -371,6 +363,63 @@
 }
 .eq-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* ── 정렬 가능한 헤더 ──
+   화살표는 항상 자리를 차지한다(비활성은 흐린 ↕). 호버할 때만 나타나면 정렬 가능하다는 걸 아무도 모른다. */
+.eq-table th.sortable {
+  padding: 0;
+}
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px var(--sp-3);
+  background: transparent;
+  border: none;
+  font: inherit;
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  letter-spacing: var(--tracking-label);
+  color: inherit;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+.eq-table th.sortable.num .th-sort {
+  justify-content: flex-end;
+}
+.th-sort:hover {
+  color: var(--lg-red);
+}
+.th-arrow {
+  font-size: 9px;
+  color: var(--n-300);
+  line-height: 1;
+}
+.th-sort:hover .th-arrow {
+  color: var(--lg-red);
+}
+.eq-table th.sorted {
+  background: var(--lg-red-wash);
+}
+.eq-table th.sorted .th-sort {
+  color: var(--lg-red);
+}
+.eq-table th.sorted .th-arrow {
+  color: var(--lg-red);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .eq-table tbody tr:hover {
   background: var(--n-50);
