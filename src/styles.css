@@ -228,3 +228,14 @@ button{font-family:inherit;cursor:pointer;}
 .proj-set{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#666;}
 .proj-set .field{padding:4px 8px;font-size:13px;}
 .proj-set .field:disabled{background:#F2F2F2;color:#999;cursor:not-allowed;}
+
+/* 장비일람표 새 창 — 계열별 탭 + 넓은 표 */
+.sch-tabs{display:flex;gap:6px;margin-left:14px;}
+.sch-count{opacity:.7;font-size:12px;margin-left:4px;}
+.sch-wrap{flex:1;min-height:0;overflow:auto;padding:0 14px 14px;}
+.sch-table{border-collapse:separate;border-spacing:0;background:#fff;border:1px solid var(--line);font-size:13px;margin-top:12px;white-space:nowrap;}
+.sch-table th,.sch-table td{padding:7px 10px;border-bottom:1px solid var(--line2);border-right:1px solid var(--line2);}
+.sch-table thead th{background:var(--head);font-weight:700;font-size:12px;position:sticky;top:0;z-index:1;}
+.sch-table tbody tr:hover{background:var(--hover);}
+.sch-table td{font-variant-numeric:tabular-nums;}
+.sch-table td.sch-dash{color:#BBB;}

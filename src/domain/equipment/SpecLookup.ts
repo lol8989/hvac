@@ -18,26 +18,34 @@ const norm = (key: string): string => key.replace(/\s+/g, '').replace(/[×xX]/g,
 
 const blank = (v: string | null | undefined): boolean => v == null || v.trim() === '' || v.trim() === '-'
 
-// 후보 키를 순서대로 훑어 첫 번째로 맞는 값을 낸다. 없으면 null(값을 지어내지 않는다).
-export function specValue(spec: SpecData, candidates: readonly string[]): string | null {
+// 후보 키를 순서대로 훑어 첫 번째로 맞는 셀을 낸다. 없으면 null.
+// 단위(unit)가 필요한 컬럼이 있다 — 실내기 소비전력은 W, 실외기는 kW로 저장돼 있다.
+export function specCell(spec: SpecData, candidates: readonly string[]): SpecCell | null {
   const index = new Map<string, string>()
   for (const k of Object.keys(spec)) index.set(norm(k), k)
 
   for (const c of candidates) {
     const hit = index.get(norm(c))
     if (hit === undefined) continue
-    const v = spec[hit]?.value
-    if (!blank(v)) return v
+    const cell = spec[hit]
+    if (cell && !blank(cell.value)) return cell
   }
   return null
 }
 
+// 값만 필요할 때. 없으면 null(값을 지어내지 않는다).
+export function specValue(spec: SpecData, candidates: readonly string[]): string | null {
+  return specCell(spec, candidates)?.value ?? null
+}
+
 // 일람표가 쓰는 의미별 후보 키. 앞쪽이 우선이다(빈도순).
 export const SPEC_KEYS = {
+  // '전 원'처럼 공백이 낀 라벨도 norm이 흡수한다.
   전원: ['전원 > Case 1', '전원', '전원 > #1', '전원 > Case 1 (V, Phase, Hz)'],
 
-  소비전력_냉방: ['소비전력(냉방) > 정격', '소비전력(실내기) > 강/중/약', '소비전력 > 강/중/약'],
-  소비전력_난방: ['소비전력(난방) > 정격'],
+  // 'TA Multi V Super 5' 시트는 '전 력 > 통합냉방소비전력'처럼 접두가 다르다.
+  소비전력_냉방: ['소비전력(냉방) > 정격', '소비전력(실내기) > 강/중/약', '소비전력 > 강/중/약', '전력 > 통합냉방소비전력', '소비전력(냉방) > 통합냉방소비전력'],
+  소비전력_난방: ['소비전력(난방) > 정격', '전력 > 통합난방소비전력', '소비전력(난방) > 통합난방소비전력'],
 
   운전전류_냉방: ['운전전류(냉방) > 정격', '전기특성치 > 실내기 팬모터 FLA', '전기특성치 > 팬모터 FLA'],
   운전전류_난방: ['운전전류(난방) > 정격'],
@@ -55,7 +63,8 @@ export const SPEC_KEYS = {
 
   통신선: ['연결전선 > 통신선(VCTF-SB)', '연결 전선 > 통신선( VCTF - SB)', '연결전선 > 전원/통신선(H07RN-F,접지포함)'],
   전원선: ['연결전선 > 전원선(H07RN-F, 접지포함)', '연결 전선 > 전원선( H07RN-F, 접지포함)', '연결전선 > 전원선(H07RN-F,접지포함)', '연결전선 > 주 전원선(H07RN-F,접지포함)'],
-  차단기: ['전기특성치 > 차단기(ELCB)'],
+  // 일부 시트는 접두 없이 최상위에 둔다.
+  차단기: ['전기특성치 > 차단기(ELCB)', '차단기(ELCB)'],
 
   냉매명: ['냉매 > 냉매명', '냉매 > 종류'],
 

@@ -2,7 +2,32 @@
 // 원문은 product_specs에 그대로 두고(SSOT), 출력할 때만 변환한다(주인님 확정 2026-07-10).
 // 근거: doc/05_설계결정/일람표_컬럼_매핑표.md §2·§4
 import { describe, it, expect } from 'vitest'
-import { firstNumber, firstOf, maxOf, powerSupply, dimensions, wireSpec, breaker, DASH } from './scheduleFormat'
+import { firstNumber, firstOf, maxOf, powerSupply, dimensions, wireSpec, breaker, toKw, DASH } from './scheduleFormat'
+
+// 일람표 소비전력 컬럼은 kW다. 그런데 실내기는 W, 실외기는 kW로 저장돼 있다 → 단위를 봐야 한다.
+describe('toKw — 단위를 보고 kW로 맞춘다', () => {
+  it('W로 저장된 값은 kW로 환산한다', () => {
+    expect(toKw({ value: '11 / - / -', unit: 'W' })).toBe('0.011')
+    expect(toKw({ value: '30', unit: 'W' })).toBe('0.03')
+  })
+
+  it('이미 kW면 그대로', () => {
+    expect(toKw({ value: '1.7', unit: 'kW' })).toBe('1.7')
+  })
+
+  it('강/중/약이면 최댓값을 쓴다', () => {
+    expect(toKw({ value: '11 / 9 / 7', unit: 'W' })).toBe('0.011')
+  })
+
+  it('단위를 모르면 값 그대로 둔다 (지어내지 않는다)', () => {
+    expect(toKw({ value: '1.7', unit: null })).toBe('1.7')
+  })
+
+  it('없으면 대시', () => {
+    expect(toKw(null)).toBe(DASH)
+    expect(toKw({ value: '-', unit: 'W' })).toBe(DASH)
+  })
+})
 
 describe('firstNumber — 기호·괄호가 붙은 값에서 숫자만 뽑는다', () => {
   it('배관구경', () => {
@@ -55,8 +80,16 @@ describe('powerSupply — 전원 표기를 일람표 순서로 재배열', () =>
     expect(powerSupply('380, 3상(4선), 60')).toBe('3, 4, 380, 60')
   })
 
+  // 시트마다 전원 표기가 다르다. 일부는 이미 일람표 순서인데 구분자만 슬래시다
+  // ('전 원 = 3 / 4 / 380 / 60', 단위 '상/선식/V/Hz').
+  it('이미 상·선식·V·Hz 순인 슬래시 표기는 구분자만 바꾼다', () => {
+    expect(powerSupply('3 / 4 / 380 / 60')).toBe('3, 4, 380, 60')
+    expect(powerSupply('1 / 2 / 220 / 60')).toBe('1, 2, 220, 60')
+  })
+
   it('원문 형식이 다르면 원문을 그대로 둔다 (값을 지어내지 않는다)', () => {
     expect(powerSupply('220V 단상')).toBe('220V 단상')
+    expect(powerSupply('3 / 4 / 380')).toBe('3 / 4 / 380') // 항목 수가 다르면 손대지 않는다
     expect(powerSupply(null)).toBe(DASH)
   })
 })

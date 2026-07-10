@@ -2,6 +2,7 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import SelectionReviewWindow from './components/selection/SelectionReviewWindow'
+import ScheduleWindow from './components/schedule/ScheduleWindow'
 import EquipmentAdminPage from './components/equipment/EquipmentAdminPage'
 import ComboPolicyPage from './components/equipment/ComboPolicyPage'
 import ForbiddenPage from './components/equipment/ForbiddenPage'
@@ -13,6 +14,7 @@ import './styles.css'
 import './styles/admin.css'
 import { createSqliteEquipmentMaster, type SqliteEquipmentMasterHandle } from './infrastructure/equipment/sqlite/SqliteEquipmentMaster'
 import { SqliteEquipmentAdminRepository } from './infrastructure/equipment/sqlite/SqliteEquipmentAdminRepository'
+import { SqliteSpecRepository } from './infrastructure/equipment/sqlite/SqliteSpecRepository'
 import { browserSqlInit } from './infrastructure/equipment/sqlite/browserSqlInit'
 import { createIdbBytesStore } from './infrastructure/equipment/sqlite/idbStore'
 import { SCHEMA_VERSION } from './infrastructure/equipment/sqlite/schema'
@@ -23,7 +25,8 @@ import { defaultEquipmentMaster } from './infrastructure/equipment/InMemoryEquip
 const rootEl = document.getElementById('root')
 if (!rootEl) throw new Error('#root 엘리먼트를 찾을 수 없습니다')
 
-// 라우팅(POC): ?view=selection → 장비선정표 새 창, ?view=equipment → 장비마스터 관리, 그 외 → 생성 작업 앱.
+// 라우팅(POC): ?view=selection → 장비선정표 새 창, ?view=schedule → 장비일람표 새 창,
+// ?view=equipment|combo → 관리자(ADMIN), 그 외 → 생성 작업 앱.
 const view = new URLSearchParams(window.location.search).get('view')
 
 // 프라미스가 제때 settle하지 않아도 앱이 멈추지 않도록 타임아웃 레이스.
@@ -69,6 +72,9 @@ const ADMIN_VIEWS = ['equipment', 'combo']
 
 if (view === 'selection') {
   render(<SelectionReviewWindow />)
+} else if (view === 'schedule') {
+  // 읽기 전용 미리보기 — 메인 창이 BroadcastChannel로 시트를 방송한다(저장소 불필요).
+  render(<ScheduleWindow />)
 } else if (view !== null && ADMIN_VIEWS.includes(view) && !canManageEquipment(CURRENT_USER)) {
   // 메뉴를 숨기는 것만으로는 URL 직접 입력을 막지 못한다. 권한이 없으면 저장소를 열지도 않는다.
   render(<ForbiddenPage userName={CURRENT_USER.name} />)
@@ -86,6 +92,7 @@ if (view === 'selection') {
   }
 } else {
   // 생성/검도는 PUBLISHED만 읽으므로 SQLite 실패 시 인메모리 기본으로 폴백(앱은 항상 렌더).
+  // 일람표용 롱테일 스펙은 SQLite에만 있다 → 폴백 시 빈 저장소(셀이 '-'로 남는다).
   const handle = await resolveSqliteHandle()
-  render(<App master={handle ?? defaultEquipmentMaster} />)
+  render(<App master={handle ?? defaultEquipmentMaster} specRepository={handle ? new SqliteSpecRepository(handle.db) : undefined} />)
 }

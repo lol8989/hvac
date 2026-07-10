@@ -35,15 +35,27 @@ export function maxOf(raw: string | null | undefined): string {
   return String(Math.max(...nums))
 }
 
-// 전원: '220, 1상(2선), 60' → '1, 2, 220, 60' (상, 선식, V, Hz)
-// 원문 형식이 다르면 원문 그대로.
-const POWER = /^\s*(\d+)\s*,\s*(\d+)\s*상\s*\(\s*(\d+)\s*선\s*\)\s*,\s*(\d+)\s*$/
+// 전원 표기는 시트마다 다르다.
+//   (a) '220, 1상(2선), 60'   → 재배열 필요 (V, 상, 선식, Hz)
+//   (b) '3 / 4 / 380 / 60'    → 이미 일람표 순서(상/선식/V/Hz). 구분자만 바꾼다.
+// 둘 다 아니면 원문 그대로 흘린다(값을 지어내지 않는다).
+const POWER_VOLT_FIRST = /^\s*(\d+)\s*,\s*(\d+)\s*상\s*\(\s*(\d+)\s*선\s*\)\s*,\s*(\d+)\s*$/
+const POWER_SLASHED = /^\s*(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)\s*$/
+
 export function powerSupply(raw: string | null | undefined): string {
   if (blank(raw)) return DASH
-  const m = POWER.exec(raw!)
-  if (!m) return raw!.trim()
-  const [, volt, phase, wires, hz] = m
-  return `${phase}, ${wires}, ${volt}, ${hz}`
+  const s = raw!.trim()
+
+  const a = POWER_VOLT_FIRST.exec(s)
+  if (a) {
+    const [, volt, phase, wires, hz] = a
+    return `${phase}, ${wires}, ${volt}, ${hz}`
+  }
+
+  const b = POWER_SLASHED.exec(s)
+  if (b) return b.slice(1).join(', ')
+
+  return s
 }
 
 // 치수: '1 880 x 2 180 x 960' → '1880x2180x960'
@@ -64,4 +76,15 @@ export function breaker(raw: string | null | undefined): string {
   if (blank(raw)) return DASH
   const s = raw!.trim()
   return /A$/i.test(s) ? s : `${s}A`
+}
+
+// 일람표의 소비전력 컬럼은 kW다. 그런데 실내기는 W, 실외기는 kW로 저장돼 있다.
+// 단위를 모르면 환산하지 않고 값을 그대로 둔다(지어내지 않는다).
+export function toKw(cell: { value: string; unit: string | null } | null | undefined): string {
+  if (!cell || blank(cell.value)) return DASH
+  const v = maxOf(cell.value)
+  if (v === DASH) return DASH
+  if (cell.unit?.trim().toLowerCase() !== 'w') return v
+  // W → kW. 0.011 처럼 부동소수 잔재가 남지 않도록 정수 연산 후 되돌린다.
+  return String(Math.round(Number(v) * 1e6) / 1e9)
 }

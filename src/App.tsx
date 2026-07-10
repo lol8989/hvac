@@ -4,7 +4,9 @@ import { canManageEquipment } from './domain/auth/Permission'
 import type { ModelCard, Room } from './data'
 import ReportStrip from './components/ReportStrip'
 import Viewer, { LAYER_OPTIONS, type LayerFilter, type ViewerHandle, type TileManifest } from './components/Viewer'
-import { buildScheduleRows, toCsv } from './presentation/generation/schedule'
+import { buildScheduleSheets } from './presentation/generation/scheduleTable'
+import { downloadScheduleXlsx } from './presentation/generation/scheduleXlsx'
+import { EMPTY_SPEC_REPOSITORY, type EquipmentSpecRepository } from './application/equipment/specPorts'
 import { buildDrawingSvg } from './presentation/generation/drawingSvg'
 import { downloadText, CSV_BOM } from './presentation/download'
 import ModelPanel from './components/ModelPanel'
@@ -35,6 +37,8 @@ import type { EquipmentMaster } from './domain/equipment/EquipmentMaster'
 import { buildSelectionTable } from './domain/generation/SelectionTable'
 import { buildSelectionCsv } from './presentation/generation/selectionCsv'
 import { SELECTION_CHANNEL } from './presentation/generation/selectionSync'
+import { SCHEDULE_CHANNEL } from './presentation/generation/scheduleSync'
+import type { ScheduleMsg } from './presentation/generation/scheduleSync'
 import type { SelectionMsg, SelectionSnapshotMsg } from './presentation/generation/selectionSync'
 
 // 우측 패널 상태 복원 헬퍼(폭은 ModelPanel의 260~560 범위로 클램프).
@@ -46,7 +50,11 @@ function loadPanelW(): number {
   return Number.isFinite(v) && v > 0 ? Math.max(260, Math.min(560, v)) : 322
 }
 
-export default function App({ master = defaultEquipmentMaster }: { master?: EquipmentMaster } = {}) {
+export default function App({
+  master = defaultEquipmentMaster,
+  // 롱테일 스펙(일람표 컬럼). SQLite가 없으면 빈 저장소 → 일람표 셀이 '-'로 남는다.
+  specRepository = EMPTY_SPEC_REPOSITORY,
+}: { master?: EquipmentMaster; specRepository?: EquipmentSpecRepository } = {}) {
   // 컴포지션 루트: 장비마스터(SSOT)를 주입받고, 실내기·실외기 카탈로그가 이를 참조(PUBLISHED만)한다.
   // 프로덕션은 main.tsx가 SQLite 백엔드 마스터를 주입, 미주입 시 인메모리 기본(테스트·폴백).
   // 배정 상태는 도메인 AssignmentPlan이 소유하고, 리포지토리 포트로 유즈케이스가 로드/저장한다.
@@ -437,6 +445,24 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
     outdoorSpecs: catalog.list().map((s) => ({ model: s.model, coolKw: s.capacityKw, heatKw: s.heatKw, hp: s.hp, comboRange: s.comboRange })),
   })
 
+  // 장비일람표 시트(계열별) — 다운로드와 '새 창' 미리보기가 같은 값을 본다.
+  //
+  // specsOf()는 SQLite 쿼리다. memo를 벗기면 렌더마다 1,206모델 테이블을 훑는다.
+  // React Compiler가 이 memo를 보존하지 못한다고 경고하지만, 쿼리 비용이 훨씬 크다.
+  /* eslint-disable react-hooks/preserve-manual-memoization */
+  const scheduleSheets = useMemo(() => {
+    const bom = selectionTable.bom
+    const models = [...bom.indoor.map((b) => b.model), ...bom.outdoor.map((b) => b.model)]
+    return buildScheduleSheets({
+      indoorBom: bom.indoor,
+      outdoorBom: bom.outdoor,
+      indoorModels,
+      outdoorSpecs: catalog.list(),
+      specs: specRepository.specsOf(models),
+    })
+  }, [selectionTable, indoorModels, catalog, specRepository])
+  /* eslint-enable react-hooks/preserve-manual-memoization */
+
   // ── 장비선정표 '새 창' 동기화 (도면을 가리지 않도록 별도 창에서 확인·조정) ──
   // 최신 스냅샷·핸들러를 ref로 유지해 채널 콜백의 stale closure를 방지한다.
   const selectionSnapshot: SelectionSnapshotMsg = {
@@ -471,17 +497,41 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
   // 상태가 바뀔 때마다 새 창에 스냅샷 재방송(편집 결과 즉시 반영).
   useEffect(() => { bcRef.current?.postMessage(snapshotRef.current) }, [domainRooms, placements, plan])
 
+  // ── 장비일람표 '새 창' 동기화 (읽기 전용 — 편집 커맨드가 없다) ──
+  // hello 응답이 최신 시트를 보도록 ref로 들고 있는다(채널은 한 번만 연다).
+  const sheetsRef = useRef(scheduleSheets)
+  const schedBcRef = useRef<BroadcastChannel | null>(null)
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return
+    const bc = new BroadcastChannel(SCHEDULE_CHANNEL)
+    schedBcRef.current = bc
+    bc.onmessage = (e: MessageEvent<ScheduleMsg>) => {
+      if (e.data?.type === 'hello') bc.postMessage({ type: 'sheets', sheets: sheetsRef.current } satisfies ScheduleMsg)
+    }
+    return () => { bc.close(); schedBcRef.current = null }
+  }, [])
+  useEffect(() => {
+    sheetsRef.current = scheduleSheets
+    schedBcRef.current?.postMessage({ type: 'sheets', sheets: scheduleSheets } satisfies ScheduleMsg)
+  }, [scheduleSheets])
+
   // 선정표 새 창 열기 — 이름 있는 창이라 반복 클릭 시 같은 창을 재사용한다.
   const openSelectionWindow = () => {
     window.open(`${window.location.pathname}?view=selection`, 'poc-selection-window', 'width=1480,height=860')
   }
 
-  // 산출물 다운로드(목업 데이터 기반 생성): 장비일람표 CSV(Excel 호환) · 독립 SVG 도면 · 현재 화면 캡처.
+  // 일람표 새 창 열기 — 컬럼이 24~31개라 도면 화면 안에서는 볼 수 없다.
+  const openScheduleWindow = () => {
+    window.open(`${window.location.pathname}?view=schedule`, 'poc-schedule-window', 'width=1480,height=860')
+  }
+
+  // 장비일람표(xlsx, 계열별 시트) — 선정 BOM + 카탈로그 hot 필드 + 롱테일 스펙 조인.
   const downloadSchedule = () => {
-    const rows = buildScheduleRows(groups, indoorByRoom, viewRooms, indoorCards)
-    if (!rows.length) { flash('다운로드할 결과가 없습니다 — 실내기 배치·조합을 먼저 진행하세요'); return }
-    downloadText('장비일람표.csv', CSV_BOM + toCsv(rows), 'text/csv;charset=utf-8')
-    flash(`장비일람표.csv를 생성했습니다 (${rows.length}행)`)
+    if (!scheduleSheets.length) { flash('다운로드할 결과가 없습니다 — 실내기 배치·조합을 먼저 진행하세요'); return }
+    void downloadScheduleXlsx(scheduleSheets).then(() => {
+      const rows = scheduleSheets.reduce((n, s) => n + s.rows.length, 0)
+      flash(`장비일람표.xlsx를 생성했습니다 (시트 ${scheduleSheets.length} · ${rows}행)`)
+    })
   }
   // 장비선정표(행=실, 층합계·BOM 포함) — 표준 260415 엑셀 양식의 CSV 직렬화.
   const downloadSelection = () => {
@@ -568,9 +618,11 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
             {step === 'combine' && <button className="btn sm" onClick={() => setMapOpen(true)}>실외기 조합 매핑</button>}
             {/* 선정표는 스텝이 아니라 새 창 — 도면을 가리지 않고 확인·조정(실시간 연동). */}
             {step === 'combine' && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
+            {step === 'combine' && <button className="btn sm" onClick={openScheduleWindow}>⧉ 일람표 확인</button>}
             {/* 미배정이 남아도 클릭은 받되, doCombineNext가 이유를 토스트로 안내(무반응 방지). */}
             {step === 'combine' && <button className="btn sm primary" onClick={doCombineNext}>산출물로 →</button>}
             {step === 'output' && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
+            {step === 'output' && <button className="btn sm" onClick={openScheduleWindow}>⧉ 일람표 확인</button>}
             {step === 'output' && <button className="btn sm primary" onClick={doGenerate}>{generated ? '재생성' : '장비선정표·도면 생성'}</button>}
           </>
         }
@@ -586,7 +638,7 @@ export default function App({ master = defaultEquipmentMaster }: { master?: Equi
           {generated && (
             <>
               <button className="btn" onClick={downloadSelection}>⭳ 장비선정표.csv</button>
-              <button className="btn" onClick={downloadSchedule}>⭳ 장비일람표.csv</button>
+              <button className="btn" onClick={downloadSchedule}>⭳ 장비일람표.xlsx</button>
               <button className="btn" onClick={downloadDrawing}>⭳ 도면.svg</button>
             </>
           )}
