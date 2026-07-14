@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+﻿/** @vitest-environment jsdom */
 // 조합 리포트 초기 상태 회귀 (NEXT #2·#3):
 //  - 검출 전 초기 상태는 부하·배정·미배정이 모두 0/빈이어야 한다(사전배정 시드 제거).
 //  - 배정은 파이프라인 진행(검출→배치→조합)의 결과로만 생겨야 한다.
@@ -36,7 +36,7 @@ describe('App — 조합 리포트 초기 상태 (NEXT #2·#3)', () => {
     expect(reportText(container)).toContain('미배정 0')
 
     // 배치: 실내기 설치 → 전 실이 미배정 풀로 편입(미배정 6).
-    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
     fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
     expect(reportText(container)).toContain('미배정 6')
     expect(reportText(container)).toContain('실내기 배정 0/6')
@@ -44,7 +44,7 @@ describe('App — 조합 리포트 초기 상태 (NEXT #2·#3)', () => {
     // 실외기 단계 진입 시 선정 알고리즘이 돈다 → 전 실 배정(미배정 0).
     // 정격 37.6kW EHP → 46.4kW 절환형 1대(조합비 0.81). 냉방전용 39.2kW는 난방 요구로 배제된다.
     // 실외기 대수·모델은 상수가 아니라 이 계산의 결과다.
-    fireEvent.click(screen.getByRole('button', { name: '실외기 선정 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
     expect(reportText(container)).toContain('실내기 배정 6/6')
     expect(reportText(container)).toContain('미배정 0')
     expect(reportText(container)).toContain('실외기 1대')
@@ -60,9 +60,9 @@ describe('App — 조합 리포트 초기 상태 (NEXT #2·#3)', () => {
       const { container, unmount } = render(<App />)
       fireEvent.change(screen.getByLabelText('시설군'), { target: { value: facility } })
       fireEvent.click(screen.getByRole('button', { name: '✦ 실 검출 실행' }))
-      fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+      fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
       fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
-      fireEvent.click(screen.getByRole('button', { name: '실외기 선정 →' }))
+      fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
       const t = reportText(container)
       unmount()
       const load = /총 부하 ([\d.]+) kW/.exec(t)![1]

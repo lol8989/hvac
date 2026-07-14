@@ -195,8 +195,14 @@ button{font-family:inherit;cursor:pointer;}
 .vw-row kbd{display:inline-block;vertical-align:middle;background:#F5F5F5;border:1px solid #CCC;border-bottom-width:2px;border-radius:4px;padding:0 5px;margin:0 1px;font-size:10px;font-family:inherit;font-weight:600;color:#333;text-align:center;white-space:nowrap;}
 .zoom-pct{font-size:10px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums;}
 
-/* 하단 중앙 Figma식 도구바 (무채색) */
-.figbar{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:30;background:#262626;border-radius:12px;padding:5px;box-shadow:0 8px 24px rgba(0,0,0,0.30);}
+/* 하단 중앙 도크 — 편집 히스토리 pill + Figma식 도구바 (무채색) */
+.figdock{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:30;display:flex;align-items:center;gap:8px;}
+.figbar{position:relative;background:#262626;border-radius:12px;padding:5px;box-shadow:0 8px 24px rgba(0,0,0,0.30);}
+/* 되돌리기/다시 실행 — 도구바와 붙이지 않고 떼어 둔다(도구 선택이 아니라 편집 히스토리다) */
+.fighist{display:flex;align-items:center;gap:2px;background:#262626;border-radius:12px;padding:5px;box-shadow:0 8px 24px rgba(0,0,0,0.30);}
+.fighist-btn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-radius:9px;color:#fff;font-size:16px;line-height:1;cursor:pointer;font-family:inherit;}
+.fighist-btn:hover:not(:disabled){background:rgba(255,255,255,0.10);}
+.fighist-btn:disabled{color:#6b6b6b;cursor:default;}
 .figtool{display:flex;align-items:center;gap:8px;background:transparent;border:none;color:#fff;border-radius:9px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;}
 .figtool:hover{background:rgba(255,255,255,0.10);}
 .figtool-chev{font-size:9px;opacity:.8;margin-left:2px;}

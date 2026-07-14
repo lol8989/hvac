@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+﻿/** @vitest-environment jsdom */
 // 되돌리기/다시하기 — 편집(실·형상·배치·조합)을 원자적으로 되돌린다.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -69,7 +69,7 @@ describe('App — 되돌리기/다시하기', () => {
   it('AI 실내기 배치를 되돌리면 심볼과 대수가 함께 사라진다', () => {
     const { container } = render(<App />)
     detect()
-    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
     fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
     expect(container.querySelectorAll('[data-unit-id]').length).toBeGreaterThan(0)
     expect(statusText(container)).toContain('미배정 6')
@@ -93,7 +93,7 @@ describe('App — 되돌리기/다시하기', () => {
   it('되돌리기 한 번이 사용자의 편집 한 건을 되돌린다(파생 동기화를 세지 않는다)', () => {
     const { container } = render(<App />)
     detect()
-    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
     fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
 
     undo() // AI 배치만 되돌린다

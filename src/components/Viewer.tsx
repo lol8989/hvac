@@ -108,6 +108,18 @@ interface ViewerProps {
   onRoomsMerge?: (aId: string, bId: string) => void
   isAdjacent?: (aId: string, bId: string) => boolean // 인접 판정은 도메인이 한다(뷰어는 물어본다)
   onMergeUnavailable?: () => void
+  // 편집 히스토리 — 되돌리기 대상은 대부분 도면 편집이라 컨트롤도 캔버스에 둔다.
+  // 히스토리 자체(스택)는 App이 갖는다. 뷰어는 상태를 표시하고 클릭을 전달할 뿐이다.
+  history?: HistoryControl
+}
+
+export interface HistoryControl {
+  canUndo: boolean
+  canRedo: boolean
+  undoLabel?: string | null // 되돌릴 편집 이름(툴팁) — 없으면 되돌릴 것이 없다
+  redoLabel?: string | null
+  onUndo: () => void
+  onRedo: () => void
 }
 
 // App 버튼에서 호출하는 명령형 핸들.
@@ -130,6 +142,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     canAddUnit = true, canPlaceOutdoors = false,
     canSliceRooms = false, onRoomSlice, onSliceUnavailable, onZoneResize,
     canMergeRooms = false, onRoomsMerge, isAdjacent, onMergeUnavailable,
+    history,
   }: ViewerProps,
   ref,
 ) {
@@ -899,14 +912,33 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         </div>
       )}
 
-      {/* 하단 중앙 Figma식 도구바 */}
-      <div className="figbar">
-        <button className="figtool" onClick={() => setToolMenuOpen((o) => !o)} title="도구 선택">
-          <span className="figtool-name">{modeLabel}</span>
-          <span className="figtool-chev">▾</span>
-        </button>
-        {toolMenuOpen && (
-          <div className="figmenu">
+      {/* 하단 중앙 도크 — 편집 히스토리(좌) + Figma식 도구바(우) */}
+      <div className="figdock">
+        {history && (
+          <div className="fighist">
+            <button
+              className="fighist-btn"
+              disabled={!history.canUndo}
+              onClick={history.onUndo}
+              title={history.undoLabel ? `${history.undoLabel} 되돌리기 (Ctrl+Z)` : '되돌릴 편집이 없습니다'}
+              aria-label="되돌리기"
+            >↶</button>
+            <button
+              className="fighist-btn"
+              disabled={!history.canRedo}
+              onClick={history.onRedo}
+              title={history.redoLabel ? `${history.redoLabel} 다시 실행 (Ctrl+Shift+Z)` : '다시 실행할 편집이 없습니다'}
+              aria-label="다시 실행"
+            >↷</button>
+          </div>
+        )}
+        <div className="figbar">
+          <button className="figtool" onClick={() => setToolMenuOpen((o) => !o)} title="도구 선택">
+            <span className="figtool-name">{modeLabel}</span>
+            <span className="figtool-chev">▾</span>
+          </button>
+          {toolMenuOpen && (
+            <div className="figmenu">
             <button className={`figitem${isCassette ? ' active' : ''}`} onClick={() => { setMode('cassette'); setToolMenuOpen(false) }}>
               <span className="tt"><b>에어컨 (실내기)</b><span>선택 · 이동 · 회전 · 삭제</span></span><span className="kk">C</span>
             </button>
@@ -925,8 +957,9 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
             <button className={`figitem${mode === 'pan' ? ' active' : ''}`} onClick={() => { setMode('pan'); setToolMenuOpen(false) }}>
               <span className="tt"><b>손 (이동)</b><span>드래그로 화면 이동</span></span><span className="kk">H</span>
             </button>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
       {toolMenuOpen && <div className="figmenu-overlay" onClick={() => setToolMenuOpen(false)} />}
 

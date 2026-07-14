@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+﻿/** @vitest-environment jsdom */
 // 실 자르기(V) 통합 — 뷰어 클릭 한 번이 도메인·배치·선정표를 원자적으로 갈아끼운다.
 //
 // 자를 때 반드시 함께 움직여야 하는 것들:
@@ -73,7 +73,7 @@ describe('App — 실 자르기', () => {
   it('검출 단계가 아니면 V는 안내만 하고 모드로 들어가지 않는다', () => {
     render(<App />)
     detect()
-    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' })) // place 단계
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' })) // place 단계
     enterSlice()
 
     expect(screen.getByText(/실 검출 단계에서만/)).toBeInTheDocument()
@@ -83,7 +83,7 @@ describe('App — 실 자르기', () => {
   it('실내기가 배치된 실을 자르면 심볼이 위치대로 나뉘고 유령 심볼이 남지 않는다', () => {
     const { container } = render(<App />)
     detect()
-    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
     fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
 
     // 침실1(AC_002, 292,24 ~ 472,134)에는 2대가 좌우로 놓인다(337,79)·(427,79).
@@ -137,7 +137,7 @@ describe('App — 실 자르기', () => {
     enterSlice()
     expect(container.querySelector('.slicehud')).not.toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' })) // place 단계
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' })) // place 단계
     expect(container.querySelector('.slicehud')).toBeNull() // 모드가 풀린다
 
     clickPlan(container, 149, 99)

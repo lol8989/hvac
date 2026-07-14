@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+﻿/** @vitest-environment jsdom */
 // App 스모크: 5단계 파이프라인 진행 + 장비선정표 '새 창' 열기·동기화 회귀 확인.
 // (선정표는 스텝이 아니라 새 창 — 도면을 가리지 않고 확인·조정, BroadcastChannel 연동)
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -25,19 +25,19 @@ afterEach(() => vi.unstubAllGlobals())
 // 순서 근거: 실내기를 다 배치해야 정격이 확정되고, 그래야 실외기를 고를 수 있다.
 const progressToPlace = () => {
   fireEvent.click(screen.getByRole('button', { name: '✦ 실 검출 실행' }))
-  fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+  fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
 }
 const progressToCombine = () => {
   progressToPlace()
   fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
-  fireEvent.click(screen.getByRole('button', { name: '실외기 선정 →' }))
+  fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
 }
 
 // 조합 → 실외기 배치(도면에 심벌) → 산출물.
 const progressToOutput = () => {
-  fireEvent.click(screen.getByRole('button', { name: '실외기 배치 →' }))
+  fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
   fireEvent.click(screen.getByRole('button', { name: '＋ 실외기 배치' }))
-  fireEvent.click(screen.getByRole('button', { name: '산출물로 →' }))
+  fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
 }
 
 describe('App — 실 검출 단계', () => {
@@ -52,7 +52,7 @@ describe('App — 실 검출 단계', () => {
     expect(panel.getByText(/6곳/)).toBeInTheDocument() // 목업 6실이 패널에 뜬다
     expect(panel.getAllByText(/거실/).length).toBeGreaterThan(0)
     // 다음 단계로는 사용자가 CTA로 넘어간다.
-    expect(screen.getByRole('button', { name: '실내기 배치 →' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '다음 단계 →' })).toBeInTheDocument()
   })
 
   it('검출 전에는 빈 상태를 안내한다', () => {
@@ -62,7 +62,7 @@ describe('App — 실 검출 단계', () => {
 
   it('검출하지 않고 실내기 배치로 가려 하면 차단한다', () => {
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
 
     const dialog = screen.getByRole('alertdialog', { name: '진행할 수 없습니다' })
     expect(within(dialog).getByText(/검출된 실이 없습니다/)).toBeInTheDocument()
@@ -73,7 +73,7 @@ describe('App — 스텝 가드', () => {
   it('실내기를 배치하지 않고 실외기 선정으로 가려 하면 차단 팝업이 실명을 알려준다', () => {
     render(<App />)
     progressToPlace()
-    fireEvent.click(screen.getByRole('button', { name: '실외기 선정 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
 
     const dialog = screen.getByRole('alertdialog', { name: '실내기 배치를 마쳐야 합니다' })
     expect(within(dialog).getByText(/거실/)).toBeInTheDocument() // 어느 실이 비었는지
@@ -91,7 +91,7 @@ describe('App — 스텝 가드', () => {
     // 도크의 편집은 즉시 반영된다(별도 '적용' 버튼이 없다).
     fireEvent.drop(container.querySelector('.pool .pbody')!, dropPayload('AC_002', 'ODU1'))
 
-    fireEvent.click(screen.getByRole('button', { name: '실외기 배치 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
     expect(screen.getByRole('alertdialog', { name: '배정되지 않은 실이 있습니다' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '확인' }))
     // 단계는 그대로(조합 매핑 버튼이 여전히 보인다)
@@ -111,8 +111,8 @@ describe('App — 스텝 가드', () => {
   it('실외기를 도면에 안 놓고 산출물로 가려 하면 몇 대 중 몇 대인지 알려준다', () => {
     render(<App />)
     progressToCombine()
-    fireEvent.click(screen.getByRole('button', { name: '실외기 배치 →' }))
-    fireEvent.click(screen.getByRole('button', { name: '산출물로 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
 
     expect(screen.getByRole('alertdialog', { name: '실외기를 도면에 배치해야 합니다' })).toBeInTheDocument()
     expect(screen.getByText(/1대 중 0대/)).toBeInTheDocument()

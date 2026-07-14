@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+﻿/** @vitest-environment jsdom */
 // 실 병합(M) 통합 — 붙어 있는 두 실을 하나로. 자르기의 역연산이다.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -76,7 +76,7 @@ describe('App — 실 병합', () => {
   it('실내기가 배치된 두 실을 합치면 심볼이 모두 살아남고 대수가 합쳐진다', () => {
     const { container } = render(<App />)
     detect()
-    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
     fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
 
     const before = container.querySelectorAll('[data-unit-id]').length
@@ -134,7 +134,7 @@ describe('App — 실 병합', () => {
   it('검출 단계가 아니면 M은 안내만 한다', () => {
     render(<App />)
     detect()
-    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
     enterMerge()
     expect(screen.getByText(/실 검출 단계에서만/)).toBeInTheDocument()
   })

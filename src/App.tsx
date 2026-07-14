@@ -23,7 +23,7 @@ import DetectPanel from './components/generation/panels/DetectPanel'
 import OutdoorPanel from './components/generation/panels/OutdoorPanel'
 import OutputPanel from './components/generation/panels/OutputPanel'
 import type { FacilityType } from './domain/shared/unitLoadTable'
-import { prevStep, isFirstStep } from './presentation/generation/steps'
+import { prevStep, nextStep, isFirstStep, isLastStep, stepDef } from './presentation/generation/steps'
 import { guardAdvance, guardRegress, guardDestructive } from './domain/generation/StepGuard'
 import type { StepId, GuardContext, GuardVerdict } from './domain/generation/StepGuard'
 import { InMemoryPlanRepository } from './infrastructure/generation/InMemoryPlanRepository'
@@ -810,7 +810,7 @@ export default function App({
 
   // 검출: 도면에서 실을 찾아 도메인 Room으로 채운다. 이미 배치가 있으면 초기화 확인을 받는다.
   // 검출 단계에 머문다 — 검출 결과(실 목록·부하)를 확인하는 것이 이 단계의 일이다.
-  // 다음 단계로는 '실내기 배치 →' CTA로 넘어간다(가드가 전제를 검사한다).
+  // 다음 단계로는 '다음 단계 →' CTA로 넘어간다(가드가 전제를 검사한다).
   const detectRooms = () => {
     const detected = Object.fromEntries(
       Object.entries(ROOMS).map(([id, r]) => [
@@ -1105,38 +1105,30 @@ export default function App({
         actions={
           <>
             <button className="btn sm" disabled={isFirstStep(step)} onClick={() => regress(prevStep(step))}>← 이전</button>
-            {/* 되돌리기/다시하기 — 편집(실·형상·배치·조합)만 되돌린다 */}
-            <button
-              className="btn sm"
-              disabled={!undoable.canUndo}
-              onClick={doUndo}
-              title={undoable.undoLabel ? `${undoable.undoLabel} 되돌리기 (Ctrl+Z)` : '되돌릴 편집이 없습니다'}
-              aria-label="되돌리기"
-            >↶</button>
-            <button
-              className="btn sm"
-              disabled={!undoable.canRedo}
-              onClick={doRedo}
-              title={undoable.redoLabel ? `${undoable.redoLabel} 다시 실행 (Ctrl+Shift+Z)` : '다시 실행할 편집이 없습니다'}
-              aria-label="다시 실행"
-            >↷</button>
+            {/* 되돌리기/다시하기(↶↷)는 캔버스 하단 도크에 있다 — 되돌리는 대상이 도면 편집이라 손이 거기 있다.
+                상단 바에는 스텝 진행 CTA만 남긴다(성격이 다른 버튼을 한 줄에 섞지 않는다). */}
             {/* 시설군은 단위부하의 전제다. 검출 후 바꾸면 부하가 통째로 다시 계산된다 → 확인을 받는다. */}
             {step === 'detect' && <ProjectSettings facility={facility} onChange={changeFacility} />}
             {step === 'detect' && <button className="btn sm" onClick={doDetect}>✦ 실 검출 실행</button>}
-            {step === 'detect' && <button className="btn sm primary" onClick={() => advance('place')}>실내기 배치 →</button>}
             {step === 'place' && <button className="btn sm primary" onClick={doPlace}>{placed ? '재배치' : '✦ AI 실내기 배치'}</button>}
-            {/* 전제 미충족이어도 버튼은 살아 있다 — 클릭하면 가드가 이유를 말한다. */}
-            {step === 'place' && <button className="btn sm primary" onClick={() => advance('combine')}>실외기 선정 →</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => runOutdoorSelection()}>✦ 실외기 재선정</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => setMapOpen(true)}>실외기 조합 매핑</button>}
             {/* 선정표는 스텝이 아니라 새 창 — 도면을 가리지 않고 확인·조정(실시간 연동). */}
             {step === 'combine' && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
             {step === 'combine' && <button className="btn sm" onClick={openScheduleWindow}>⧉ 일람표 확인</button>}
-            {step === 'combine' && <button className="btn sm primary" onClick={() => advance('outdoor')}>실외기 배치 →</button>}
-            {step === 'outdoor' && <button className="btn sm primary" onClick={() => advance('output')}>산출물로 →</button>}
             {step === 'output' && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
             {step === 'output' && <button className="btn sm" onClick={openScheduleWindow}>⧉ 일람표 확인</button>}
             {step === 'output' && <button className="btn sm primary" onClick={doGenerate}>{generated ? '재생성' : '장비선정표·도면 생성'}</button>}
+            {/* 이동 버튼은 '다음 단계 →' 하나뿐이다. 목적지 이름을 라벨에 쓰면(예: '실내기 배치 →')
+                같은 단계의 실행 버튼('✦ AI 실내기 배치')과 글자가 겹쳐, 누르면 배치가 실행된다고 오해한다.
+                목적지는 툴팁으로 알린다. 전제 미충족이어도 버튼은 살아 있다 — 누르면 가드가 이유를 말한다. */}
+            {!isLastStep(step) && (
+              <button
+                className="btn sm primary"
+                onClick={() => advance(nextStep(step))}
+                title={`${stepDef(nextStep(step)).label} 단계로 이동`}
+              >다음 단계 →</button>
+            )}
             <OverflowMenu items={[{ label: '◉ 현재 화면 캡처', onClick: captureView }]} />
           </>
         }
@@ -1156,6 +1148,14 @@ export default function App({
             selectedIds={selRooms}
             onSelectionChange={setSelRooms}
             onEscape={() => setMapOpen(false)}
+            history={{
+              canUndo: undoable.canUndo,
+              canRedo: undoable.canRedo,
+              undoLabel: undoable.undoLabel,
+              redoLabel: undoable.redoLabel,
+              onUndo: doUndo,
+              onRedo: doRedo,
+            }}
             indoorSymbols={indoorSymbols}
             onUnitsMove={moveUnits}
             onUnitsRotate={rotateUnits}
