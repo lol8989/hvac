@@ -58,9 +58,11 @@ export default function SelectionRowView({
       </td>
       <td>
         <EditCell value={String(unitLoad.heatKcal)} onCommit={(v) => commitUnitLoad(unitLoad.coolKcal, num(v))} />
-        {unitLoad.overridden
-          ? <><span className="badge manual">수정</span><button className="reset" title="AI 기본값으로 초기화" onClick={() => onResetUnitLoad(row.roomId)}>↺</button></>
-          : <span className="badge ai">AI</span>}
+        {/* AI 뱃지는 표시하지 않는다 — 기본값이 AI라는 사실은 모든 행에 붙어 정보가 없다.
+            사람이 손댄 셀(수정)만 눈에 띄어야 한다. */}
+        {unitLoad.overridden && (
+          <><span className="badge manual">수정</span><button className="reset" title="AI 기본값으로 초기화" onClick={() => onResetUnitLoad(row.roomId)}>↺</button></>
+        )}
       </td>
       <td>{w(requiredW.cool)}</td>
       <td>{w(requiredW.heat)}</td>
@@ -81,9 +83,9 @@ export default function SelectionRowView({
         {indoor ? (
           <>
             <EditCell value={String(indoor.quantity)} onCommit={(v) => { const q = qty(v); if (q !== null) onOverrideIndoor(row.roomId, indoor.code, q) }} />
-            {indoor.overridden
-              ? <><span className="badge manual">수정</span><button className="reset" title="AI 추천으로 초기화" onClick={() => onResetIndoor(row.roomId)}>↺</button></>
-              : <span className="badge ai">AI</span>}
+            {indoor.overridden && (
+              <><span className="badge manual">수정</span><button className="reset" title="AI 추천으로 초기화" onClick={() => onResetIndoor(row.roomId)}>↺</button></>
+            )}
           </>
         ) : ''}
       </td>

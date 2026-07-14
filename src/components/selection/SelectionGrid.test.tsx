@@ -50,15 +50,15 @@ const renderGrid = (over: Partial<typeof noop> = {}) =>
   )
 
 describe('SelectionGrid', () => {
-  it('층 섹션·합계 행·조합비·AI/수정 뱃지를 표시한다', () => {
+  it('층 섹션·합계 행·조합비·수정 뱃지를 표시한다', () => {
     renderGrid()
     expect(screen.getByText('지하1층')).toBeInTheDocument()
     expect(screen.getAllByText(/합계/).length).toBeGreaterThan(0) // 층 합계 행(+BOM 합계)
     // 조합비 = (12000+4000) / 23300 = 68.7% — 실무는 퍼센트로 말한다(그룹 소계 행에 표기)
     expect(screen.getByText('68.7%')).toBeInTheDocument()
-    // R1은 AI 선정, R2는 수동 오버라이드(대수 2)
-    expect(screen.getAllByText('AI').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('수정').length).toBe(1)
+    // 사람이 손댄 셀(수정)만 표시한다 — 'AI'는 거의 모든 행에 붙어 정보가 없다(주인님 지시 2026-07-14)
+    expect(screen.queryByText('AI')).toBeNull()
+    expect(screen.getAllByText('수정').length).toBe(1) // R2만 수동 오버라이드(대수 2)
   })
 
   // 같은 실외기에 엮인 실이 한눈에 묶여 보여야 한다(주인님 지시).

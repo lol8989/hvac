@@ -21,7 +21,6 @@
 .selgrid select.cell{width:100%;border:1px solid transparent;background:transparent;font:inherit;padding:1px 0;}
 .selgrid select.cell:hover,.selgrid select.cell:focus{border-color:#CCCCCC;}
 .selgrid .badge{display:inline-block;font-size:9.5px;line-height:1;padding:2px 4px;border-radius:2px;margin-left:4px;vertical-align:1px;}
-.selgrid .badge.ai{background:#E8E8E8;color:#333;}
 .selgrid .badge.manual{background:#333333;color:#fff;}
 .selgrid .badge.warn{background:#555555;color:#fff;}
 .selgrid button.reset{border:none;background:transparent;color:#999;cursor:pointer;font-size:11px;padding:0 2px;}
