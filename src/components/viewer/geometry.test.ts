@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { pointInZone, zoneOfPoint, roomIdsForUnits, zoneAreaM2 } from './geometry'
+import { pointInZone, zoneOfPoint, roomIdsForUnits, zoneAreaM2, zoneHitsRect, isRectZone, zoneBounds, rectPoints } from './geometry'
 import type { ZoneBox, UnitSym } from './geometry'
 
-const z = (id: string, x: number, y: number, w: number, h: number): ZoneBox => ({ id, name: id, x, y, w, h })
+const z = (id: string, x: number, y: number, w: number, h: number): ZoneBox => ({ id, name: id, points: rectPoints(x, y, w, h) })
 // 실내기 심볼 1개 = 실내기 1대. roomId가 소속 실이고, id는 `${roomId}#${n}`.
 const u = (roomId: string, x: number, y: number, n = 1): UnitSym => ({ id: `${roomId}#${n}`, roomId, x, y, rot: 0 })
 
@@ -10,6 +10,9 @@ const ZONES: ZoneBox[] = [
   z('AC_001', 0, 0, 100, 100),
   z('AC_002', 100, 0, 100, 100),
 ]
+
+// V(자르기)로 생긴 실 — 사각형이 아니다.
+const TRI: ZoneBox = { id: 'AC_003', name: 'AC_003', points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 0, y: 100 }] }
 
 describe('pointInZone', () => {
   it('내부 점은 true', () => {
@@ -22,6 +25,10 @@ describe('pointInZone', () => {
   it('외부 점은 false', () => {
     expect(pointInZone(150, 50, ZONES[0])).toBe(false)
     expect(pointInZone(-1, 50, ZONES[0])).toBe(false)
+  })
+  it('사선으로 잘린 실은 빗변 바깥을 제외한다(bbox가 아니다)', () => {
+    expect(pointInZone(10, 10, TRI)).toBe(true)
+    expect(pointInZone(90, 90, TRI)).toBe(false) // bbox 안이지만 실 밖
   })
 })
 
@@ -59,15 +66,41 @@ describe('roomIdsForUnits (선택 심볼 → 담당 실 id, 위치 우선)', () 
   })
 })
 
-describe('zoneAreaM2 (존 면적 ㎡ 계산)', () => {
-  it('mmPerUnit이 있으면 사각형 기하로 면적을 계산한다 (리사이즈 반영)', () => {
-    // 1단위 = 100mm → 50×40단위 = 5m×4m = 20㎡
-    expect(zoneAreaM2({ w: 50, h: 40 }, 100)).toBeCloseTo(20)
+// 면적은 도메인이 말하는 값이다 — 뷰어가 기하에서 따로 계산하면 화면과 산출물이 갈라진다.
+// (예전엔 mmPerUnit으로 폴리곤 넓이를 환산했는데, 목업 폴리곤은 DXF 실좌표가 아니라
+//  도면 라벨이 622㎡, 선정표가 31.9㎡를 말했다 — 적대적 QA 2026-07-14)
+describe('zoneAreaM2 (존 면적 ㎡)', () => {
+  it('도메인 실 면적을 그대로 돌려준다', () => {
+    expect(zoneAreaM2(31.89)).toBe(31.89)
   })
-  it('mmPerUnit이 없으면(목업 좌표계) 설계 면적 폴백을 반환한다', () => {
-    expect(zoneAreaM2({ w: 250, h: 150 }, undefined, 31.89)).toBe(31.89)
+  it('실 면적을 모르면 null(라벨을 그리지 않는다)', () => {
+    expect(zoneAreaM2(undefined)).toBeNull()
   })
-  it('mmPerUnit도 폴백도 없으면 null을 반환한다', () => {
-    expect(zoneAreaM2({ w: 250, h: 150 })).toBeNull()
+})
+
+describe('zoneHitsRect (마퀴 교차)', () => {
+  it('마퀴가 존을 덮으면 true', () => {
+    expect(zoneHitsRect({ x: -10, y: -10, w: 500, h: 500 }, ZONES[0])).toBe(true)
+  })
+  it('마퀴가 존 일부만 걸쳐도 true', () => {
+    expect(zoneHitsRect({ x: 90, y: 40, w: 20, h: 20 }, ZONES[0])).toBe(true)
+  })
+  it('떨어져 있으면 false', () => {
+    expect(zoneHitsRect({ x: 300, y: 300, w: 50, h: 50 }, ZONES[0])).toBe(false)
+  })
+  it('bbox는 겹치지만 폴리곤은 안 겹치면 false', () => {
+    // 삼각형의 빗변 바깥(우하단 모서리) — bbox로 판정하면 잘못 걸린다
+    expect(zoneHitsRect({ x: 92, y: 92, w: 6, h: 6 }, TRI)).toBe(false)
+  })
+})
+
+describe('isRectZone / zoneBounds', () => {
+  it('축정렬 사각형은 리사이즈 가능한 실이다', () => {
+    expect(isRectZone(ZONES[0])).toBe(true)
+    expect(zoneBounds(ZONES[0])).toEqual({ x: 0, y: 0, w: 100, h: 100 })
+  })
+  it('잘린 실은 사각형이 아니다(모서리 핸들이 붙지 않는다)', () => {
+    expect(isRectZone(TRI)).toBe(false)
+    expect(zoneBounds(TRI)).toEqual({ x: 0, y: 0, w: 100, h: 100 }) // bbox는 있다
   })
 })

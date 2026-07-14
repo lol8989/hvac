@@ -3,6 +3,7 @@ import { recommendedIndoorIdx, outdoorIdxByModel, indoorCoolByModel, MODELS, ROO
 import type { ModelCard } from './data'
 import { lookupUnitLoadKcal } from './domain/shared/unitLoadTable'
 import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemoryOutdoorModelCatalog'
+import { Polygon, sharedEdgeLength } from './domain/shared/Polygon'
 
 // 부하 근사 매칭용 목업 카드(용량만 의미 있음)
 const cards: ModelCard[] = [
@@ -108,5 +109,44 @@ describe('outdoorIdxByModel (그룹 실외기 → 카드 하이라이트)', () =
 
   it('목록에 없는 모델이면 -1을 반환한다', () => {
     expect(outdoorIdxByModel('NON_EXISTENT_MODEL')).toBe(-1)
+  })
+})
+
+// 실 병합(M)의 전제: 실들이 붙어 있어야 한다.
+// 예전 목업은 실이 서로 떨어져 있어(사이에 여백) 어떤 두 실도 병합할 수 없었다.
+describe('ROOMS 배치 — 빈틈없는 인접 파티션', () => {
+  const polys = () => Object.entries(ROOMS).map(([id, r]) => ({ id, poly: Polygon.of(r.points) }))
+
+  it('모든 실은 적어도 한 실과 변을 공유한다(양의 길이)', () => {
+    const ps = polys()
+    for (const a of ps) {
+      const touching = ps.filter((b) => b.id !== a.id && sharedEdgeLength(a.poly, b.poly) > 0)
+      expect(touching.length, `${a.id}이(가) 어떤 실과도 붙어 있지 않다`).toBeGreaterThan(0)
+    }
+  })
+
+  it('거실(AC_001)과 침실1(AC_002)은 붙어 있다 — 병합 대상', () => {
+    const a = Polygon.of(ROOMS.AC_001.points)
+    const b = Polygon.of(ROOMS.AC_002.points)
+    expect(sharedEdgeLength(a, b)).toBeGreaterThan(50) // 벽 하나를 통째로 공유한다
+  })
+
+  it('실끼리 내부가 겹치지 않는다', () => {
+    const ps = polys()
+    for (const a of ps) {
+      for (const b of ps) {
+        if (a.id >= b.id) continue
+        // 한 실의 무게중심이 다른 실 안에 있으면 겹친 것이다
+        expect(b.poly.contains(a.poly.centroid)).toBe(false)
+        expect(a.poly.contains(b.poly.centroid)).toBe(false)
+      }
+    }
+  })
+
+  it('실 넓이가 실제 면적(㎡)에 비례한다(도면이 자연스럽게 보인다)', () => {
+    const ratios = Object.values(ROOMS).map((r) => Polygon.of(r.points).area / r.area)
+    const min = Math.min(...ratios)
+    const max = Math.max(...ratios)
+    expect(max / min).toBeLessThan(1.05) // 축척이 실마다 5% 이내로 일치
   })
 })

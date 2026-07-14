@@ -1,5 +1,8 @@
-// 실(존) 사각형 — 프레젠테이션 전용(무채색). editing 시 모서리 리사이즈 핸들 표시.
+// 실(존) 폴리곤 — 프레젠테이션 전용(무채색). editing 시 모서리 리사이즈 핸들 표시.
+// 리사이즈 핸들은 축정렬 사각형 실에만 붙는다. 잘린 실(사선·삼각형)에는 '반대편 고정 모서리'라는
+// 개념이 없다 — 정점 편집은 백로그(실_슬라이싱_설계_v1 §8).
 import type { ZoneBox, Corner } from './geometry'
+import { zoneBounds, isRectZone, zoneCentroid } from './geometry'
 
 interface ZoneRectProps {
   z: ZoneBox
@@ -13,29 +16,32 @@ interface ZoneRectProps {
 const HS = 9 // 핸들 크기
 
 export default function ZoneRect({ z, editing, selected, areaText, onDown, onCornerDown }: ZoneRectProps) {
-  const corners: [Corner, number, number, string][] = editing
+  const b = zoneBounds(z)
+  const corners: [Corner, number, number, string][] = editing && isRectZone(z)
     ? [
-        ['tl', z.x, z.y, 'nwse-resize'],
-        ['tr', z.x + z.w, z.y, 'nesw-resize'],
-        ['bl', z.x, z.y + z.h, 'nesw-resize'],
-        ['br', z.x + z.w, z.y + z.h, 'nwse-resize'],
+        ['tl', b.x, b.y, 'nwse-resize'],
+        ['tr', b.x + b.w, b.y, 'nesw-resize'],
+        ['bl', b.x, b.y + b.h, 'nesw-resize'],
+        ['br', b.x + b.w, b.y + b.h, 'nwse-resize'],
       ]
     : []
+  // 라벨은 무게중심에 둔다 — 잘린 실에서 bbox 좌상단은 실 밖으로 나간다.
+  const c = zoneCentroid(z)
   return (
     <g>
       <g onMouseDown={(e) => onDown(e, z.id)} style={{ cursor: 'pointer' }}>
-        <rect
-          x={z.x} y={z.y} width={z.w} height={z.h}
+        <polygon
+          points={z.points.map((p) => `${p.x},${p.y}`).join(' ')}
           fill={selected ? '#EDEDED' : '#FCFCFC'}
           fillOpacity={selected ? 0.7 : 0.4}
           stroke={selected ? '#222222' : '#C9C9C9'}
           strokeWidth={selected ? 2 : 1.2}
         />
-        <text x={z.x + 10} y={z.y + 18} fontSize={12} fontWeight="700" fill={selected ? '#222222' : '#777777'} style={{ pointerEvents: 'none' }}>
+        <text x={c.x} y={c.y} textAnchor="middle" fontSize={12} fontWeight="700" fill={selected ? '#222222' : '#777777'} style={{ pointerEvents: 'none' }}>
           {z.name}
         </text>
         {areaText && (
-          <text x={z.x + 10} y={z.y + 32} fontSize={10} fill={selected ? '#444444' : '#999999'} style={{ pointerEvents: 'none' }}>
+          <text x={c.x} y={c.y + 14} textAnchor="middle" fontSize={10} fill={selected ? '#444444' : '#999999'} style={{ pointerEvents: 'none' }}>
             {areaText}
           </text>
         )}

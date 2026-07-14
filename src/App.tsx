@@ -33,13 +33,19 @@ import { makeReassignRoom } from './application/generation/ReassignRoom'
 import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoorModel'
 import { makeAddGroup, makeRemoveGroup, makeSplitGroup } from './application/generation/GroupCommands'
 import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, syncPlanUnits, selectOutdoorPlan, indoorUnitsFor } from './presentation/generation/planAdapter'
-import { NotFoundError, NoCompatibleOutdoorError, UnpackableLoadError } from './domain/generation/errors'
+import { DomainError, NotFoundError, NoCompatibleOutdoorError, UnpackableLoadError } from './domain/generation/errors'
 import { Room as DomainRoom } from './domain/generation/Room'
 import { indoorUnitId, type IndoorUnit } from './domain/generation/IndoorUnit'
 import { Placement } from './domain/generation/Placement'
 import { applyAiPlacement, placementTotalsW, aiSelectionFor } from './domain/generation/recalc'
 import { layoutPositions } from './domain/generation/layoutPositions'
 import type { UnitPosition } from './domain/generation/layoutPositions'
+import { Polygon, sharedEdgeLength, NotAdjacentError } from './domain/shared/Polygon'
+import type { Pt } from './domain/shared/Polygon'
+import { sliceRoom, SliceMissedRoomError, TooThinSliceError, SliceProducesManyPiecesError } from './domain/generation/sliceRoom'
+import { mergeRooms } from './domain/generation/mergeRooms'
+import type { SliceLine } from './components/Viewer'
+import { planScaleOf, scalePoints, worldLineToBase } from './presentation/generation/planScale'
 import { checkClearances } from './domain/generation/clearanceRules'
 import { UnitLoad } from './domain/shared/UnitLoad'
 import { InMemoryIndoorModelCatalog } from './infrastructure/generation/InMemoryIndoorModelCatalog'
@@ -47,9 +53,18 @@ import { defaultEquipmentMaster } from './infrastructure/equipment/InMemoryEquip
 import type { EquipmentMaster } from './domain/equipment/EquipmentMaster'
 import { buildSelectionTable } from './domain/generation/SelectionTable'
 import { buildSelectionCsv } from './presentation/generation/selectionCsv'
+import { useUndoable } from './presentation/generation/useUndoable'
+import type { World } from './presentation/generation/world'
 import { useSelectionSync } from './presentation/generation/useSelectionSync'
 import { useScheduleSync } from './presentation/generation/useScheduleSync'
 import { useTileManifest } from './presentation/generation/useTileManifest'
+
+// 절단선 위에 정확히 놓인 심볼은 두 조각 모두에 '포함'된다 → 무게중심이 가까운 쪽으로 보낸다.
+// (어느 쪽에도 안 걸리는 경우도 여기로 온다 — 심볼은 반드시 한 실에 속해야 대수가 맞는다.)
+const nearestChild = <T extends { poly: Polygon }>(cs: T[], p: Pt): T => {
+  const d2 = (c: T) => (c.poly.centroid.x - p.x) ** 2 + (c.poly.centroid.y - p.y) ** 2
+  return cs.reduce((best, c) => (d2(c) < d2(best) ? c : best), cs[0])
+}
 
 // 우측 패널 상태 복원 헬퍼(폭은 ModelPanel의 260~560 범위로 클램프).
 function loadPanelOpen(): boolean {
@@ -75,14 +90,33 @@ export default function App({
   const [indoorCatalog] = useState(() => new InMemoryIndoorModelCatalog(master))
   const indoorModels = useMemo(() => indoorCatalog.list(), [indoorCatalog])
 
-  const [plan, setPlan] = useState(() => repo.load())
-  // 도메인 Room(층·실명·면적·용도·단위부하 Adjustable) — 선정표 그리드에서 편집되는 SSOT.
-  // 초기엔 비어 있다(검출 전). '실 검출 실행'이 도면에서 실을 찾아 채운다(파이프라인 의미론).
-  const [domainRooms, setDomainRooms] = useState<Record<string, DomainRoom>>({})
-  // 시설군은 단위부하의 전제다(같은 실명도 시설군마다 값이 다르다) → 프로젝트 설정으로 검출 전에 정한다.
-  const [facility, setFacility] = useState<FacilityType>(DEFAULT_FACILITY)
-  // 실별 실내기 배치(모델+대수, AI 기본값+사용자 오버라이드) — 실내기 선정의 SSOT.
-  const [placements, setPlacements] = useState<Record<string, Placement>>({})
+  // ── 편집 상태(World) ──
+  // 생성 파이프라인의 편집 상태를 하나로 묶는다. 되돌리기(Ctrl+Z)가 원자적이려면
+  // 스냅샷도 원자적이어야 한다 — 실을 자르면 실·형상·배치가 함께 바뀌고, 함께 돌아와야 한다.
+  //  · rooms  : 도메인 Room(층·실명·면적·용도·단위부하) — 선정표 그리드가 편집하는 SSOT
+  //  · geom   : 실의 형상(베이스 720×470 좌표 폴리곤) — 목업 ROOMS는 'AI 검출기의 출력'일 뿐이라
+  //             자르기로 태어난 새 실(AC_001-1 …)의 좌표를 담을 자리가 없다
+  //  · placements : 실별 실내기 배치(모델·대수·좌표) — 대수 SSOT는 도면 심볼이다
+  //  · outdoorPositions : 실외기 심볼 좌표(그룹 key → 좌표)
+  //  · plan   : 실외기 조합·배정(AssignmentPlan)
+  //  · facility : 시설군(단위부하의 전제)
+  const undoable = useUndoable<World>(
+    () => ({ plan: repo.load(), rooms: {}, geom: {}, placements: {}, outdoorPositions: {}, facility: DEFAULT_FACILITY }),
+    '',
+  )
+  const world = undoable.present
+  const { plan, rooms: domainRooms, geom: roomGeom, placements, outdoorPositions, facility } = world
+  // 사용자의 편집 1회 = 커밋 1회(= Ctrl+Z 1회). 파생 동기화는 replace를 쓴다(히스토리를 더럽히지 않는다).
+  const edit = undoable.commit
+
+  // 부분 편집 헬퍼 — 한 사용자 행동 = 한 커밋(= Ctrl+Z 한 번).
+  type Up<T> = T | ((prev: T) => T)
+  const next = <T,>(v: Up<T>, prev: T): T => (typeof v === 'function' ? (v as (p: T) => T)(prev) : v)
+  const editPlacements = (label: string, v: Up<Record<string, Placement>>) =>
+    edit((w) => ({ ...w, placements: next(v, w.placements) }), label)
+  const editOutdoorPositions = (label: string, v: Up<Record<string, { x: number; y: number }>>) =>
+    edit((w) => ({ ...w, outdoorPositions: next(v, w.outdoorPositions) }), label)
+
   const [selRooms, setSelRooms] = useState<string[]>([]) // 초기엔 선택 없음(뱃지·하이라이트 없음)
   const [tab, setTab] = useState<'in' | 'out'>('in')
   // 카드 선택은 기본적으로 대표 실에서 '파생'(실외기=그룹 모델, 실내기=배정/추천)한다.
@@ -155,17 +189,34 @@ export default function App({
     return map
   }, [placements, domainRooms, indoorCatalog, indoorModels])
 
-  // 뷰용 실 정보: 좌표·유형은 목업(ROOMS), 실명·부하(kW)는 도메인 Room에서 파생(그리드 편집 반영).
+  // 뷰용 실 정보: 형상은 roomGeom(SSOT), 실명·면적·부하는 도메인 Room에서 파생(그리드 편집·자르기 반영).
   // 검출된 실(domainRooms)만 순회 — 검출 전에는 빈 객체라 뷰어·리포트가 0/빈 상태가 된다.
+  // 표시용 태그(type·sys)는 목업 검출기 출력에서 가져온다. 잘린 실은 부모(AC_001-2 → AC_001)의 것을 쓴다.
   const viewRooms = useMemo<Record<string, Room>>(
     () =>
       Object.fromEntries(
         Object.entries(domainRooms).map(([id, dr]) => {
-          const r = ROOMS[id]
-          return [id, { ...r, name: dr.name, cool: Math.round(dr.requiredLoadW.cool / 100) / 10 }]
+          const src = ROOMS[id] ?? ROOMS[id.split('-')[0]]
+          const g = roomGeom[id]
+          const room: Room = {
+            name: dr.name,
+            floor: dr.floor,
+            usage: dr.usage,
+            area: dr.areaM2,
+            shortSideM: dr.shortSideM,
+            longSideM: dr.longSideM,
+            corridor: src?.corridor,
+            type: src?.type ?? '',
+            // kW 원값(반올림하지 않는다) — 표시할 때 자릿수를 맞춘다.
+            // 실별 반올림값을 더하면 자를수록 총합이 흘러내린다(적대적 QA).
+            cool: dr.requiredLoadW.cool / 1000,
+            sys: src?.sys ?? 'EHP',
+            points: g ? g.points : [],
+          }
+          return [id, room]
         }),
       ),
-    [domainRooms],
+    [domainRooms, roomGeom],
   )
   // 우측 패널 접힘/폭은 localStorage에 유지(새로고침 후에도 복원).
   const [panelOpen, setPanelOpen] = useState(() => loadPanelOpen())
@@ -177,7 +228,6 @@ export default function App({
     localStorage.setItem('poc.panel.w', String(panelW))
   }, [panelW])
   // 실외기 심볼 좌표(그룹 key → 좌표). 도면에 놓였는지 여부가 곧 '배치 완료' 여부다.
-  const [outdoorPositions, setOutdoorPositions] = useState<Record<string, { x: number; y: number }>>({})
   // 스텝 가드 팝업(차단/확인). null = 닫힘.
   const [guard, setGuard] = useState<{ verdict: Extract<GuardVerdict, { kind: 'BLOCK' } | { kind: 'CONFIRM' }>; proceed: () => void; confirmLabel?: string } | null>(null)
   const [mapOpen, setMapOpen] = useState(false)
@@ -194,14 +244,22 @@ export default function App({
   // 실제 도면: Python(ezdxf)로 전처리한 딥줌 타일 피라미드. 좌표계 정합의 토대.
   const { tiles, planDims } = useTileManifest()
 
-  // 목업 실 좌표(720×470)를 정규화 좌표계로 스케일(도면 위 앵커링). 용량·이름 등은 유지.
+  // 베이스(목업 720×470) → 도면(실도면 DXF 월드) 축척. 타일이 없으면 1:1.
+  const scale = useMemo(() => planScaleOf(planDims), [planDims])
+
+  // 실 형상을 도면 좌표로 스케일(도면 위 앵커링). 용량·이름 등은 유지.
   const worldRooms = useMemo(() => {
     if (!planDims) return viewRooms
-    const sx = planDims.w / 720, sy = planDims.h / 470
     return Object.fromEntries(
-      Object.entries(viewRooms).map(([id, r]) => [id, { ...r, x: r.x * sx, y: r.y * sy, w: r.w * sx, h: r.h * sy }] as const),
+      Object.entries(viewRooms).map(([id, r]) => [id, { ...r, points: scalePoints(r.points, scale) }] as const),
     )
-  }, [planDims, viewRooms])
+  }, [planDims, viewRooms, scale])
+
+  // 심볼 좌표(도면 좌표계)로 실 폴리곤을 판정할 때 쓴다.
+  const worldPolyOf = (roomId: string): Polygon | null => {
+    const pts = worldRooms[roomId]?.points
+    return pts && pts.length >= 3 ? Polygon.of(pts) : null
+  }
 
   const flash = (msg: string) => {
     setToast(msg)
@@ -211,9 +269,9 @@ export default function App({
   // 실 안에 N대를 놓을 도면 좌표. 도메인(Placement)은 "대수만큼 좌표가 있어야 한다"만 알고,
   // 실이 도면 어디에 있는지는 이 어댑터가 안다.
   const layoutFor = (roomId: string, count: number): UnitPosition[] => {
-    const r = worldRooms[roomId] ?? ROOMS[roomId]
-    if (!r) return []
-    return layoutPositions({ x: r.x, y: r.y, w: r.w, h: r.h }, count)
+    const poly = worldPolyOf(roomId)
+    if (!poly) return []
+    return layoutPositions(poly, count)
   }
 
   // 대수가 바뀔 때 좌표 맞추기: 이미 놓인 심볼의 자리는 지키고, 남는 건 자르고 모자라면 새로 깐다.
@@ -247,15 +305,21 @@ export default function App({
     }),
     [repo],
   )
-  const sync = () => setPlan(repo.load())
+  // 유즈케이스가 리포지토리를 고친 뒤 그 결과를 World에 커밋한다(= 되돌릴 수 있는 편집 1건).
+  const sync = (label: string) => edit((w) => ({ ...w, plan: repo.load() }), label)
+
+  // 되돌리기로 플랜이 과거로 돌아가면 리포지토리도 그 시점으로 맞춘다 —
+  // 유즈케이스(배정·그룹 편집)는 리포지토리를 읽으므로, 어긋나면 undo가 반쯤만 적용된다.
+  useEffect(() => { repo.save(plan) }, [plan, repo])
 
   // 실내기 배치(placements)가 대수·모델의 SSOT다. 바뀌면 플랜을 그에 맞춘다
   // — 그러지 않으면 선정표에서 대수를 고쳐도 조합비·최대 연결 대수가 낡은 값을 본다.
-  // 배정은 최대한 보존된다(syncPlanUnits).
+  // 배정은 최대한 보존된다(syncPlanUnits). 이것은 **파생 동기화**라 히스토리를 남기지 않는다
+  // (남기면 Ctrl+Z가 사용자가 한 적 없는 일을 되돌린다).
   useEffect(() => {
     const next = syncPlanUnits(repo.load(), unitsFrom(placements))
     repo.save(next)
-    setPlan(next)
+    undoable.replace((w) => ({ ...w, plan: next }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placements, domainRooms, repo])
 
@@ -267,7 +331,7 @@ export default function App({
     try {
       const next = selectOutdoorPlan(units, (roomId) => domainRooms[roomId]?.floor ?? '', catalog)
       repo.save(next)
-      setPlan(next)
+      edit((w) => ({ ...w, plan: next }), '실외기 선정')
       const odus = next.groups.length
       flash(`✦ 정격 ${(units.reduce((a, u) => a + u.cool.kw, 0)).toFixed(1)}kW에 맞춰 실외기 ${odus}대를 선정했습니다`)
       return true
@@ -290,7 +354,11 @@ export default function App({
   const { groups, pool } = toViewModel(plan)
 
   // 대표 실(헤더/모델 파생 기준). 실내기 목록에서 새로 켠 실이 맨 앞으로 승격된다.
-  const primary = selRooms[0]
+  //
+  // 사라진 실(자르기·재검출로 없어진 id)이 선택에 남아 있으면 domainRooms[primary]가 undefined가 되고
+  // aiSelectionFor(undefined)가 렌더 중 터져 화면이 통째로 죽는다(적대적 QA) → 존재하는 실만 본다.
+  const liveSelRooms = useMemo(() => selRooms.filter((id) => domainRooms[id]), [selRooms, domainRooms])
+  const primary = liveSelRooms[0]
 
   // 실 선택이 바뀌면 수동 선택(pick)을 초기화 — 렌더 중 조정(effect·cascading 불필요).
   if (primary !== prevPrimary) {
@@ -315,7 +383,7 @@ export default function App({
   const moveRoom = (id: string, to: string): boolean => {
     try {
       const res = uc.reassign({ roomId: id, to })
-      if (res.ok) sync()
+      if (res.ok) sync('실외기 배정 변경')
       return res.ok
     } catch (e) {
       if (e instanceof NotFoundError) return false
@@ -328,7 +396,7 @@ export default function App({
     const g = plan.groupByKey(key)
     if (!g) return
     const res = uc.replace({ key, outdoorUnit: outdoorUnitFromSpec(spec) })
-    sync()
+    sync('실외기 모델 교체')
     if (res.ejected.length) {
       flash(`실외기 교체: 계열이 달라 실내기 ${res.ejected.length}개를 미배정으로 옮겼습니다`)
     } else {
@@ -342,7 +410,7 @@ export default function App({
     if (!g || g.roomIds.length < 2) return
     const meta = nextGroupMeta(plan)
     uc.split({ key, meta })
-    sync()
+    sync('실외기 그룹 분할')
     flash(`${g.label}을(를) 분할해 ${meta.label}을(를) 추가했습니다`)
   }
 
@@ -350,7 +418,7 @@ export default function App({
   const addGroup = (spec: OutdoorModelSpec) => {
     const meta = nextGroupMeta(plan)
     uc.add({ meta, outdoorUnit: outdoorUnitFromSpec(spec) })
-    sync()
+    sync('실외기 그룹 추가')
     flash(`${meta.label} (${spec.model})을(를) 추가했습니다`)
   }
 
@@ -359,7 +427,7 @@ export default function App({
     const g = plan.groupByKey(key)
     if (!g) return
     uc.remove({ key })
-    sync()
+    sync('실외기 그룹 삭제')
     flash(`${g.label}을(를) 삭제했습니다`)
   }
 
@@ -383,8 +451,8 @@ export default function App({
     if (tab === 'in') {
       const m = indoorCards[effIn]
       if (!m) return
-      if (selRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
-      const scope = selRooms.length > 1 ? `${primary} 외 ${selRooms.length - 1}실` : primary
+      if (liveSelRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
+      const scope = liveSelRooms.length > 1 ? `${primary} 외 ${liveSelRooms.length - 1}실` : primary
       setConfirmMsg(`실내기 ${m.mn}을(를) 선택한 ${scope}에 일괄 적용합니다. 계속하시겠습니까?`)
       return
     }
@@ -402,13 +470,13 @@ export default function App({
     if (tab === 'in') {
       const m = indoorCards[effIn]
       if (!m) return
-      if (selRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
+      if (liveSelRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
       const model = indoorCatalog.byModel(m.mn)
       if (!model) { flash('카탈로그에 없는 실내기 모델입니다'); return }
       // 수동 적용 = 사용자 오버라이드(AI 재선정에도 보존). 대수는 기존 값 유지, 최초면 1.
-      setPlacements((prev) => {
+      editPlacements(`실내기 모델 적용(${m.mn})`, (prev) => {
         const next = { ...prev }
-        selRooms.forEach((id) => {
+        liveSelRooms.forEach((id) => {
           const sel = { modelCode: model.code, quantity: prev[id]?.effectiveSelection.quantity ?? 1 }
           // 모델만 바뀌고 대수는 그대로 → 심볼 좌표도 그대로.
           const positions = prev[id] ? [...prev[id].positions] : layoutFor(id, sel.quantity)
@@ -416,7 +484,7 @@ export default function App({
         })
         return next
       })
-      const scope = selRooms.length > 1 ? `${primary} 외 ${selRooms.length - 1}실` : primary
+      const scope = liveSelRooms.length > 1 ? `${primary} 외 ${liveSelRooms.length - 1}실` : primary
       flash(`실내기 ${m.mn}을(를) ${scope}에 적용했습니다`)
       return
     }
@@ -434,7 +502,7 @@ export default function App({
   const aiPlace = () => {
     // 방마다 필요부하 기반으로 모델+대수 자동 선정. 사용자 수정 셀·좌표는 보존(AI값만 갱신).
     // 플랜 동기화(미배정 풀 편입)는 placements 변경 이펙트가 맡는다. 배정은 이후 combine에서 생긴다.
-    setPlacements(applyAiPlacement(Object.values(domainRooms), placements, indoorModels, layoutFor))
+    editPlacements('AI 실내기 배치', applyAiPlacement(Object.values(domainRooms), placements, indoorModels, layoutFor))
     flash('✦ AI가 실 ' + Object.keys(domainRooms).length + '곳에 실내기를 배치·선정했습니다 (수정 셀은 보존)')
   }
 
@@ -459,7 +527,7 @@ export default function App({
 
   // 도면에서 심볼을 옮기면 그 실내기의 좌표가 바뀐다(대수·모델은 그대로).
   const moveUnits = (moves: { id: string; x: number; y: number }[]) => {
-    setPlacements((prev) => {
+    editPlacements('실내기 이동', (prev) => {
       const next = { ...prev }
       for (const m of moves) {
         const ref = parseUnitId(m.id)
@@ -470,7 +538,7 @@ export default function App({
     })
   }
   const rotateUnits = (rots: { id: string; rot: number }[]) => {
-    setPlacements((prev) => {
+    editPlacements('실내기 회전', (prev) => {
       const next = { ...prev }
       for (const r of rots) {
         const ref = parseUnitId(r.id)
@@ -484,7 +552,7 @@ export default function App({
   // 도면에서 심볼을 지우면 그 실의 대수가 줄고, 선정표·조합비가 즉시 따라온다.
   // 한 실의 여러 대수를 지울 때는 인덱스가 밀리지 않도록 큰 것부터 지운다.
   const deleteUnits = (ids: string[]) => {
-    setPlacements((prev) => {
+    editPlacements('실내기 삭제', (prev) => {
       const next = { ...prev }
       const byRoom = new Map<string, number[]>()
       for (const id of ids) {
@@ -525,80 +593,93 @@ export default function App({
     [outdoorPositions],
   )
   const moveOutdoors = (moves: { id: string; x: number; y: number }[]) =>
-    setOutdoorPositions((prev) => {
+    editOutdoorPositions('실외기 이동', (prev) => {
       const next = { ...prev }
       for (const m of moves) if (next[m.id]) next[m.id] = { x: m.x, y: m.y }
       return next
     })
   const deleteOutdoors = (keys: string[]) =>
-    setOutdoorPositions((prev) => {
+    editOutdoorPositions('실외기 삭제', (prev) => {
       const next = { ...prev }
       for (const k of keys) delete next[k]
       return next
     })
   // 자동 배치: 활성 그룹만 도면 하단에 나열한다.
   const autoPlaceOutdoors = (positions: Record<string, { x: number; y: number }>) => {
-    setOutdoorPositions(positions)
+    editOutdoorPositions('실외기 배치', positions)
     flash(`실외기 ${Object.keys(positions).length}대를 도면에 배치했습니다`)
   }
   // 그룹이 사라지면 그 좌표도 지운다(삭제·재선정으로 key가 바뀔 수 있다).
   useEffect(() => {
     const alive = new Set(plan.groups.map((g) => g.key))
-    setOutdoorPositions((prev) => {
-      const kept = Object.keys(prev).filter((k) => alive.has(k))
-      return kept.length === Object.keys(prev).length ? prev : Object.fromEntries(kept.map((k) => [k, prev[k]]))
+    undoable.replace((w) => {
+      const kept = Object.keys(w.outdoorPositions).filter((k) => alive.has(k))
+      if (kept.length === Object.keys(w.outdoorPositions).length) return w
+      return { ...w, outdoorPositions: Object.fromEntries(kept.map((k) => [k, w.outdoorPositions[k]])) }
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan])
 
   // 도면에서 실내기를 더하면 그 실의 대수가 는다. 모델은 그 실의 선정 모델을 따른다.
+  // layoutFor는 실이 너무 얇으면 도메인 에러를 던진다 → 화면을 죽이지 않고 사유를 알린다.
   const addUnitToRoom = (roomId: string) => {
-    setPlacements((prev) => {
-      const room = domainRooms[roomId]
-      if (!room) return prev
-      const existing = prev[roomId]
-      if (!existing) {
-        // 실내기가 없던 실 → AI 추천 모델 1대로 시작
-        const ai = aiSelectionFor(room, indoorModels)
-        return { ...prev, [roomId]: Placement.ai(roomId, { ...ai, quantity: 1 }, layoutFor(roomId, 1)) }
-      }
-      const n = existing.quantity + 1
-      const spot = layoutFor(roomId, n)[n - 1] ?? { x: 0, y: 0, rot: 0 }
-      return { ...prev, [roomId]: existing.addUnit(spot) }
-    })
-    flash(`${roomId}에 실내기 1대를 추가했습니다`)
+    const room = domainRooms[roomId]
+    if (!room) return
+    try {
+      const existing = placements[roomId]
+      const next = existing
+        ? existing.addUnit(layoutFor(roomId, existing.quantity + 1)[existing.quantity] ?? { x: 0, y: 0, rot: 0 })
+        : Placement.ai(roomId, { ...aiSelectionFor(room, indoorModels), quantity: 1 }, layoutFor(roomId, 1))
+      editPlacements('실내기 추가', (prev) => ({ ...prev, [roomId]: next }))
+      flash(`${roomId}에 실내기 1대를 추가했습니다`)
+    } catch (e) {
+      flash(e instanceof DomainError ? e.message : '실내기를 추가할 수 없습니다')
+    }
   }
 
   // ── 선정표 그리드 편집 핸들러: 상류 수정 → 하류(AI 선정·조합비) 재계산 ──
-  const updateRoom = (id: string, fn: (r: DomainRoom) => DomainRoom) => {
+  // 편집 커맨드는 새 창(BroadcastChannel)에서도 온다 → 사라진 실(자르기·재검출)을 가리킬 수 있다.
+  // 신뢰 경계를 넘어오는 id는 반드시 존재를 확인한다(적대적 QA).
+  const updateRoom = (id: string, fn: (r: DomainRoom) => DomainRoom, label = '실 정보 수정') => {
+    if (!domainRooms[id]) return
     const nextRooms = { ...domainRooms, [id]: fn(domainRooms[id]) }
-    setDomainRooms(nextRooms)
     // 부하가 바뀌면 AI 선정도 재계산(오버라이드는 보존). 배치 전에는 건드리지 않는다.
-    if (Object.keys(placements).length) setPlacements(applyAiPlacement(Object.values(nextRooms), placements, indoorModels, layoutFor))
+    const nextPlacements = Object.keys(placements).length
+      ? applyAiPlacement(Object.values(nextRooms), placements, indoorModels, layoutFor)
+      : placements
+    edit((w) => ({ ...w, rooms: nextRooms, placements: nextPlacements }), label)
   }
   const renameRoom = (id: string, name: string) => {
-    try { updateRoom(id, (r) => r.rename(name)) } catch { flash('실명은 비워둘 수 없습니다') }
+    try { updateRoom(id, (r) => r.rename(name), '실명 변경') } catch { flash('실명은 비워둘 수 없습니다') }
   }
   const overrideUnitLoad = (id: string, coolKcal: number, heatKcal: number) => {
-    try { updateRoom(id, (r) => r.overrideUnitLoad(new UnitLoad(coolKcal, heatKcal))) } catch { flash('단위부하는 0보다 큰 숫자여야 합니다') }
+    try { updateRoom(id, (r) => r.overrideUnitLoad(new UnitLoad(coolKcal, heatKcal)), '단위부하 수정') } catch { flash('단위부하는 0보다 큰 숫자여야 합니다') }
   }
-  const resetUnitLoad = (id: string) => updateRoom(id, (r) => r.clearUnitLoadOverride())
+  const resetUnitLoad = (id: string) => updateRoom(id, (r) => r.clearUnitLoadOverride(), '단위부하 초기화')
   // 선정표에서 모델·대수를 고치면 도면 심볼 개수도 함께 바뀐다(대수 SSOT = 심볼).
   const overrideIndoor = (id: string, modelCode: string, quantity: number) => {
+    if (!domainRooms[id]) return
     if (!indoorCatalog.byCode(modelCode)) { flash('카탈로그에 없는 모델입니다'); return }
-    setPlacements((prev) => {
+    try {
       const sel = { modelCode, quantity }
-      const positions = resizePositions(prev[id]?.positions ?? [], id, quantity)
-      return { ...prev, [id]: (prev[id] ?? Placement.ai(id, sel, positions)).overrideSelection(sel, positions) }
-    })
+      const positions = resizePositions(placements[id]?.positions ?? [], id, quantity)
+      const nextP = (placements[id] ?? Placement.ai(id, sel, positions)).overrideSelection(sel, positions)
+      editPlacements('실내기 대수·모델 수정', (prev) => ({ ...prev, [id]: nextP }))
+    } catch (e) {
+      flash(e instanceof DomainError ? e.message : '대수를 바꿀 수 없습니다')
+    }
   }
   const resetIndoor = (id: string) => {
-    setPlacements((prev) => {
-      if (!prev[id]) return prev
+    if (!domainRooms[id] || !placements[id]) return
+    try {
       // 오버라이드 해제 + 최신 부하 기준 AI 추천으로 갱신. 좌표도 AI 대수에 맞춰 다시 깐다.
       const ai = aiSelectionFor(domainRooms[id], indoorModels)
       const positions = layoutFor(id, ai.quantity)
-      return { ...prev, [id]: prev[id].clearOverride(positions).withAiSelection(ai, positions) }
-    })
+      const nextP = placements[id].clearOverride(positions).withAiSelection(ai, positions)
+      editPlacements('실내기 초기화', (prev) => ({ ...prev, [id]: nextP }))
+    } catch (e) {
+      flash(e instanceof DomainError ? e.message : '초기화할 수 없습니다')
+    }
   }
   const moveRoomFromGrid = (id: string, to: string) => {
     const cur = groupOfRoom(groups, id)?.key ?? 'pool'
@@ -728,6 +809,8 @@ export default function App({
   const placed = Object.keys(placements).length > 0
 
   // 검출: 도면에서 실을 찾아 도메인 Room으로 채운다. 이미 배치가 있으면 초기화 확인을 받는다.
+  // 검출 단계에 머문다 — 검출 결과(실 목록·부하)를 확인하는 것이 이 단계의 일이다.
+  // 다음 단계로는 '실내기 배치 →' CTA로 넘어간다(가드가 전제를 검사한다).
   const detectRooms = () => {
     const detected = Object.fromEntries(
       Object.entries(ROOMS).map(([id, r]) => [
@@ -735,13 +818,197 @@ export default function App({
         DomainRoom.create({ id, floor: r.floor, name: r.name, areaM2: r.area, usage: r.usage, facility, shortSideM: r.shortSideM, longSideM: r.longSideM }),
       ]),
     )
-    setPlacements({}) // 재검출은 하류를 지운다(배치·조합)
-    setOutdoorPositions({})
-    setDomainRooms(detected)
-    setStep('place')
+    // 형상도 함께 시딩한다 — 검출기(ROOMS)는 출력일 뿐이고, 이후 편집(자르기·리사이즈)의 SSOT는 roomGeom이다.
+    const geom = Object.fromEntries(Object.entries(ROOMS).map(([id, r]) => [id, Polygon.of(r.points)]))
+    // 검출은 하나의 편집이다 — 실·형상·배치·실외기 좌표가 함께 바뀌고, Ctrl+Z 한 번에 함께 돌아온다.
+    edit((w) => ({ ...w, rooms: detected, geom, placements: {}, outdoorPositions: {} }), '실 검출')
+    setSelRooms([]) // 자르기로 생겼던 실 id가 선택에 남으면 파생값이 터진다(적대적 QA)
     flash(`AI가 도면에서 실 ${Object.keys(detected).length}곳을 검출했습니다`)
   }
   const doDetect = () => runGuarded(guardDestructive('REDETECT', guardContext()), detectRooms, '재검출')
+
+  // ── 실 자르기(V 도구) ──
+  // 실 1곳 → 2곳. 도면에서 잘랐으니 도면 심볼(실내기)도 잘린 위치대로 나뉜다
+  // (도면이 진실 — 심볼 1개 = 실내기 1대 = 선정표 대수 1).
+  const applySlice = (roomId: string, line: SliceLine) => {
+    const parent = domainRooms[roomId]
+    const geom = roomGeom[roomId]
+    if (!parent || !geom) return
+
+    let children
+    try {
+      // 뷰어는 도면(월드) 좌표로 선을 그었고, 실 형상은 베이스 좌표에 있다.
+      // 축척이 x·y로 다르면 각도가 보존되지 않으므로 방향벡터로 옮긴다(planScale).
+      children = sliceRoom(parent, geom, worldLineToBase(line, scale))
+    } catch (e) {
+      if (e instanceof TooThinSliceError) { flash(e.message); return }
+      if (e instanceof SliceMissedRoomError) { flash('절단선이 실을 가르지 않았습니다'); return }
+      if (e instanceof SliceProducesManyPiecesError) { flash(e.message); return }
+      throw e
+    }
+
+    // 부모 자리에 자식을 끼워 넣는다 — 선정표 행 순서·층 섹션이 입력 순서를 따른다.
+    const spliceIn = <T,>(src: Record<string, T>, made: [string, T][]): Record<string, T> =>
+      Object.fromEntries(Object.entries(src).flatMap(([k, v]) => (k === roomId ? made : [[k, v]])))
+
+    // 실내기: 부모의 심볼을 좌표로 나눠 자식에게 준다. 조각에 심볼이 없으면 그 실은 '미배치'다
+    // (quantity >= 1 불변식을 우회하지 않는다 — 가드가 ROOMS_WITHOUT_INDOOR로 잡아준다).
+    const parentPlacement = placements[roomId]
+    const worldChildren = children.map((c) => ({ id: c.room.id, poly: Polygon.of(scalePoints(c.polygon.points, scale)) }))
+    const childPlacements: Record<string, Placement> = {}
+    if (parentPlacement) {
+      const model = parentPlacement.effectiveSelection.modelCode
+      const overridden = parentPlacement.isOverridden // 사용자가 직접 고른 모델·대수인가
+      const byChild: Record<string, UnitPosition[]> = { [worldChildren[0].id]: [], [worldChildren[1].id]: [] }
+      for (const pos of parentPlacement.positions) {
+        // 절단선 위의 심볼은 두 조각 모두에 '포함'된다 → 먼저 걸리는 쪽 하나에만 넣는다.
+        const hit = worldChildren.find((c) => c.poly.contains(pos)) ?? nearestChild(worldChildren, pos)
+        byChild[hit.id].push(pos)
+      }
+      for (const c of worldChildren) {
+        const pos = byChild[c.id]
+        if (pos.length === 0) continue
+        const sel = { modelCode: model, quantity: pos.length }
+        const base = Placement.ai(c.id, sel, pos)
+        // 부모가 '수정 셀'이었다면 자식도 수정 셀이다 — 아니면 다음 AI 재배치가 사용자의 선택을
+        // 조용히 덮는다('수정 셀은 보존한다'는 명시 정책이 자르기에서만 깨졌다 — 적대적 QA).
+        childPlacements[c.id] = overridden ? base.overrideSelection(sel, pos) : base
+      }
+    }
+
+    // 자르기는 하나의 편집이다 — 실·형상·배치가 함께 바뀌고 Ctrl+Z 한 번에 함께 돌아온다.
+    edit((w) => {
+      const placementsNext = { ...w.placements }
+      delete placementsNext[roomId] // 부모 배치를 지우지 않으면 도면에 유령 심볼이 남는다
+      Object.assign(placementsNext, childPlacements)
+      return {
+        ...w,
+        rooms: spliceIn(w.rooms, children.map((c) => [c.room.id, c.room] as [string, DomainRoom])),
+        geom: spliceIn(w.geom, children.map((c) => [c.room.id, c.polygon] as [string, Polygon])),
+        placements: placementsNext,
+      }
+    }, '실 자르기')
+
+    // 사라진 부모를 선택한 채로 두면 파생값(aiSelectionFor)이 undefined를 받아 터진다.
+    setSelRooms((prev) => prev.filter((id) => id !== roomId))
+    const [a, b] = children
+    flash(`${parent.name}을(를) ${a.room.name} · ${b.room.name}(으)로 나눴습니다`)
+  }
+
+  // 자르기는 검출 단계의 도구다. 모드 진입만 막으면 부족하다 — 단계를 넘긴 뒤에도
+  // 모드가 남아 클릭이 실을 잘랐다(적대적 QA). 실행 직전에 단계를 다시 확인한다.
+  const doSlice = (roomId: string, line: SliceLine) => {
+    if (step !== 'detect') { flash('실 자르기는 실 검출 단계에서만 가능합니다'); return }
+    runGuarded(guardDestructive('ROOM_SLICE', guardContext()), () => applySlice(roomId, line), '자르기')
+  }
+
+  // ── 실 병합(M 도구) ──
+  // 붙어 있는 두 실을 하나로. 자르기의 역연산이다(형제를 합치면 원래 실이 복원된다).
+  // 실내기 심볼은 좌표 그대로 살아남고, 대수는 두 실의 합이 된다(도면이 진실).
+  const applyMerge = (aId: string, bId: string) => {
+    const a = domainRooms[aId]
+    const b = domainRooms[bId]
+    const ga = roomGeom[aId]
+    const gb = roomGeom[bId]
+    if (!a || !b || !ga || !gb) return
+
+    let merged
+    try {
+      merged = mergeRooms({ room: a, polygon: ga }, { room: b, polygon: gb })
+    } catch (e) {
+      if (e instanceof NotAdjacentError) { flash('붙어 있지 않은 실은 합칠 수 없습니다'); return }
+      if (e instanceof DomainError) { flash(e.message); return }
+      throw e
+    }
+
+    // 실내기: 두 실의 심볼을 그대로 합친다. 모델이 다르면 대수가 많은 쪽(동수면 면적이 큰 쪽)을 승계한다
+    // — 한 실은 한 모델이다(실내기_자동배치_룰 §4). 'AI 실내기 배치'로 다시 뽑을 수 있다.
+    const pa = placements[aId]
+    const pb = placements[bId]
+    const positions = [...(pa?.positions ?? []), ...(pb?.positions ?? [])]
+    let mergedPlacement: Placement | null = null
+    if (positions.length > 0) {
+      const dominant =
+        (pa?.positions.length ?? 0) === (pb?.positions.length ?? 0)
+          ? (a.areaM2 >= b.areaM2 ? pa : pb)
+          : ((pa?.positions.length ?? 0) > (pb?.positions.length ?? 0) ? pa : pb)
+      const owner = dominant ?? pa ?? pb
+      if (!owner) return // 좌표가 있는데 배치가 없을 수는 없다(방어)
+      const sel = { modelCode: owner.effectiveSelection.modelCode, quantity: positions.length }
+      const base = Placement.ai(merged.room.id, sel, positions)
+      const overridden = (pa?.isOverridden ?? false) || (pb?.isOverridden ?? false)
+      mergedPlacement = overridden ? base.overrideSelection(sel, positions) : base
+    }
+
+    // 앞선 실(a) 자리에 병합 결과를 끼우고 b는 뺀다 — 선정표 행 순서를 지킨다.
+    const spliceMerge = <T,>(src: Record<string, T>, value: T | undefined): Record<string, T> =>
+      Object.fromEntries(
+        Object.entries(src).flatMap(([k, v]) => {
+          if (k === aId) return value === undefined ? [] : [[merged.room.id, value] as [string, T]]
+          if (k === bId) return []
+          return [[k, v] as [string, T]]
+        }),
+      )
+
+    edit((w) => ({
+      ...w,
+      rooms: spliceMerge(w.rooms, merged.room),
+      geom: spliceMerge(w.geom, merged.polygon),
+      // 배치는 두 실 모두 지우고 합친 것 하나만 남긴다(유령 심볼 방지).
+      placements: Object.fromEntries(
+        Object.entries(w.placements)
+          .filter(([k]) => k !== aId && k !== bId)
+          .concat(mergedPlacement ? [[merged.room.id, mergedPlacement]] : []),
+      ),
+    }), '실 병합')
+
+    setSelRooms((prev) => prev.filter((id) => id !== aId && id !== bId))
+    const delta = merged.loadDeltaW / 1000
+    flash(
+      merged.usageChanged && Math.abs(delta) >= 0.05
+        ? `${merged.room.name}으(로) 합쳤습니다 — 용도가 '${merged.room.usage}'이 되어 부하가 ${delta > 0 ? '+' : ''}${delta.toFixed(1)}kW 바뀝니다`
+        : `${merged.room.name}으(로) 합쳤습니다 (${merged.room.areaM2.toFixed(1)}㎡)`,
+    )
+  }
+
+  const doMerge = (aId: string, bId: string) => {
+    if (step !== 'detect') { flash('실 병합은 실 검출 단계에서만 가능합니다'); return }
+    runGuarded(guardDestructive('ROOM_MERGE', guardContext()), () => applyMerge(aId, bId), '병합')
+  }
+
+  // 두 실이 붙어 있는가 — 뷰어의 프리뷰가 물어본다(판정은 도메인 기하가 한다).
+  const roomsAdjacent = (aId: string, bId: string): boolean => {
+    const ga = roomGeom[aId]
+    const gb = roomGeom[bId]
+    return !!ga && !!gb && sharedEdgeLength(ga, gb) > 0
+  }
+
+  // 존 모서리 리사이즈 커밋 — 형상 SSOT는 App이다(뷰어는 드래그 중에만 draft로 그린다).
+  //
+  // 형상만 바꾸면 도면과 표가 다른 실을 말한다(적대적 QA): 면적·단변·장변이 검출 당시 값에 머물러
+  // 부하·대수·조합비·선정표가 리사이즈를 전혀 반영하지 못했다. 실의 축척(m/단위)을 지키면서
+  // 새 폴리곤에서 면적과 치수를 다시 유도한다 — 자르기와 같은 규칙이다.
+  const resizeZone = (roomId: string, points: readonly Pt[]) => {
+    const room = domainRooms[roomId]
+    const prevPoly = roomGeom[roomId]
+    if (!room || !prevPoly) return
+    const base = planDims ? points.map((p) => ({ x: p.x / scale.sx, y: p.y / scale.sy })) : points
+    let next: Polygon
+    try {
+      next = Polygon.of(base)
+    } catch {
+      return // 면적 0 등 성립하지 않는 형상 — 무시한다(뷰어가 GRID 하한으로 이미 막는다)
+    }
+    const mPerUnit = Math.sqrt(room.areaM2 / prevPoly.area) // 이 실의 축척은 리사이즈로 변하지 않는다
+    const areaM2 = next.area * mPerUnit * mPerUnit
+    const { shortSide, longSide } = next.obb()
+    const shaped = room.withShape(areaM2, shortSide * mPerUnit, longSide * mPerUnit)
+    edit((w) => ({
+      ...w,
+      geom: { ...w.geom, [roomId]: next },
+      rooms: { ...w.rooms, [roomId]: shaped },
+    }), '실 크기 조정')
+  }
 
   const doPlace = () => { aiPlace() } // 배치만(단계 유지) → 이동·회전으로 조정 후 다음 단계로
   // 전진: 가드를 통과해야 넘어간다. 막히면 왜 못 가는지 팝업이 말한다.
@@ -758,12 +1025,48 @@ export default function App({
   // 시설군 변경: 검출 후에는 부하가 통째로 다시 계산된다 → 확인을 받는다(예전엔 잠갔다).
   const changeFacility = (f: FacilityType) =>
     runGuarded(guardDestructive('FACILITY_CHANGE', guardContext()), () => {
-      setFacility(f)
-      setPlacements({})
-      setOutdoorPositions({})
-      setDomainRooms({})
+      edit((w) => ({ ...w, facility: f, rooms: {}, geom: {}, placements: {}, outdoorPositions: {} }), '시설군 변경')
+      setSelRooms([])
       setStep('detect')
     }, '시설군 변경')
+
+  // ── 되돌리기 / 다시하기 ──
+  // 편집(World)만 되돌린다. 선택·단계 같은 '보기' 상태는 히스토리에 없다.
+  // 되돌린 뒤 사라진 실이 선택에 남아 있으면 파생값이 터지므로 선택을 정리한다.
+  const doUndo = () => {
+    if (!undoable.canUndo) return
+    const label = undoable.undoLabel
+    undoable.undo()
+    flash(label ? `${label}을(를) 되돌렸습니다` : '되돌렸습니다')
+  }
+  const doRedo = () => {
+    if (!undoable.canRedo) return
+    const label = undoable.redoLabel
+    undoable.redo()
+    flash(label ? `${label}을(를) 다시 실행했습니다` : '다시 실행했습니다')
+  }
+  // 되돌린 결과에 없는 실은 선택에서 뺀다(자르기 undo → 자식 id가 사라진다).
+  useEffect(() => {
+    setSelRooms((prev) => {
+      const kept = prev.filter((id) => domainRooms[id])
+      return kept.length === prev.length ? prev : kept
+    })
+  }, [domainRooms])
+
+  useEffect(() => {
+    const typing = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || typing(e.target)) return
+      const k = e.key.toLowerCase()
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); doUndo() }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); doRedo() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   // 작업 중 새로고침·창 닫기 이탈 방지.
   useEffect(() => {
@@ -802,9 +1105,25 @@ export default function App({
         actions={
           <>
             <button className="btn sm" disabled={isFirstStep(step)} onClick={() => regress(prevStep(step))}>← 이전</button>
+            {/* 되돌리기/다시하기 — 편집(실·형상·배치·조합)만 되돌린다 */}
+            <button
+              className="btn sm"
+              disabled={!undoable.canUndo}
+              onClick={doUndo}
+              title={undoable.undoLabel ? `${undoable.undoLabel} 되돌리기 (Ctrl+Z)` : '되돌릴 편집이 없습니다'}
+              aria-label="되돌리기"
+            >↶</button>
+            <button
+              className="btn sm"
+              disabled={!undoable.canRedo}
+              onClick={doRedo}
+              title={undoable.redoLabel ? `${undoable.redoLabel} 다시 실행 (Ctrl+Shift+Z)` : '다시 실행할 편집이 없습니다'}
+              aria-label="다시 실행"
+            >↷</button>
             {/* 시설군은 단위부하의 전제다. 검출 후 바꾸면 부하가 통째로 다시 계산된다 → 확인을 받는다. */}
             {step === 'detect' && <ProjectSettings facility={facility} onChange={changeFacility} />}
-            {step === 'detect' && <button className="btn sm primary" onClick={doDetect}>실 검출 실행 →</button>}
+            {step === 'detect' && <button className="btn sm" onClick={doDetect}>✦ 실 검출 실행</button>}
+            {step === 'detect' && <button className="btn sm primary" onClick={() => advance('place')}>실내기 배치 →</button>}
             {step === 'place' && <button className="btn sm primary" onClick={doPlace}>{placed ? '재배치' : '✦ AI 실내기 배치'}</button>}
             {/* 전제 미충족이어도 버튼은 살아 있다 — 클릭하면 가드가 이유를 말한다. */}
             {step === 'place' && <button className="btn sm primary" onClick={() => advance('combine')}>실외기 선정 →</button>}
@@ -854,6 +1173,27 @@ export default function App({
             canAddUnit={step === 'place' && placed}
             canPlaceOutdoors={step === 'outdoor'}
             outdoorGroups={activeGroups.map((g) => ({ key: g.key, label: g.label, model: g.model }))}
+            // 실 자르기(V)는 검출 단계 도구다 — 검출 결과를 다듬는다.
+            canSliceRooms={step === 'detect' && Object.keys(domainRooms).length > 0}
+            onRoomSlice={doSlice}
+            onSliceUnavailable={() =>
+              flash(
+                Object.keys(domainRooms).length === 0
+                  ? '실을 먼저 검출해야 자를 수 있습니다'
+                  : '실 자르기는 실 검출 단계에서만 가능합니다',
+              )
+            }
+            onZoneResize={resizeZone}
+            canMergeRooms={step === 'detect' && Object.keys(domainRooms).length > 1}
+            onRoomsMerge={doMerge}
+            isAdjacent={roomsAdjacent}
+            onMergeUnavailable={() =>
+              flash(
+                Object.keys(domainRooms).length < 2
+                  ? '합칠 실이 두 곳 이상 있어야 합니다'
+                  : '실 병합은 실 검출 단계에서만 가능합니다',
+              )
+            }
           />
           {/* 조합 매핑은 도면 아래에 붙는다 — 실내기 심볼을 보면서 조합한다. */}
           {mapOpen && step === 'combine' && (

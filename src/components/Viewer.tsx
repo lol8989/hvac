@@ -4,10 +4,13 @@ import type { Room } from '../data'
 import ACUnit from './viewer/ACUnit'
 import ODUnit from './viewer/ODUnit'
 import ZoneRect from './viewer/ZoneRect'
-import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectsIntersect, roomIdsForUnits, zoneAreaM2 } from './viewer/geometry'
-import type { UnitSym, ZoneBox, Corner } from './viewer/geometry'
+import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsRect, zoneOfPoint, roomIdsForUnits, zoneAreaM2 } from './viewer/geometry'
+import type { UnitSym, ZoneBox, Corner, Pt } from './viewer/geometry'
 
-type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' // 에어컨(실내기) / 존(실) / 손 / 실외기
+type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
+
+// 자르기 라인(무한 직선): 지나는 점 + 각도(도). 도메인 CutLine과 같은 모양이다.
+export interface SliceLine { x: number; y: number; angleDeg: number }
 
 // 도면 폭에 맞는 '딱 떨어지는' 격자 실치수(1·2·5·10 계열, ~100칸 목표). 대형 mm 좌표계용.
 const niceGrid = (w: number): number => {
@@ -21,6 +24,8 @@ interface ViewBox { x: number; y: number; w: number; h: number }
 const SHORTCUTS: readonly { key: string; desc: string }[] = [
   { key: 'C', desc: '에어컨(실내기) 모드' },
   { key: 'Z', desc: '존(실) 모드' },
+  { key: 'V', desc: '실 자르기 모드' },
+  { key: 'M', desc: '실 병합 모드 (붙어 있는 두 실)' },
   { key: 'O', desc: '실외기 모드' },
   { key: 'H', desc: '손(화면 이동) 모드' },
   { key: 'Space', desc: '누르는 동안 화면 이동' },
@@ -28,7 +33,7 @@ const SHORTCUTS: readonly { key: string; desc: string }[] = [
   { key: '0', desc: '화면 맞춤' },
   { key: '드래그', desc: '이동 / 영역 선택' },
   { key: 'Shift', desc: '선택 추가' },
-  { key: 'R', desc: '90° 회전' },
+  { key: 'R', desc: '에어컨: 90° 회전 / 자르기: 라인 15° 회전' },
   { key: '⟳', desc: '회전 핸들 15°' },
   { key: 'Del', desc: '실내기 삭제' },
   { key: 'Esc', desc: '선택 해제' },
@@ -93,6 +98,16 @@ interface ViewerProps {
   onLayerFilterChange?: (f: LayerFilter) => void // 레이어 셀렉트는 뷰어 도구다(상단 툴바 밴드 제거)
   canAddUnit?: boolean // ＋실내기 수동 추가 허용 — 실검출·AI 배치 완료 전에는 비활성
   canPlaceOutdoors?: boolean // ＋실외기 배치 허용 — '실외기 배치' 단계에서만 활성
+  // 실 자르기(V): 검출 단계에서만 허용한다(실_슬라이싱_설계_v1 §D2).
+  canSliceRooms?: boolean
+  onRoomSlice?: (roomId: string, line: SliceLine) => void
+  onSliceUnavailable?: () => void // 허용되지 않는 단계에서 V를 눌렀을 때(App이 안내한다)
+  onZoneResize?: (roomId: string, points: readonly Pt[]) => void // 모서리 리사이즈 커밋(형상 SSOT는 App)
+  // 실 병합(M): 붙어 있는 두 실을 하나로. 자르기와 같은 단계(검출)에서만 쓴다.
+  canMergeRooms?: boolean
+  onRoomsMerge?: (aId: string, bId: string) => void
+  isAdjacent?: (aId: string, bId: string) => boolean // 인접 판정은 도메인이 한다(뷰어는 물어본다)
+  onMergeUnavailable?: () => void
 }
 
 // App 버튼에서 호출하는 명령형 핸들.
@@ -113,6 +128,8 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     outdoorSymbols, onOutdoorsMove, onOutdoorsDelete, onOutdoorsAutoPlace,
     indoorInfo, outdoorGroups, planW, planH, mmPerUnit, layerFilter = 'all', onLayerFilterChange,
     canAddUnit = true, canPlaceOutdoors = false,
+    canSliceRooms = false, onRoomSlice, onSliceUnavailable, onZoneResize,
+    canMergeRooms = false, onRoomsMerge, isAdjacent, onMergeUnavailable,
   }: ViewerProps,
   ref,
 ) {
@@ -144,8 +161,19 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     () => (draft ? indoorSymbols.map((s) => (draft[s.id] ? { ...s, ...draft[s.id] } : s)) : indoorSymbols),
     [indoorSymbols, draft],
   )
-  const [zones, setZones] = useState<ZoneBox[]>(() =>
-    Object.entries(rooms).map(([id, r]) => ({ id, name: r.name, x: r.x, y: r.y, w: r.w, h: r.h })),
+  // 실(존)의 형상은 App(roomGeom)이 소유한다 — 검출·자르기 결과가 그대로 내려오고,
+  // 뷰어의 모서리 리사이즈는 드래그 중에만 로컬 draft로 그린 뒤 마우스를 뗄 때 한 번 올린다.
+  // (실내기 심볼과 같은 controlled 패턴. 뷰어가 형상을 쥐고 있으면 App이 자르는 도형과
+  //  사용자가 보는 도형이 어긋난다.)
+  const [zoneDraft, setZoneDraft] = useState<{ id: string; points: Pt[] } | null>(null)
+  const zones = useMemo<ZoneBox[]>(
+    () =>
+      Object.entries(rooms).map(([id, r]) => ({
+        id,
+        name: r.name,
+        points: zoneDraft && zoneDraft.id === id ? zoneDraft.points : r.points,
+      })),
+    [rooms, zoneDraft],
   )
   const [selUnits, setSelUnits] = useState<Set<string>>(() => new Set())
   // 실외기 심볼도 controlled. 드래그 중에는 oduDraft로 그리고 마우스를 뗄 때 커밋한다.
@@ -155,6 +183,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     [outdoorSymbols, oduDraft],
   )
   const [selOdu, setSelOdu] = useState<string | null>(null)
+  // 자르기(V) 모드: 커서를 지나는 무한 직선. R을 누르면 15°씩 돈다.
+  const [sliceAngle, setSliceAngle] = useState(90) // 기본은 세로선
+  const [sliceCursor, setSliceCursor] = useState<Pt | null>(null)
+  // 병합(M) 모드: 첫 클릭으로 실 하나를 잡고, 두 번째 클릭으로 붙어 있는 실과 합친다.
+  const [mergeFirst, setMergeFirst] = useState<string | null>(null)
+  const [hoverZone, setHoverZone] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [rotatingId, setRotatingId] = useState<string | null>(null)
   const [spaceDown, setSpaceDown] = useState(false)
@@ -181,8 +215,9 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     setDraft(d)
   }
   const oduDraftRef = useRef<{ id: string; x: number; y: number } | null>(null)
-  const cbRef = useRef({ onUnitsMove, onUnitsRotate, onUnitsDelete, onOutdoorsMove, onOutdoorsDelete })
-  cbRef.current = { onUnitsMove, onUnitsRotate, onUnitsDelete, onOutdoorsMove, onOutdoorsDelete }
+  const zoneDraftRef = useRef<{ id: string; points: Pt[] } | null>(null)
+  const cbRef = useRef({ onUnitsMove, onUnitsRotate, onUnitsDelete, onOutdoorsMove, onOutdoorsDelete, onZoneResize })
+  cbRef.current = { onUnitsMove, onUnitsRotate, onUnitsDelete, onOutdoorsMove, onOutdoorsDelete, onZoneResize }
 
   // 실외기 자동 배치: 건물 외부(도면 하단)에 그룹당 하나씩 가로로 나열(폭에 비례 배치).
   // 좌표는 App이 소유하므로 결과를 콜백으로 올린다(재호출 시 기본 배치로 리셋).
@@ -205,8 +240,10 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   }), [placeOutdoorsFn])
 
   // window 리스너(1회 등록)에서 읽는 최신 상태 스냅샷. 렌더 중이 아닌 effect에서 갱신(refs 규칙 준수).
-  const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu })
-  useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu } })
+  // layerFilter도 싣는다 — 숨긴 레이어의 객체를 마퀴로 잡거나 Del로 지울 수 없어야 한다(적대적 QA).
+  const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layerFilter })
+  useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layerFilter } })
+  const layerVisible = (name: LayerFilter, f: LayerFilter): boolean => f === 'all' || f === name
 
   // SVG 화면 폭(px) 추적 — 타일 레벨 선택(화면 해상도 ≒ 타일 해상도)에 사용.
   useEffect(() => {
@@ -308,7 +345,9 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         else if (c.corner === 'tl') { px = Math.min(px, c.ax - GRID); py = Math.min(py, c.ay - GRID); nx = px; ny = py; nw = c.ax - px; nh = c.ay - py }
         else if (c.corner === 'tr') { px = Math.max(px, c.ax + GRID); py = Math.min(py, c.ay - GRID); nx = c.ax; ny = py; nw = px - c.ax; nh = c.ay - py }
         else { px = Math.min(px, c.ax - GRID); py = Math.max(py, c.ay + GRID); nx = px; ny = c.ay; nw = c.ax - px; nh = py - c.ay }
-        setZones((prev) => prev.map((z) => (z.id === c.id ? { ...z, x: nx, y: ny, w: nw, h: nh } : z)))
+        const next = { id: c.id, points: rectPoints(nx, ny, nw, nh) }
+        zoneDraftRef.current = next
+        setZoneDraft(next)
         return
       }
       const r = rotRef.current
@@ -374,7 +413,14 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         if (d) cbRef.current.onOutdoorsMove?.([d])
         return
       }
-      if (cornerRef.current) { cornerRef.current = null; return }
+      if (cornerRef.current) {
+        cornerRef.current = null
+        const zd = zoneDraftRef.current
+        zoneDraftRef.current = null
+        setZoneDraft(null)
+        if (zd) cbRef.current.onZoneResize?.(zd.id, zd.points) // 형상은 App이 소유한다
+        return
+      }
       if (rotRef.current) { rotRef.current = null; setRotatingId(null); commitDraft('rotate'); return }
       if (marqRef.current) {
         const m = marqRef.current
@@ -383,12 +429,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
             const big = rect.w > 3 || rect.h > 3
             const s = st.current
             if (s.mode === 'zone') {
-              if (big) {
-                const hits = s.zones.filter((z) => rectsIntersect(rect, z)).map((z) => z.id)
+              if (big && layerVisible('zone', s.layerFilter)) {
+                const hits = s.zones.filter((z) => zoneHitsRect(rect, z)).map((z) => z.id)
                 onSelectionChange(Array.from(new Set([...(m.additive ? s.selectedIds : []), ...hits])))
               } else if (!m.additive) onSelectionChange([])
             } else if (s.mode === 'cassette') {
-              if (big) {
+              if (big && layerVisible('indoor', s.layerFilter)) {
                 const hits = s.symbols.filter((u) => u.x >= rect.x && u.x <= rect.x + rect.w && u.y >= rect.y && u.y <= rect.y + rect.h).map((u) => u.id)
                 const base = m.additive ? new Set(s.selUnits) : new Set<string>()
                 hits.forEach((id) => base.add(id))
@@ -410,6 +456,46 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
   }, [toSvg, onSelectionChange])
 
+  // 자르기 모드 진입(V). 허용되지 않는 단계면 모드로 들어가지 않고 App이 이유를 알린다.
+  const enterSlice = useCallback(() => {
+    if (!canSliceRooms) { onSliceUnavailable?.(); return }
+    setMode('slice')
+  }, [canSliceRooms, onSliceUnavailable])
+
+  // 병합 모드 진입(M).
+  const enterMerge = useCallback(() => {
+    if (!canMergeRooms) { onMergeUnavailable?.(); return }
+    setMergeFirst(null)
+    setMode('merge')
+  }, [canMergeRooms, onMergeUnavailable])
+
+  // 자르기가 더 이상 허용되지 않는 단계로 넘어가면 모드에서 빠져나온다.
+  // (게이트가 '진입 시점'에만 있으면, 단계를 넘긴 뒤에도 클릭이 실을 자른다 — 적대적 QA)
+  useEffect(() => {
+    if (!canSliceRooms) {
+      setMode((m) => (m === 'slice' ? 'cassette' : m))
+      setSliceCursor(null)
+    }
+  }, [canSliceRooms])
+
+  useEffect(() => {
+    if (!canMergeRooms) {
+      setMode((m) => (m === 'merge' ? 'cassette' : m))
+      setMergeFirst(null)
+    }
+  }, [canMergeRooms])
+
+  // 모드가 바뀌면 프리뷰 커서를 버린다 — 남아 있으면 '강조된 실'과 '잘리는 실'이 달라진다.
+  useEffect(() => {
+    if (mode !== 'slice') setSliceCursor(null)
+    if (mode !== 'merge') { setMergeFirst(null); setHoverZone(null) }
+  }, [mode])
+  // window 키 리스너는 1회만 등록된다 → 최신 함수를 ref로 읽는다(stale closure 방지).
+  const enterSliceRef = useRef(enterSlice)
+  enterSliceRef.current = enterSlice
+  const enterMergeRef = useRef(enterMerge)
+  enterMergeRef.current = enterMerge
+
   // 단축키.
   useEffect(() => {
     const typing = (t: EventTarget | null) => {
@@ -424,8 +510,11 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       else if (k === 'z') setMode('zone')
       else if (k === 'o') setMode('outdoor')
       else if (k === 'h') setMode('pan')
+      else if (k === 'v') enterSliceRef.current()
+      else if (k === 'm') enterMergeRef.current()
       else if (k === '0') setView(FIT)
       else if (k === 'r') {
+        // R은 모드마다 다른 일을 한다. 에어컨: 선택 실내기 90° 회전 / 자르기: 라인 15° 회전.
         if (st.current.mode === 'cassette') {
           e.preventDefault()
           const sel = st.current.selUnits
@@ -435,20 +524,28 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
               .map((s) => ({ id: s.id, rot: norm((Math.floor(s.rot / 90) + 1) * 90) }))
             cbRef.current.onUnitsRotate?.(rots)
           }
+        } else if (st.current.mode === 'slice') {
+          e.preventDefault()
+          setSliceAngle((a) => (a + ROT_STEP) % 180) // 직선은 180°면 제자리로 돌아온다
         }
       } else if (k === 'delete' || k === 'backspace') {
-        if (st.current.mode === 'cassette') {
+        // 숨긴 레이어는 지울 수 없다 — 안 보이는 실내기가 사라지면 대수·조합비가 조용히 틀어진다.
+        if (st.current.mode === 'cassette' && layerVisible('indoor', st.current.layerFilter)) {
           e.preventDefault()
           const sel = st.current.selUnits
           // 심볼 삭제 = 실내기 대수 감소. 선정표·조합비가 즉시 따라온다.
           if (sel.size) { cbRef.current.onUnitsDelete?.(Array.from(sel)); setSelUnits(new Set()) }
-        } else if (st.current.mode === 'outdoor') {
+        } else if (st.current.mode === 'outdoor' && layerVisible('outdoor', st.current.layerFilter)) {
           e.preventDefault()
           const id = st.current.selOdu
           // 실외기 심볼 삭제 = 도면에서 뺀 것. 그룹 자체는 남는다(가드가 '미배치'로 잡는다).
           if (id) { cbRef.current.onOutdoorsDelete?.([id]); setSelOdu(null) }
         }
       } else if (k === 'escape') {
+        // Esc는 '지금 하던 걸 취소한다'는 보편적 계약이다 — 자르기/병합 모드에서 빠져나온다.
+        // (안 그러면 사용자가 취소했다고 믿은 채 클릭해 실을 자른다 — 적대적 QA)
+        setMergeFirst(null)
+        setMode((m) => (m === 'slice' || m === 'merge' ? 'cassette' : m))
         setSelUnits(new Set()); setSelOdu(null); onSelectionChange([]); setToolMenuOpen(false); onEscape?.()
       }
     }
@@ -467,8 +564,42 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const onBgDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (panActive) { startPan(e.clientX, e.clientY); return }
     const p = toSvg(e.clientX, e.clientY); if (!p) return
+    // 자르기 모드에서는 존 레이어가 클릭을 받지 않으므로(pointerEvents none) 여기서 히트 판정한다.
+    // 마퀴보다 먼저 걸러야 한다 — 안 그러면 자르기 클릭이 영역 선택으로 먹힌다.
+    if (mode === 'slice') {
+      if (!layerOn('zone')) return // 숨긴 실은 자를 수 없다(안 보이는 것을 편집하지 않는다)
+      // 격자 ON이면 절단선도 격자에 맞춘다 — 다른 편집(이동·리사이즈)과 같은 약속이다.
+      // 단, 스냅된 점이 실 밖으로 나가면 스냅을 포기한다(그 선은 실을 가르지 못한다).
+      const cx = snapOn ? Math.round(p.x / gridStep) * gridStep : p.x
+      const cy = snapOn ? Math.round(p.y / gridStep) * gridStep : p.y
+      const snapped = zoneOfPoint(cx, cy, zones)
+      const raw = zoneOfPoint(p.x, p.y, zones)
+      if (snapped) onRoomSlice?.(snapped.id, { x: cx, y: cy, angleDeg: sliceAngle })
+      else if (raw) onRoomSlice?.(raw.id, { x: p.x, y: p.y, angleDeg: sliceAngle })
+      return
+    }
+    // 병합 모드: 첫 클릭으로 실을 잡고, 두 번째 클릭으로 '붙어 있는' 실과 합친다.
+    if (mode === 'merge') {
+      if (!layerOn('zone')) return
+      const z = zoneOfPoint(p.x, p.y, zones)
+      if (!z) { setMergeFirst(null); return }
+      if (!mergeFirst) { setMergeFirst(z.id); return }
+      if (z.id === mergeFirst) { setMergeFirst(null); return } // 같은 실을 다시 누르면 선택 해제
+      onRoomsMerge?.(mergeFirst, z.id) // 인접 여부는 App(도메인)이 최종 판정한다
+      setMergeFirst(null)
+      return
+    }
     marqRef.current = { sx: p.x, sy: p.y, additive: e.shiftKey }
     setMarquee({ x: p.x, y: p.y, w: 0, h: 0 })
+  }
+
+  // 자르기 라인 프리뷰: 버튼을 누르지 않은 커서 추적은 window onMove(드래그 전용)가 안 잡는다.
+  const onSvgMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (mode !== 'slice' && mode !== 'merge') return
+    const p = toSvg(e.clientX, e.clientY)
+    if (!p) return
+    if (mode === 'slice') setSliceCursor({ x: p.x, y: p.y })
+    else setHoverZone(zoneOfPoint(p.x, p.y, zones)?.id ?? null)
   }
 
   // 실내기 심볼: 선택 + 이동 시작.
@@ -519,11 +650,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const onCornerDown = (e: React.MouseEvent, id: string, corner: Corner) => {
     e.stopPropagation()
     const z = zones.find((zz) => zz.id === id); if (!z) return
+    const b = zoneBounds(z)
     let ax: number, ay: number // 반대편(고정) 모서리
-    if (corner === 'tl') { ax = z.x + z.w; ay = z.y + z.h }
-    else if (corner === 'tr') { ax = z.x; ay = z.y + z.h }
-    else if (corner === 'bl') { ax = z.x + z.w; ay = z.y }
-    else { ax = z.x; ay = z.y }
+    if (corner === 'tl') { ax = b.x + b.w; ay = b.y + b.h }
+    else if (corner === 'tr') { ax = b.x; ay = b.y + b.h }
+    else if (corner === 'bl') { ax = b.x + b.w; ay = b.y }
+    else { ax = b.x; ay = b.y }
     cornerRef.current = { id, corner, ax, ay }
     onSelectionChange([id])
   }
@@ -569,9 +701,40 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const isCassette = mode === 'cassette'
   const isZone = mode === 'zone'
   const isOutdoor = mode === 'outdoor'
+  const isSlice = mode === 'slice'
+  const isMerge = mode === 'merge'
   // 레이어 필터: 선택된 레이어만 표시(전체면 모두).
   const layerOn = (name: LayerFilter): boolean => layerFilter === 'all' || layerFilter === name
-  const modeLabel = mode === 'cassette' ? '에어컨' : mode === 'zone' ? '존(실)' : mode === 'outdoor' ? '실외기' : '손 (이동)'
+  const MODE_LABEL: Record<Mode, string> = {
+    cassette: '에어컨',
+    zone: '존(실)',
+    outdoor: '실외기',
+    slice: '실 자르기',
+    merge: '실 병합',
+    pan: '손 (이동)',
+  }
+  const modeLabel = MODE_LABEL[mode]
+
+  // 병합 프리뷰: 1차 선택 실은 굵게, 커서 아래 실은 '붙어 있으면' 강조하고 아니면 안 된다고 알린다.
+  const mergePreview = (() => {
+    if (!isMerge) return null
+    const first = mergeFirst ? zones.find((z) => z.id === mergeFirst) ?? null : null
+    const hover = hoverZone && hoverZone !== mergeFirst ? zones.find((z) => z.id === hoverZone) ?? null : null
+    // 첫 실을 고르기 전에는 '붙어 있는지'를 물을 수 없다 — 그냥 커서 아래 실을 강조한다.
+    const adjacent = !first || !hover ? true : (isAdjacent?.(first.id, hover.id) ?? true)
+    return { first, hover, adjacent }
+  })()
+
+  // 자르기 프리뷰: 커서를 지나는 무한 직선(현재 뷰를 가로지르는 길이로 그린다) + 잘릴 실 강조.
+  const slicePreview = (() => {
+    if (!isSlice || !sliceCursor) return null
+    const rad = (sliceAngle * Math.PI) / 180
+    const len = (view.w + view.h) * 2
+    const dx = Math.cos(rad) * len
+    const dy = Math.sin(rad) * len
+    const target = zoneOfPoint(sliceCursor.x, sliceCursor.y, zones)
+    return { x1: sliceCursor.x - dx, y1: sliceCursor.y - dy, x2: sliceCursor.x + dx, y2: sliceCursor.y + dy, target }
+  })()
 
   return (
     <div className="viewer">
@@ -610,10 +773,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
 
       <svg
         ref={svgRef}
-        className={`plansvg${panActive ? ' panmode' : ''}${panning ? ' panning' : ''}`}
+        className={`plansvg${panActive ? ' panmode' : ''}${panning ? ' panning' : ''}${isSlice && !panActive ? ' slicemode' : ''}`}
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
         onMouseDown={onBgDown}
+        onMouseMove={onSvgMove}
+        onMouseLeave={() => isSlice && setSliceCursor(null)}
       >
         <g className="drawing-layer">
           <rect x="0" y="0" width={PLAN_W} height={PLAN_H} fill="#ffffff" stroke="#CFCFCF" />
@@ -633,11 +798,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
           )}
         </g>
 
-        {/* 실(존) 레이어 */}
-        <g style={{ pointerEvents: isZone ? 'auto' : 'none', opacity: isZone ? 1 : 0.85, display: layerOn('zone') ? undefined : 'none' }}>
+        {/* 실(존) 레이어 — 자르기 모드에서도 또렷하게 보여야 무엇을 자르는지 안다.
+            단 클릭은 받지 않는다(배경 핸들러가 히트 판정해 자른다). */}
+        <g style={{ pointerEvents: isZone ? 'auto' : 'none', opacity: isZone || isSlice || isMerge ? 1 : 0.85, display: layerOn('zone') ? undefined : 'none' }}>
           {zones.map((z) => {
-            // 면적(㎡): 실도면이면 존 기하로 실시간 계산(리사이즈 반영), 목업이면 설계 면적.
-            const a = zoneAreaM2(z, mmPerUnit, rooms[z.id]?.area)
+            // 면적(㎡)은 도메인 값이다 — 화면·선정표·산출 도면이 같은 숫자를 말해야 한다.
+            const a = zoneAreaM2(rooms[z.id]?.area)
             return (
               <ZoneRect
                 key={z.id} z={z} editing={isZone && selectedIds.includes(z.id)} selected={selectedIds.includes(z.id)}
@@ -677,7 +843,61 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         {marquee && (marquee.w > 0 || marquee.h > 0) && (
           <rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} fill="rgba(34,34,34,0.06)" stroke="#333333" strokeWidth={1} strokeDasharray="4 3" />
         )}
+
+        {/* 병합 프리뷰: 1차 선택 실(굵은 테두리) + 커서 아래 실(붙어 있으면 채움, 아니면 점선) */}
+        {mergePreview && (
+          <g style={{ pointerEvents: 'none' }} data-testid="merge-preview">
+            {mergePreview.first && (
+              <polygon
+                points={mergePreview.first.points.map((p) => `${p.x},${p.y}`).join(' ')}
+                fill="#222222" fillOpacity={0.12} stroke="#222222" strokeWidth={2} vectorEffect="non-scaling-stroke"
+              />
+            )}
+            {mergePreview.hover && (
+              <polygon
+                points={mergePreview.hover.points.map((p) => `${p.x},${p.y}`).join(' ')}
+                fill={mergePreview.adjacent ? '#222222' : 'none'}
+                fillOpacity={mergePreview.adjacent ? 0.08 : 0}
+                stroke={mergePreview.adjacent ? '#222222' : '#999999'}
+                strokeWidth={1.5}
+                strokeDasharray={mergePreview.adjacent ? undefined : '5 4'}
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+          </g>
+        )}
+
+        {/* 자르기 라인 — 마우스 포인터를 대신한다(커서는 CSS에서 숨긴다) */}
+        {slicePreview && (
+          <g style={{ pointerEvents: 'none' }} data-testid="slice-preview">
+            {slicePreview.target && (
+              <polygon
+                points={slicePreview.target.points.map((p) => `${p.x},${p.y}`).join(' ')}
+                fill="#222222" fillOpacity={0.08} stroke="#222222" strokeWidth={1.5} vectorEffect="non-scaling-stroke"
+              />
+            )}
+            <line
+              x1={slicePreview.x1} y1={slicePreview.y1} x2={slicePreview.x2} y2={slicePreview.y2}
+              stroke="#222222" strokeWidth={1.5} strokeDasharray="6 4" vectorEffect="non-scaling-stroke"
+            />
+            <circle cx={sliceCursor!.x} cy={sliceCursor!.y} r={3} fill="#222222" vectorEffect="non-scaling-stroke" />
+          </g>
+        )}
       </svg>
+
+      {/* 자르기 모드 안내 — 각도를 숫자로 보여준다(R로 15°씩) */}
+      {isSlice && (
+        <div className="slicehud">실 자르기 · {sliceAngle}° <kbd>R</kbd> 15° 회전 · 실을 클릭하면 잘립니다</div>
+      )}
+      {/* 병합 모드 안내 */}
+      {isMerge && (
+        <div className="slicehud">
+          {mergePreview?.first
+            ? `실 병합 · ${mergePreview.first.name} + ? · 붙어 있는 실을 클릭하세요`
+            : '실 병합 · 합칠 두 실을 차례로 클릭하세요'}
+          {mergePreview?.first && mergePreview?.hover && !mergePreview.adjacent && <span> · 붙어 있지 않습니다</span>}
+        </div>
+      )}
 
       {/* 하단 중앙 Figma식 도구바 */}
       <div className="figbar">
@@ -692,6 +912,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
             </button>
             <button className={`figitem${isZone ? ' active' : ''}`} onClick={() => { setMode('zone'); setToolMenuOpen(false) }}>
               <span className="tt"><b>존 (실)</b><span>선택 · 모서리 리사이즈</span></span><span className="kk">Z</span>
+            </button>
+            <button className={`figitem${isSlice ? ' active' : ''}`} onClick={() => { enterSlice(); setToolMenuOpen(false) }}>
+              <span className="tt"><b>실 자르기</b><span>클릭으로 절단 · R 15° 회전</span></span><span className="kk">V</span>
+            </button>
+            <button className={`figitem${isMerge ? ' active' : ''}`} onClick={() => { enterMerge(); setToolMenuOpen(false) }}>
+              <span className="tt"><b>실 병합</b><span>붙어 있는 두 실을 클릭</span></span><span className="kk">M</span>
             </button>
             <button className={`figitem${isOutdoor ? ' active' : ''}`} onClick={() => { setMode('outdoor'); setToolMenuOpen(false) }}>
               <span className="tt"><b>실외기</b><span>선택 · 이동 · 삭제</span></span><span className="kk">O</span>

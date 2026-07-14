@@ -43,7 +43,7 @@ export default function DetectPanel({ rooms, facility }: DetectPanelProps) {
         <div key={id} className="selrow">
           <span className="selrow-main">
             <span className="selrow-top">{id} <span style={{ color: '#999' }}>· {rooms[id].name}</span></span>
-            <span className="selrow-idu">{rooms[id].area.toFixed(1)}㎡ · {rooms[id].cool}kW</span>
+            <span className="selrow-idu">{rooms[id].area.toFixed(1)}㎡ · {rooms[id].cool.toFixed(1)}kW</span>
           </span>
           <span className="rt">{rooms[id].usage}</span>
         </div>

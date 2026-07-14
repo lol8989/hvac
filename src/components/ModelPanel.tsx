@@ -153,7 +153,7 @@ export default function ModelPanel({
         {sel ? (
           <>
             <span>{primary} ({sel.name}){extra > 0 ? ` 외 ${extra}실` : ''}</span>
-            <span>{sel.type} · {sel.cool}kW · {sel.area.toFixed(2)}㎡</span>
+            <span>{sel.type} · {sel.cool.toFixed(1)}kW · {sel.area.toFixed(2)}㎡</span>
           </>
         ) : (
           <span style={{ color: '#999' }}>선택된 실 없음</span>
@@ -255,7 +255,7 @@ export default function ModelPanel({
               title="클릭하여 이 실을 대표로"
             >
               <span className="selrow-main">
-                <span className="selrow-top">{id} <span style={{ color: '#999' }}>· {rooms[id].cool}kW</span></span>
+                <span className="selrow-top">{id} <span style={{ color: '#999' }}>· {rooms[id].cool.toFixed(1)}kW</span></span>
                 <span className={'selrow-idu' + (model ? '' : ' rec')}>
                   {model ? `${aiRooms.has(id) ? 'AI' : '실내기'} ${model}` : '미지정'}
                 </span>

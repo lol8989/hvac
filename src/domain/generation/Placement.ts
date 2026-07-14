@@ -84,11 +84,14 @@ export class Placement {
   }
 
   // AI 재선정 — 사용자 오버라이드(수정 셀)는 보존한다.
-  // 오버라이드가 있으면 좌표도 사용자가 놓은 그대로 둔다(aiPositions 무시).
+  // 좌표도 지킨다: 오버라이드가 있거나 **대수가 그대로면** 사용자가 도면에서 놓은 자리를 유지한다.
+  // (적대적 QA 2026-07-14: 실명 하나를 고쳤을 뿐인데 무관한 실의 실내기가 격자 중심으로
+  //  되돌아갔다. 좌표는 '실외기 배치' 단계에서 산출물에 실리는 값이다 — 함부로 재배치하지 않는다.)
   withAiSelection(sel: IndoorSelection, aiPositions: readonly UnitPosition[]): Placement {
     const valid = validSelection(sel)
     const next = withAi(this.selection, valid)
-    return new Placement(this.roomId, next, this.isOverridden ? this.positions : aiPositions)
+    const keep = this.isOverridden || effective(next).quantity === this.positions.length
+    return new Placement(this.roomId, next, keep ? this.positions : aiPositions)
   }
 
   // 사용자 조정 (오버라이드 설정). 대수가 바뀌면 좌표도 함께 준다.

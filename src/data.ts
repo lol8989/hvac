@@ -2,7 +2,16 @@
 
 import type { Principal } from './domain/auth/Permission'
 import type { EnergySourceCode } from './domain/shared/EnergySource'
+import type { Pt } from './domain/shared/Polygon'
 import { lookupUnitLoadKcal, type FacilityType } from './domain/shared/unitLoadTable'
+
+// 사각형 실의 정점(좌상 → 우상 → 우하 → 좌하).
+const rect = (x: number, y: number, w: number, h: number): Pt[] => [
+  { x, y },
+  { x: x + w, y },
+  { x: x + w, y: y + h },
+  { x, y: y + h },
+]
 
 export interface Room {
   name: string
@@ -10,17 +19,16 @@ export interface Room {
   usage: string // 용도 (단위부하 조회 키)
   area: number
   // 실측 폭·길이(m). 실내기 타입 결정(짧은 폭 경계)과 확산범위 대수 계산이 요구한다.
-  // 목업 도면은 SVG 픽셀만 가지므로 면적과 정합되게 환산한다(scale = √(area / (w·h))).
+  // 목업 도면은 SVG 픽셀만 가지므로 면적과 정합되게 환산한다(scale = √(area / 폴리곤넓이)).
   shortSideM: number
   longSideM: number
   corridor?: boolean // 복도는 '4kW 이상 4WAY 기본' 규칙에서 제외된다
   type: string
   cool: number
   sys: EnergySourceCode
-  x: number
-  y: number
-  w: number
-  h: number
+  // 도면 위 형상(정점 배열). 사각형은 정점 4개짜리 특수 케이스다 —
+  // V(자르기) 도구로 사선 절단하면 조각은 사각형이 아니다.
+  points: readonly Pt[]
 }
 
 // 부하 = 면적 × 시설군·용도별 단위부하 × 1.163. kW, 0.1 단위 반올림.
@@ -56,13 +64,19 @@ export const ACTIVE_MENU = '생성'
 export const DEFAULT_FACILITY: FacilityType = 'OFFICE'
 
 // cool은 하드코딩이 아닌 산식 파생값(프로젝트 기본 시설군 기준). 사용자가 시설군을 바꾸면 도메인 Room이 다시 계산한다.
+//
+// 배치는 **빈틈없는 인접 파티션**이다(건물 외곽 24~696 × 24~346).
+// 실 병합(M)은 변을 공유하는 실끼리만 성립하므로, 실이 떨어져 있으면 병합 자체가 불가능하다.
+// 픽셀 넓이를 실제 면적(㎡)에 비례시켜(≈1151 px²/㎡) 도면이 자연스럽게 보이게 한다.
+//   상단(y 24~159): 거실 | 침실1 | 회의실
+//   하단(y 159~346): 사무실 | 로비 | 탕비실
 export const ROOMS: Record<string, Room> = {
-  AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 31.89, type: '4WAY', cool: roomCoolKw(31.89, DEFAULT_FACILITY, '거실'), ...sidesM(31.89, 250, 150), sys: 'EHP', x: 24, y: 24, w: 250, h: 150 },
-  AC_002: { name: '침실1', floor: '지상1층', usage: '침실', area: 18.5, type: '1WAY', cool: roomCoolKw(18.5, DEFAULT_FACILITY, '침실'), ...sidesM(18.5, 180, 110), sys: 'EHP', x: 292, y: 24, w: 180, h: 110 },
-  AC_003: { name: '회의실', floor: '지상1층', usage: '회의실', area: 28.5, type: '4WAY', cool: roomCoolKw(28.5, DEFAULT_FACILITY, '회의실'), ...sidesM(28.5, 206, 150), sys: 'EHP', x: 490, y: 24, w: 206, h: 150 },
-  AC_004: { name: '사무실', floor: '지상1층', usage: '사무실', area: 42.0, type: '4WAY', cool: roomCoolKw(42.0, DEFAULT_FACILITY, '사무실'), ...sidesM(42.0, 250, 150), sys: 'EHP', x: 24, y: 196, w: 250, h: 150 },
-  AC_005: { name: '로비', floor: '지상1층', usage: '로비', area: 55.0, type: '4WAY', cool: roomCoolKw(55.0, DEFAULT_FACILITY, '로비'), ...sidesM(55.0, 180, 194), sys: 'EHP', x: 292, y: 152, w: 180, h: 194 },
-  AC_006: { name: '탕비실', floor: '지상1층', usage: '탕비실', area: 12.0, type: '1WAY', cool: roomCoolKw(12.0, DEFAULT_FACILITY, '탕비실'), ...sidesM(12.0, 206, 150), sys: 'EHP', x: 490, y: 196, w: 206, h: 150 },
+  AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 31.89, type: '4WAY', cool: roomCoolKw(31.89, DEFAULT_FACILITY, '거실'), ...sidesM(31.89, 272, 135), sys: 'EHP', points: rect(24, 24, 272, 135) },
+  AC_002: { name: '침실1', floor: '지상1층', usage: '침실', area: 18.5, type: '1WAY', cool: roomCoolKw(18.5, DEFAULT_FACILITY, '침실'), ...sidesM(18.5, 158, 135), sys: 'EHP', points: rect(296, 24, 158, 135) },
+  AC_003: { name: '회의실', floor: '지상1층', usage: '회의실', area: 28.5, type: '4WAY', cool: roomCoolKw(28.5, DEFAULT_FACILITY, '회의실'), ...sidesM(28.5, 242, 135), sys: 'EHP', points: rect(454, 24, 242, 135) },
+  AC_004: { name: '사무실', floor: '지상1층', usage: '사무실', area: 42.0, type: '4WAY', cool: roomCoolKw(42.0, DEFAULT_FACILITY, '사무실'), ...sidesM(42.0, 259, 187), sys: 'EHP', points: rect(24, 159, 259, 187) },
+  AC_005: { name: '로비', floor: '지상1층', usage: '로비', area: 55.0, type: '4WAY', cool: roomCoolKw(55.0, DEFAULT_FACILITY, '로비'), ...sidesM(55.0, 339, 187), sys: 'EHP', points: rect(283, 159, 339, 187) },
+  AC_006: { name: '탕비실', floor: '지상1층', usage: '탕비실', area: 12.0, type: '1WAY', cool: roomCoolKw(12.0, DEFAULT_FACILITY, '탕비실'), ...sidesM(12.0, 74, 187), sys: 'EHP', points: rect(622, 159, 74, 187) },
 }
 
 // 실외기 그룹은 상수가 아니다 — 실내기 배치가 끝난 뒤 정격 총용량으로 선정한다

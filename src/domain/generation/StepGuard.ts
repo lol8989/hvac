@@ -29,6 +29,8 @@ export type GuardCode =
   | 'REGRESS_INVALIDATES'
   | 'REDETECT'
   | 'FACILITY_CHANGE'
+  | 'ROOM_SLICE'
+  | 'ROOM_MERGE'
 
 export type GuardVerdict =
   | { kind: 'ALLOW' }
@@ -181,11 +183,34 @@ export const guardRegress = (from: StepId, to: StepId, c: GuardContext): GuardVe
   )
 }
 
-export type DestructiveAction = 'REDETECT' | 'FACILITY_CHANGE'
+export type DestructiveAction = 'REDETECT' | 'FACILITY_CHANGE' | 'ROOM_SLICE' | 'ROOM_MERGE'
 
 // 되돌리기 어려운 액션: 실행 전에 무엇을 잃는지 알린다.
 export const guardDestructive = (action: DestructiveAction, c: GuardContext): GuardVerdict => {
   switch (action) {
+    // 실을 합치면 실 2곳이 1곳이 된다 → 심볼은 그대로 남지만, 두 실이 서로 다른 실외기에
+    // 붙어 있었다면 한 실이 두 그룹에 걸리게 되므로(실 응집 불변식) 배정을 풀어야 한다.
+    case 'ROOM_MERGE':
+      return c.placedRoomCount === 0 && c.activeGroupCount === 0
+        ? ALLOW
+        : confirm(
+            'ROOM_MERGE',
+            '실을 합칩니다',
+            '실 2곳이 1곳이 되어 실내기가 한 실의 대수로 합쳐집니다.',
+            '합친 실은 실외기 배정이 풀려 미배정으로 돌아갑니다. 용도가 다르면 부하도 다시 계산됩니다.',
+          )
+
+    // 실을 자르면 실 1곳이 2곳이 된다 → 실내기는 심볼 위치대로 나뉘고, 실외기 조합은 다시 배정해야 한다.
+    case 'ROOM_SLICE':
+      return c.placedRoomCount === 0 && c.activeGroupCount === 0
+        ? ALLOW // 아직 하류가 없다 — 검출 결과를 다듬는 중이다
+        : confirm(
+            'ROOM_SLICE',
+            '실을 자릅니다',
+            '실 1곳이 2곳이 되어 실내기 대수가 심볼 위치대로 다시 나뉩니다.',
+            '잘린 실은 실외기 배정이 풀려 미배정으로 돌아갑니다(조합을 다시 확인해야 합니다).',
+          )
+
     case 'REDETECT':
       return c.placedRoomCount === 0
         ? ALLOW // 잃을 배치가 없다

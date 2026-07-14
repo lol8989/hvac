@@ -177,6 +177,10 @@ button{font-family:inherit;cursor:pointer;}
 .plansvg{position:absolute;inset:0;width:100%;height:100%;display:block;background:#F7F7F8;touch-action:none;overscroll-behavior:contain;-webkit-user-select:none;user-select:none;}
 .plansvg.panmode,.plansvg.panmode *{cursor:grab;}
 .plansvg.panning,.plansvg.panning *{cursor:grabbing;}
+/* 자르기(V): 포인터 대신 라인이 커서다 — 자식(ZoneRect의 인라인 cursor)까지 덮어야 한다 */
+.plansvg.slicemode,.plansvg.slicemode *{cursor:none;}
+.slicehud{position:absolute;bottom:74px;left:50%;transform:translateX(-50%);z-index:31;background:rgba(38,38,38,0.94);color:#fff;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;display:flex;align-items:center;gap:6px;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,0.28);}
+.slicehud kbd{background:rgba(255,255,255,0.16);border-radius:4px;padding:1px 5px;font-family:Consolas,monospace;font-size:11px;}
 
 /* 뷰어 우상단 플로팅 위젯 (단축키 힌트) — 무채색 */
 .vwidget{position:absolute;top:12px;right:12px;width:236px;z-index:20;background:rgba(255,255,255,0.97);border:1px solid var(--line);border-radius:9px;box-shadow:0 4px 14px rgba(0,0,0,0.10);overflow:hidden;}

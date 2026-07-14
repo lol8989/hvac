@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { buildDrawingSvg } from './drawingSvg'
 import type { DrawingInput } from './drawingSvg'
 import type { Room } from '../../data'
+import { rectPoints } from '../../components/viewer/geometry'
 
-const room = (name: string, x: number, y: number): Room => ({ name, floor: '지상1층', usage: '거실', area: 20, type: '4WAY', cool: 9.0, shortSideM: 3.5, longSideM: 5.8, sys: 'EHP', x, y, w: 200, h: 120 })
+const room = (name: string, x: number, y: number): Room => ({ name, floor: '지상1층', usage: '거실', area: 20, type: '4WAY', cool: 9.0, shortSideM: 3.5, longSideM: 5.8, sys: 'EHP', points: rectPoints(x, y, 200, 120) })
 const ROOMS_FX: Record<string, Room> = {
   AC_001: room('거실', 24, 24),
   AC_002: room('침실', 260, 24),
@@ -79,11 +80,27 @@ describe('buildDrawingSvg (도면 좌표 → 독립 SVG 도면)', () => {
     expect(svg).not.toContain('실외기-2')
   })
 
+  const viewBox = (svg: string) => {
+    const m = /viewBox="(-?\d+) (-?\d+) (\d+) (\d+)"/.exec(svg)!
+    const [x, y, w, h] = m.slice(1).map(Number)
+    return { x, y, w, h, right: x + w, bottom: y + h }
+  }
+
   it('실외기가 도면 밖(아래)에 있어도 viewBox가 그것을 담는다', () => {
     const svg = buildDrawingSvg(input({ groups: GROUPS_FX, outdoorPositions: { ODU1: { x: 500, y: 900 } } }))
-    const vb = /viewBox="0 0 (\d+) (\d+)"/.exec(svg)!
-    expect(Number(vb[1])).toBeGreaterThan(500)
-    expect(Number(vb[2])).toBeGreaterThan(900)
+    const vb = viewBox(svg)
+    expect(vb.right).toBeGreaterThan(500)
+    expect(vb.bottom).toBeGreaterThan(900)
+  })
+
+  // 건물 왼쪽·위쪽에 실외기를 놓는 것은 자연스러운 배치다.
+  // viewBox가 '0 0 W H'로 고정이면 그 심벌이 산출 도면에서 통째로 사라진다(적대적 QA).
+  it('실외기가 도면 왼쪽·위쪽(음수 좌표)에 있어도 viewBox가 그것을 담는다', () => {
+    const svg = buildDrawingSvg(input({ groups: GROUPS_FX, outdoorPositions: { ODU1: { x: -200, y: -80 } } }))
+    const vb = viewBox(svg)
+    expect(vb.x).toBeLessThan(-200 - 60) // 본체 폭(120)의 절반까지 담는다
+    expect(vb.y).toBeLessThan(-80 - 22)
+    expect(svg).toContain('실외기-1')
   })
 
   it('XML 특수문자를 이스케이프한다', () => {

@@ -6,10 +6,11 @@ import { useState } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import Viewer, { type UnitMove } from './Viewer'
 import type { UnitSym } from './viewer/geometry'
+import { rectPoints } from './viewer/geometry'
 import type { Room } from '../data'
 
 const ROOMS_FX: Record<string, Room> = {
-  AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 31.89, type: '4WAY', cool: 11.2, shortSideM: 4.37, longSideM: 7.29, sys: 'EHP', x: 24, y: 24, w: 680, h: 420 },
+  AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 31.89, type: '4WAY', cool: 11.2, shortSideM: 4.37, longSideM: 7.29, sys: 'EHP', points: rectPoints(24, 24, 680, 420) },
 }
 
 // 실 AC_001에 실내기 2대(같은 실, 다른 대수 번호)
@@ -64,8 +65,8 @@ describe('Viewer 선택 동기화', () => {
   it('실내기를 드래그해 다른 실로 옮기면 옮겨진 실이 하이라이팅(선택)된다', () => {
     // 좌우로 나란한 두 실.
     const rooms: Record<string, Room> = {
-      AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 20, type: '4WAY', cool: 9, shortSideM: 4.5, longSideM: 4.5, sys: 'EHP', x: 0, y: 0, w: 200, h: 200 },
-      AC_002: { name: '침실', floor: '지상1층', usage: '침실', area: 20, type: '4WAY', cool: 5.6, shortSideM: 4.5, longSideM: 4.5, sys: 'EHP', x: 300, y: 0, w: 200, h: 200 },
+      AC_001: { name: '거실', floor: '지상1층', usage: '거실', area: 20, type: '4WAY', cool: 9, shortSideM: 4.5, longSideM: 4.5, sys: 'EHP', points: rectPoints(0, 0, 200, 200) },
+      AC_002: { name: '침실', floor: '지상1층', usage: '침실', area: 20, type: '4WAY', cool: 5.6, shortSideM: 4.5, longSideM: 4.5, sys: 'EHP', points: rectPoints(300, 0, 200, 200) },
     }
     // 부모가 커밋 결과를 다시 내려주는 controlled 흐름을 흉내낸다.
     const Two = () => {
@@ -124,5 +125,135 @@ describe('Viewer 실내기 편집 커밋 (도면 심볼 = 대수)', () => {
   it('실내기가 없는 실이면 심볼도 없다(빈 배열 렌더)', () => {
     const { container } = render(<Harness symbols={[]} />)
     expect(container.querySelector('[data-unit-id^="AC_001"]')).toBeNull()
+  })
+})
+
+// 실은 마운트 이후에 생긴다 — 검출은 뷰어가 뜬 뒤에 실행된다.
+// 존을 마운트 시점 rooms로만 초기화하면 검출된 실이 도면에 영원히 안 그려진다.
+describe('Viewer 실(존) 동기화', () => {
+  function ZoneHarness() {
+    const [rooms, setRooms] = useState<Record<string, Room>>({})
+    return (
+      <>
+        <button data-testid="detect" onClick={() => setRooms(ROOMS_FX)}>검출</button>
+        <Viewer rooms={rooms} selectedIds={[]} onSelectionChange={() => {}} indoorSymbols={[]} outdoorSymbols={[]} />
+      </>
+    )
+  }
+
+  it('마운트 후 rooms가 채워지면 실이 도면에 그려진다', () => {
+    render(<ZoneHarness />)
+    expect(screen.queryByText('거실')).toBeNull() // 검출 전
+
+    fireEvent.click(screen.getByTestId('detect'))
+    expect(screen.getByText('거실')).toBeInTheDocument() // 검출 후 존 라벨
+  })
+
+  it('rooms가 비워지면(재검출 초기화) 실도 사라진다', () => {
+    const { rerender } = render(
+      <Viewer rooms={ROOMS_FX} selectedIds={[]} onSelectionChange={() => {}} indoorSymbols={[]} outdoorSymbols={[]} />,
+    )
+    expect(screen.getByText('거실')).toBeInTheDocument()
+
+    rerender(<Viewer rooms={{}} selectedIds={[]} onSelectionChange={() => {}} indoorSymbols={[]} outdoorSymbols={[]} />)
+    expect(screen.queryByText('거실')).toBeNull()
+  })
+})
+
+// V(실 자르기): 포인터 대신 라인이 커서가 되고, 실을 클릭하면 그 위치·각도로 잘린다.
+describe('Viewer 실 자르기(V)', () => {
+  const sliceHarness = (over: Partial<React.ComponentProps<typeof Viewer>> = {}) =>
+    render(
+      <Viewer
+        rooms={ROOMS_FX}
+        selectedIds={[]}
+        onSelectionChange={() => {}}
+        indoorSymbols={[]}
+        outdoorSymbols={[]}
+        canSliceRooms
+        {...over}
+      />,
+    )
+
+  it('V를 누르면 도구바가 실 자르기로 바뀐다', () => {
+    sliceHarness()
+    fireEvent.keyDown(window, { key: 'v' })
+    expect(screen.getByText('실 자르기')).toBeInTheDocument()
+  })
+
+  it('하단 플로팅 메뉴에도 실 자르기 도구가 있다', () => {
+    sliceHarness()
+    fireEvent.click(screen.getByTitle('도구 선택'))
+    const item = screen.getByRole('button', { name: /실 자르기/ })
+    fireEvent.click(item)
+    expect(screen.getByText(/실 자르기 · 90°/)).toBeInTheDocument() // 자르기 HUD
+  })
+
+  it('R을 누르면 라인이 15°씩 회전한다', () => {
+    const { container } = sliceHarness()
+    const hud = () => container.querySelector('.slicehud')!.textContent
+    fireEvent.keyDown(window, { key: 'v' })
+    expect(hud()).toContain('90°')
+
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(hud()).toContain('105°')
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(hud()).toContain('120°')
+  })
+
+  it('180°를 넘으면 0°로 돌아온다(직선은 180°가 제자리)', () => {
+    sliceHarness()
+    fireEvent.keyDown(window, { key: 'v' })
+    for (let i = 0; i < 6; i++) fireEvent.keyDown(window, { key: 'r' }) // 90 + 90
+    expect(screen.getByText(/실 자르기 · 0°/)).toBeInTheDocument()
+  })
+
+  // R은 모드마다 다른 일을 한다 — 에어컨 모드의 90° 회전이 죽으면 안 된다.
+  it('[회귀] 에어컨 모드의 R은 여전히 선택 실내기를 90° 회전시킨다', () => {
+    const onUnitsRotate = vi.fn()
+    const { container } = sliceHarness({ indoorSymbols: TWO_UNITS, onUnitsRotate })
+
+    fireEvent.mouseDown(container.querySelector('[data-unit-id="AC_001#1"] > g')!)
+    fireEvent.keyDown(window, { key: 'r' })
+
+    expect(onUnitsRotate).toHaveBeenCalledWith([{ id: 'AC_001#1', rot: 90 }])
+  })
+
+  it('실을 클릭하면 그 좌표와 각도로 onRoomSlice를 부른다', () => {
+    const onRoomSlice = vi.fn()
+    const { container } = sliceHarness({ onRoomSlice })
+    fireEvent.keyDown(window, { key: 'v' })
+
+    fireEvent.mouseDown(container.querySelector('.plansvg')!, { clientX: 100, clientY: 100 })
+
+    expect(onRoomSlice).toHaveBeenCalledTimes(1)
+    const [roomId, line] = onRoomSlice.mock.calls[0]
+    expect(roomId).toBe('AC_001')
+    expect(line.angleDeg).toBe(90)
+  })
+
+  // 자르기 클릭이 영역 선택(마퀴)으로 먹히면 안 된다.
+  it('자르기 모드에서는 배경 드래그가 마퀴 선택을 시작하지 않는다', () => {
+    const onSelectionChange = vi.fn()
+    const { container } = sliceHarness({ onSelectionChange })
+    fireEvent.keyDown(window, { key: 'v' })
+
+    const svg = container.querySelector('.plansvg')!
+    fireEvent.mouseDown(svg, { clientX: 900, clientY: 900 }) // 실 밖
+    fireEvent.mouseMove(window, { clientX: 950, clientY: 950 })
+    fireEvent.mouseUp(window)
+
+    expect(container.querySelector('[stroke-dasharray="4 3"]')).toBeNull() // 마퀴 사각형 없음
+    expect(onSelectionChange).not.toHaveBeenCalled()
+  })
+
+  it('자르기가 허용되지 않는 단계면 모드로 들어가지 않고 이유를 알린다', () => {
+    const onSliceUnavailable = vi.fn()
+    sliceHarness({ canSliceRooms: false, onSliceUnavailable })
+
+    fireEvent.keyDown(window, { key: 'v' })
+
+    expect(onSliceUnavailable).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('실 자르기')).toBeNull() // 도구바는 그대로
   })
 })

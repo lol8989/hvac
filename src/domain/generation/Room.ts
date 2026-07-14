@@ -108,6 +108,14 @@ export class Room {
     return new Room(this.id, this.floor, this.name, areaM2, this.usage, this.shortSideM, this.longSideM, this.facility, this.intensity, this.unitLoad)
   }
 
+  // 도면에서 실 형상이 바뀌었다(리사이즈) → 면적과 변 길이가 함께 바뀐다.
+  // withArea만 쓰면 치수가 옛 형상으로 남아 실내기 타입(4WAY/2WAY 폭 경계)이 낡은 값으로 나온다.
+  withShape(areaM2: number, shortSideM: number, longSideM: number): Room {
+    const short = Math.min(shortSideM, longSideM)
+    const long = Math.max(shortSideM, longSideM)
+    return new Room(this.id, this.floor, this.name, areaM2, this.usage, short, long, this.facility, this.intensity, this.unitLoad)
+  }
+
   // 용도 변경 → AI 단위부하를 새 용도 기본값으로 갱신, user 오버라이드는 보존(withAi)
   withUsage(usage: string): Room {
     const next = withAi(this.unitLoad, unitLoadForUsage(this.facility, usage, this.intensity))

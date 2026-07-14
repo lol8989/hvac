@@ -174,6 +174,19 @@ describe('guardDestructive — 되돌리기 어려운 액션', () => {
     expect(v.kind).toBe('ALLOW')
   })
 
+  it('배치가 없으면 실을 자르는 데 확인이 필요 없다', () => {
+    expect(guardDestructive('ROOM_SLICE', ctx({ roomCount: 6 })).kind).toBe('ALLOW')
+  })
+
+  it('실내기가 배치된 실을 자르면 대수가 다시 나뉜다고 확인을 받는다', () => {
+    const v = guardDestructive('ROOM_SLICE', healthy())
+    expect(v.kind).toBe('CONFIRM')
+    if (v.kind === 'CONFIRM') {
+      expect(v.code).toBe('ROOM_SLICE')
+      expect(v.reason).toContain('대수')
+    }
+  })
+
   it('검출 후 시설군을 바꾸면 부하가 다시 계산된다고 확인을 받는다', () => {
     const v = guardDestructive('FACILITY_CHANGE', healthy())
     expect(v.kind).toBe('CONFIRM')

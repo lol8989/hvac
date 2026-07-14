@@ -30,12 +30,13 @@ describe('App — 조합 리포트 초기 상태 (NEXT #2·#3)', () => {
     const { container } = render(<App />)
 
     // 검출: 부하가 채워지되, 실내기 미설치라 미배정/배정은 아직 0.
-    fireEvent.click(screen.getByRole('button', { name: '실 검출 실행 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '✦ 실 검출 실행' }))
     expect(reportText(container)).not.toContain('총 부하 0.0 kW')
     expect(reportText(container)).toContain('실내기 배정 0/6')
     expect(reportText(container)).toContain('미배정 0')
 
     // 배치: 실내기 설치 → 전 실이 미배정 풀로 편입(미배정 6).
+    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
     fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
     expect(reportText(container)).toContain('미배정 6')
     expect(reportText(container)).toContain('실내기 배정 0/6')
@@ -58,7 +59,8 @@ describe('App — 조합 리포트 초기 상태 (NEXT #2·#3)', () => {
     const run = (facility: string) => {
       const { container, unmount } = render(<App />)
       fireEvent.change(screen.getByLabelText('시설군'), { target: { value: facility } })
-      fireEvent.click(screen.getByRole('button', { name: '실 검출 실행 →' }))
+      fireEvent.click(screen.getByRole('button', { name: '✦ 실 검출 실행' }))
+      fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
       fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
       fireEvent.click(screen.getByRole('button', { name: '실외기 선정 →' }))
       const t = reportText(container)

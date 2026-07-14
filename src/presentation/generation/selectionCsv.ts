@@ -30,7 +30,8 @@ const dataRow = (r: SelectionRow, floorLabel: string): (string | number)[] => {
   return [
     floorLabel,
     r.roomName,
-    r.areaM2,
+    // 자른 실의 면적은 비율 계산 결과라 15자리 부동소수가 나온다 — 엑셀 양식은 소수 1자리다.
+    w(r.areaM2),
     r.unitLoad.coolKcal,
     r.unitLoad.heatKcal,
     w(r.unitLoad.coolW),

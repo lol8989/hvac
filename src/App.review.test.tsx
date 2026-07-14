@@ -23,8 +23,12 @@ afterEach(() => vi.unstubAllGlobals())
 
 // 검출 → 실내기 배치 → 실외기 선정·조합 단계까지.
 // 순서 근거: 실내기를 다 배치해야 정격이 확정되고, 그래야 실외기를 고를 수 있다.
+const progressToPlace = () => {
+  fireEvent.click(screen.getByRole('button', { name: '✦ 실 검출 실행' }))
+  fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+}
 const progressToCombine = () => {
-  fireEvent.click(screen.getByRole('button', { name: '실 검출 실행 →' }))
+  progressToPlace()
   fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
   fireEvent.click(screen.getByRole('button', { name: '실외기 선정 →' }))
 }
@@ -36,10 +40,39 @@ const progressToOutput = () => {
   fireEvent.click(screen.getByRole('button', { name: '산출물로 →' }))
 }
 
+describe('App — 실 검출 단계', () => {
+  // 검출은 그 자체로 결과를 확인하는 단계다. 실행하자마자 다음 단계로 넘어가 버리면
+  // 검출 결과 패널(DetectPanel)이 언마운트돼 사용자는 무엇이 잡혔는지 한 번도 못 본다.
+  it('검출 실행 후에도 검출 단계에 머물러 검출된 실을 보여준다', () => {
+    const { container } = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '✦ 실 검출 실행' }))
+
+    const panel = within(container.querySelector('.rpanel') as HTMLElement)
+    expect(panel.getByText('검출된 실')).toBeInTheDocument()
+    expect(panel.getByText(/6곳/)).toBeInTheDocument() // 목업 6실이 패널에 뜬다
+    expect(panel.getAllByText(/거실/).length).toBeGreaterThan(0)
+    // 다음 단계로는 사용자가 CTA로 넘어간다.
+    expect(screen.getByRole('button', { name: '실내기 배치 →' })).toBeInTheDocument()
+  })
+
+  it('검출 전에는 빈 상태를 안내한다', () => {
+    render(<App />)
+    expect(screen.getByText(/아직 검출된 실이 없습니다/)).toBeInTheDocument()
+  })
+
+  it('검출하지 않고 실내기 배치로 가려 하면 차단한다', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '실내기 배치 →' }))
+
+    const dialog = screen.getByRole('alertdialog', { name: '진행할 수 없습니다' })
+    expect(within(dialog).getByText(/검출된 실이 없습니다/)).toBeInTheDocument()
+  })
+})
+
 describe('App — 스텝 가드', () => {
   it('실내기를 배치하지 않고 실외기 선정으로 가려 하면 차단 팝업이 실명을 알려준다', () => {
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: '실 검출 실행 →' }))
+    progressToPlace()
     fireEvent.click(screen.getByRole('button', { name: '실외기 선정 →' }))
 
     const dialog = screen.getByRole('alertdialog', { name: '실내기 배치를 마쳐야 합니다' })
@@ -93,7 +126,7 @@ describe('App — 스텝 가드', () => {
     fireEvent.click(screen.getByRole('button', { name: '돌아가기' }))
     fireEvent.click(screen.getByRole('button', { name: '← 이전' })) // place → detect
     fireEvent.click(screen.getByRole('button', { name: '돌아가기' }))
-    fireEvent.click(screen.getByRole('button', { name: '실 검출 실행 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '✦ 실 검출 실행' }))
 
     expect(screen.getByRole('alertdialog', { name: '실을 다시 검출합니다' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '재검출' })).toBeInTheDocument()
