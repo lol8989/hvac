@@ -139,12 +139,22 @@ export function classifySheet(fileName: string, sheetName: string): Taxon | null
   }
 
   if (f.includes('MULTI_V_IDU') || f.includes('Multi V_IDU')) {
-    const variant = f.includes('조달') ? '조달전용' : f.includes('대공간') ? '대공간덕트' : '민수전용'
+    // 시스템보일러·천장매립덕트는 별도 시트 파일이다(구형 .xls) — 민수/조달과 섞지 않는다.
+    const variant = f.includes('시스템보일러')
+      ? '시스템보일러'
+      : f.includes('천장매립덕트')
+        ? '천장매립덕트'
+        : f.includes('조달')
+          ? '조달전용'
+          : f.includes('대공간')
+            ? '대공간덕트'
+            : '민수전용'
     return indoor(f.includes('대공간') ? '대공간' : s, 'EHP', `Multi V 실내기(${variant})`)
   }
 
-  if (f.includes('MV Water') || f.includes('MVW')) {
-    const series = f.includes('Water IV') ? 'Multi V Water IV' : 'Multi V Water 5'
+  // 'MV Water'(공백) · 'MVW' · 'MV_Water'(TA_MV_Water_S) 모두 수냉식 VRF다.
+  if (f.includes('MV Water') || f.includes('MV_Water') || f.includes('MVW')) {
+    const series = f.includes('Water_S') ? 'Multi V Water S' : f.includes('Water IV') ? 'Multi V Water IV' : 'Multi V Water 5'
     return outdoor('OUT_WATER', '수냉식', '수냉식', series, true)
   }
 
@@ -180,6 +190,24 @@ export function classifySheet(fileName: string, sheetName: string): Taxon | null
     const co = s.includes('냉방')
     const series = f.includes('R32') ? 'Multi V S(R32)' : 'Multi V S'
     return outdoor(co ? 'OUT_CO' : 'OUT_HR', co ? '냉방전용' : '냉난방 절환형', 'EHP', series, true)
+  }
+
+  // MVS = Multi V S(구형 .xls 표기). 실내기 시트와 실외기 시트가 한 파일에 섞여 있다.
+  //   MVS_주거 / MVS_상업(냉난방동시절환겸용) / SMART_MVS_주거_냉방전용(zip)
+  if (/(^|_)(SMART_)?MVS_/.test(f)) {
+    const smart = f.includes('SMART_')
+    const scope = f.includes('상업') ? '상업' : '주거'
+    const co = f.includes('냉방전용')
+    const series = `${smart ? 'Smart ' : ''}Multi V S(${scope}${co ? '_냉방전용' : ''})`
+    if (/실내기|IDU/i.test(s) || /실내기/.test(f)) return indoor(s, 'EHP', series)
+    return outdoor(co ? 'OUT_CO' : 'OUT_HR', co ? '냉방전용' : '냉난방 절환형', 'EHP', series, true)
+  }
+
+  // ALL in 1 = 가정용 멀티(실외기 1 ↔ 실내기 N). 모델명 숫자가 마력이 아니라 용량이므로 VRF 아님.
+  if (f.includes('ALLin1')) {
+    const series = 'MULTI (ALL in 1)'
+    if (/실내기|IDU/i.test(f) || /실내기|Way/i.test(s)) return indoor(s, 'EHP', series)
+    return outdoor('OUT_MULTI', '가정용 멀티(ALL in 1)', 'EHP', series)
   }
 
   if (/SINGLE|Single/.test(f)) {

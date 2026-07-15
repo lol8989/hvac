@@ -19,7 +19,7 @@ import { queryRows, numOrNull, strOrNull } from './query'
 
 const LIST_SQL = `
   SELECT p.id, c.code AS category_code, c.name_ko AS category_name,
-         sc.name_ko AS subcategory_name, sc.energy_source,
+         sc.name_ko AS subcategory_name, s.energy_source,
          s.code AS series_code, s.name_ko AS series_name, p.model_code, p.equipment_code,
          p.horsepower, p.hp_source, p.cooling_capacity_w, p.heating_capacity_w, p.max_connections, p.status,
          p.created_at, p.updated_at, p.published_at
@@ -32,7 +32,7 @@ const LIST_SQL = `
 
 const SERIES_SQL = `
   SELECT s.code, s.name_ko, s.is_vrf, c.code AS category_code, c.name_ko AS category_name,
-         sc.name_ko AS subcategory_name, sc.energy_source
+         sc.name_ko AS subcategory_name, s.energy_source
   FROM product_series s
   JOIN product_subcategories sc ON s.subcategory_id = sc.id
   JOIN product_categories c     ON sc.category_id = c.id

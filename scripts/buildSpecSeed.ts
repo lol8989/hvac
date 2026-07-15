@@ -20,12 +20,51 @@ import { horsepowerFromModelCode } from '../src/domain/equipment/ModelCode'
 import { horsepowerFromCapacityW } from '../src/domain/shared/Horsepower'
 import { PUBLISH_STATUS } from '../src/domain/equipment/PublishStatus'
 import { INDOOR_RECORDS, OUTDOOR_RECORDS } from '../src/infrastructure/equipment/seedData'
-import type { SeedData, SeedProduct, SeedSeries, SeedSubcategory, SeedPrice } from '../src/infrastructure/equipment/seed/seedTypes'
+import type { SeedData, SeedProduct, SeedSeries, SeedSubcategory, SeedPrice, SeedCombination } from '../src/infrastructure/equipment/seed/seedTypes'
 import { CATEGORIES, classifySheet } from './taxonomy'
 
 const SPEC_DIR = resolve('../03_참고자료/LG전자 스펙시트 모음')
+// 구형 .xls 10개는 Excel로 xlsx 변환(scripts/convertXls.ps1), zip 2개는 풀어서 하위 폴더에 둔다.
+// read-excel-file이 .xls를 못 읽어 예전에는 14개 파일이 통째로 누락됐다(2026-07-14 전수조사).
+const SPEC_DIRS = [SPEC_DIR, resolve(SPEC_DIR, 'xls_converted'), resolve(SPEC_DIR, 'zip_extracted')]
 const OUT_JSON = resolve('public/equipment-seed.json')
 const OUT_META = resolve('src/infrastructure/equipment/seed/seedMeta.ts')
+
+// 원본 폴더의 모든 스펙 파일. .xls/.zip은 위 하위 폴더에 변환본이 있어야 한다.
+interface SpecFile {
+  dir: string
+  name: string
+}
+function collectSpecFiles(): { files: SpecFile[]; unconverted: string[] } {
+  const xlsx = new Map<string, SpecFile>() // 파일명(확장자 제외) → 파일
+  for (const dir of SPEC_DIRS) {
+    let entries: string[]
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      continue // 하위 폴더가 없을 수 있다
+    }
+    for (const name of entries) {
+      if (!name.endsWith('.xlsx') || name.startsWith('~$')) continue
+      const key = name.replace(/\.xlsx$/i, '')
+      if (!xlsx.has(key)) xlsx.set(key, { dir, name })
+    }
+  }
+  // 원본에 .xls/.zip이 있는데 변환본이 없으면 누락이다 — 조용히 넘어가지 않는다.
+  const unconverted: string[] = []
+  for (const name of readdirSync(SPEC_DIR)) {
+    if (/\.xls$/i.test(name) && !xlsx.has(name.replace(/\.xls$/i, ''))) unconverted.push(name)
+    if (/\.zip$/i.test(name)) {
+      // zip은 내부 파일명을 알 수 없으니 추출 폴더가 비어 있으면 경고
+      try {
+        if (readdirSync(resolve(SPEC_DIR, 'zip_extracted')).length === 0) unconverted.push(name)
+      } catch {
+        unconverted.push(name)
+      }
+    }
+  }
+  return { files: [...xlsx.values()], unconverted }
+}
 
 // 큐레이션 게시본이 속할 중분류. 라벨은 InMemory 시드(seedData.ts)의 type과 정확히 일치해야 한다
 // — 생성/검도가 그 문자열을 실내기 유형으로 표시하고, 동치 테스트가 이를 고정한다.
@@ -51,21 +90,32 @@ function resolveHp(categoryCode: string, isVrf: boolean, modelCode: string, cool
 }
 
 async function main() {
-  const files = readdirSync(SPEC_DIR).filter((f) => f.endsWith('.xlsx') && !f.startsWith('~$'))
+  const { files, unconverted } = collectSpecFiles()
+  files.sort((a, b) => a.name.localeCompare(b.name))
 
   const subcategories = new Map<string, SeedSubcategory>()
   const series = new Map<string, SeedSeries>()
   const products = new Map<string, SeedProduct>() // modelCode → product (첫 등장 우선)
 
   const skipped: string[] = []
+  const emptyFiles: string[] = [] // 읽었는데 모델이 0건인 파일 — 파싱 실패 신호다
+  const combinations: SeedCombination[] = [] // 단품 세트 — 제품이 아니라 조합
   let sheetCount = 0
 
-  for (const file of files.sort()) {
-    const wrapped = (await readXlsxFile(resolve(SPEC_DIR, file))) as unknown as WrappedSheet[]
-    for (const sheet of toParsedSheets(wrapped)) {
+  for (const { dir, name: file } of files) {
+    const wrapped = (await readXlsxFile(resolve(dir, file))) as unknown as WrappedSheet[]
+    const parsedSheets = toParsedSheets(wrapped)
+    if (parsedSheets.length === 0) emptyFiles.push(file)
+
+    for (const sheet of parsedSheets) {
+      for (const s of sheet.sets) {
+        combinations.push({ ...s, source: `${file} | ${sheet.sheetName}` })
+      }
+      // 세트만 실린 시트(조합 사양)는 제품이 없다 — 분류를 요구하지 않는다.
+      if (sheet.products.length === 0) continue
       const taxon = classifySheet(file, sheet.sheetName)
       if (!taxon) {
-        skipped.push(`${file} | ${sheet.sheetName} (분류 불가)`)
+        skipped.push(`${file} | ${sheet.sheetName} (분류 불가 · 모델 ${sheet.products.length}건 버려짐)`)
         continue
       }
       sheetCount++
@@ -75,7 +125,6 @@ async function main() {
           code: taxon.subcategoryCode,
           categoryCode: taxon.categoryCode,
           nameKo: taxon.subcategoryName,
-          energySource: taxon.energySource,
         })
       }
       if (!series.has(taxon.seriesCode)) {
@@ -86,6 +135,7 @@ async function main() {
           nameKo: taxon.seriesName,
           mflCode: mfl ? `MFL${mfl[1]}` : null,
           isVrf: taxon.isVrf,
+          energySource: taxon.energySource, // 계열은 시리즈에 실린다(중분류 버킷 오염 방지)
         })
       }
 
@@ -124,7 +174,15 @@ async function main() {
     const seriesCode = `S_CURATED_${subCode}`
     if (!series.has(seriesCode)) {
       // 큐레이션 실외기는 생성·검도가 소비하는 Multi V/GHP 게시본이다 → VRF.
-      series.set(seriesCode, { code: seriesCode, subcategoryCode: subCode, nameKo: seriesName, mflCode: null, isVrf: subCode.startsWith('OUT_') })
+      // 계열: GHP 게시본만 GHP, 나머지(Multi V 실내기·실외기)는 EHP.
+      series.set(seriesCode, {
+        code: seriesCode,
+        subcategoryCode: subCode,
+        nameKo: seriesName,
+        mflCode: null,
+        isVrf: subCode.startsWith('OUT_'),
+        energySource: subCode === 'OUT_GHP' ? 'GHP' : 'EHP',
+      })
     }
     const existing = products.get(modelCode)
 
@@ -190,11 +248,11 @@ async function main() {
 
   // 큐레이션이 붙인 중분류가 시트에 없었다면 보충(예: OUT_CO)
   const CURATED_SUBS: SeedSubcategory[] = [
-    { code: 'IN_4WAY', categoryCode: 'INDOOR', nameKo: '4WAY 카세트', energySource: 'EHP' },
-    { code: 'IN_DUCT_CURATED', categoryCode: 'INDOOR', nameKo: '덕트', energySource: 'EHP' },
-    { code: 'OUT_HR', categoryCode: 'OUTDOOR', nameKo: '냉난방 절환형', energySource: 'EHP' },
-    { code: 'OUT_CO', categoryCode: 'OUTDOOR', nameKo: '냉방전용', energySource: 'EHP' },
-    { code: 'OUT_GHP', categoryCode: 'OUTDOOR', nameKo: 'GHP', energySource: 'GHP' },
+    { code: 'IN_4WAY', categoryCode: 'INDOOR', nameKo: '4WAY 카세트' },
+    { code: 'IN_DUCT_CURATED', categoryCode: 'INDOOR', nameKo: '덕트' },
+    { code: 'OUT_HR', categoryCode: 'OUTDOOR', nameKo: '냉난방 절환형' },
+    { code: 'OUT_CO', categoryCode: 'OUTDOOR', nameKo: '냉방전용' },
+    { code: 'OUT_GHP', categoryCode: 'OUTDOOR', nameKo: 'GHP' },
   ]
   for (const s of CURATED_SUBS) if (!subcategories.has(s.code)) subcategories.set(s.code, s)
 
@@ -215,6 +273,7 @@ async function main() {
     series: [...series.values()].sort((a, b) => a.code.localeCompare(b.code)),
     products: ordered,
     prices,
+    combinations,
   }
   seed.hash = createHash('sha256').update(JSON.stringify({ ...seed, hash: '' })).digest('hex').slice(0, 16)
 
@@ -243,10 +302,36 @@ async function main() {
   console.log(`  HP 출처: 모델명 ${bySource('MODEL_CODE')} · 환산백필 ${bySource('DERIVED')} · 큐레이션 ${bySource('CURATED')}`)
   console.log(`  용량 미상 ${noCapacity} · HP 미상(실외기, 용량 없어 백필 불가) ${outdoorNoHp}`)
   console.log(`  hash ${seed.hash} · ${(readFileSync(OUT_JSON).length / 1024 / 1024).toFixed(2)} MB`)
+  if (combinations.length) {
+    console.log(`  단품 세트(제품 아님, 조합) ${combinations.length}건 — 예: ${combinations[0].setCode}`)
+  }
   if (skipped.length) {
     console.log(`\n분류 불가 ${skipped.length}건:`)
     for (const s of skipped) console.log('  -', s)
   }
+
+  // ── 커버리지 가드 ──
+  // 조용한 누락을 금지한다. 예전에는 .xls 10 · zip 2 · 파싱실패 2 = 14개 파일이
+  // 경고 한 줄 없이 빠졌고, 아무도 몰랐다(doc/05_설계결정/시드_적재_전수조사_2026-07-14.md).
+  const problems: string[] = []
+  if (unconverted.length) {
+    problems.push(`변환본이 없는 원본 ${unconverted.length}건 (.xls는 xls_converted/, .zip은 zip_extracted/에 풀어 둔다)`)
+    for (const f of unconverted) console.error(`  ✗ 변환 안 됨: ${f}`)
+  }
+  if (emptyFiles.length) {
+    problems.push(`읽었지만 모델 0건인 파일 ${emptyFiles.length}건 (파싱 실패)`)
+    for (const f of emptyFiles) console.error(`  ✗ 모델 0건: ${f}`)
+  }
+  if (skipped.length) {
+    problems.push(`분류 불가 시트 ${skipped.length}건 (taxonomy.ts에 규칙이 없다)`)
+  }
+  if (problems.length) {
+    console.error(`\n✗ 시드 커버리지 결함 — 원본이 시드에 온전히 들어가지 않았다:`)
+    for (const p of problems) console.error(`  - ${p}`)
+    process.exitCode = 1
+    return
+  }
+  console.log(`\n✓ 커버리지 정상 — 원본 스펙 파일 ${files.length}개가 모두 시드에 반영됐다.`)
 }
 
 await main()

@@ -26,24 +26,24 @@ export function seedDatabase(db: Database, data: SeedData, now: string = new Dat
   data.subcategories.forEach((s, i) => {
     const id = i + 1
     subcategoryId.set(s.code, id)
-    db.run(`INSERT INTO product_subcategories (id, category_id, code, name_ko, energy_source) VALUES (?,?,?,?,?)`, [
+    db.run(`INSERT INTO product_subcategories (id, category_id, code, name_ko) VALUES (?,?,?,?)`, [
       id,
       categoryId.get(s.categoryCode)!,
       s.code,
       s.nameKo,
-      s.energySource,
     ])
   })
 
   data.series.forEach((s, i) => {
     const id = i + 1
     seriesId.set(s.code, id)
-    db.run(`INSERT INTO product_series (id, subcategory_id, code, name_ko, mfl_code, is_vrf) VALUES (?,?,?,?,?,?)`, [
+    db.run(`INSERT INTO product_series (id, subcategory_id, code, name_ko, mfl_code, energy_source, is_vrf) VALUES (?,?,?,?,?,?,?)`, [
       id,
       subcategoryId.get(s.subcategoryCode)!,
       s.code,
       s.nameKo,
       s.mflCode,
+      s.energySource,
       s.isVrf ? 1 : 0,
     ])
   })

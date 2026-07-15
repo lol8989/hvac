@@ -22,7 +22,7 @@ const xlsx = (name = 'spec.xlsx', size = 13819) => {
   return f
 }
 
-const sheets = (products: ParsedProduct[]): ParsedSheet[] => [{ sheetName: 'Sheet', products }]
+const sheets = (products: ParsedProduct[]): ParsedSheet[] => [{ sheetName: 'Sheet', products, sets: [] }]
 
 function setup(over: Partial<React.ComponentProps<typeof SpecSheetUploadModal>> = {}) {
   const onImport = vi.fn((_seriesCode: string, rows: readonly unknown[]) => rows.length)

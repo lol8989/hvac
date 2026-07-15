@@ -7,7 +7,8 @@
 // v2: 시드 제품에 created_at/updated_at/published_at 스탬프 추가(등록·수정·게시일 컬럼 표기).
 // v3: product_series.is_vrf(계열별 게시 요건·HP 유도 분기) + products.hp_source(마력 출처).
 // v4: system_settings(전역 조합비 기본) + products.combo_min/combo_max(실외기 모델별 override).
-export const SCHEMA_VERSION = 4
+// v5: 계열(energy_source)을 subcategory→series로 이동. '기타 실내기' 버킷이 계열을 오염시키던 버그 차단.
+export const SCHEMA_VERSION = 5
 
 export const SCHEMA_SQL = `
 PRAGMA foreign_keys = ON;
@@ -23,8 +24,7 @@ CREATE TABLE product_subcategories (
   id            INTEGER PRIMARY KEY,
   category_id   INTEGER NOT NULL REFERENCES product_categories(id),
   code          TEXT NOT NULL UNIQUE,
-  name_ko       TEXT NOT NULL,           -- 실내기 유형(4WAY 카세트/덕트) · 실외기 계통(냉난방 절환형/냉방전용/GHP)
-  energy_source TEXT                      -- 계열: EHP/GHP/AWHP...
+  name_ko       TEXT NOT NULL            -- 실내기 유형(4WAY 카세트/덕트) · 실외기 계통(냉난방 절환형/냉방전용/GHP)
 );
 
 CREATE TABLE product_series (
@@ -33,6 +33,9 @@ CREATE TABLE product_series (
   code           TEXT NOT NULL UNIQUE,
   name_ko        TEXT NOT NULL,
   mfl_code       TEXT,
+  -- 계열: EHP/GHP/AWHP/수냉식/Chiller/CDU/ERV. 시리즈 속성이다 — 중분류에 두면
+  -- '기타 실내기(IN_ETC)'처럼 계열이 섞인 버킷이 첫 적재 파일의 계열로 오염된다.
+  energy_source  TEXT,
   -- VRF(실외기 1대 ↔ 실내기 N대) 계열 여부. 이 한 축이 세 가지를 가른다:
   --   ① 모델명이 마력을 인코딩하는가 ② 게시에 최대 연결 실내기 수를 요구하는가
   --   ③ 생성단 실외기 조합 후보로 노출되는가
@@ -112,7 +115,7 @@ CREATE VIEW v_published_products AS
   SELECT
     p.*,
     sc.name_ko       AS subcategory_name,
-    sc.energy_source AS energy_source,
+    s.energy_source  AS energy_source,
     c.code           AS category_code
   FROM products p
   JOIN product_series s        ON p.series_id = s.id

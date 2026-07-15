@@ -19,14 +19,27 @@ export interface WrappedSheet {
   data: SheetRow[]
 }
 
+// 세트('실외기 + 실내기') — 제품(마스터 레코드)이 아니라 조합이다.
+// 단품(SINGLE)은 능력이 세트 단위로만 적혀 있어(실외기 시트 단독엔 없다) 버리면 능력을 잃는다.
+export interface ParsedSet {
+  setCode: string // 원문 표기 'TUW072PA2SR + TNW072PA2UR'
+  models: string[] // 구성 모델 ['TUW072PA2SR', 'TNW072PA2UR']
+  coolingW: number | null
+  heatingW: number | null
+}
+
 export interface ParsedSheet {
   sheetName: string
   products: ParsedProduct[]
+  sets: ParsedSet[]
 }
 
-// 한 파일에 시트가 여러 개면(1Way/4Way 등) 전부 파싱하고, 모델이 없는 시트는 버린다.
+// 한 파일에 시트가 여러 개면(1Way/4Way 등) 전부 파싱한다.
+// 제품도 세트도 없는 시트만 버린다(빈 시트·표지).
 export function toParsedSheets(sheets: readonly WrappedSheet[]): ParsedSheet[] {
-  return sheets.map((s) => ({ sheetName: s.sheet, products: parseSpecRows(s.data) })).filter((s) => s.products.length > 0)
+  return sheets
+    .map((s) => ({ sheetName: s.sheet, products: parseSpecRows(s.data), sets: parseSets(s.data) }))
+    .filter((s) => s.products.length > 0 || s.sets.length > 0)
 }
 
 const text = (v: CellValue): string => (v == null ? '' : String(v).trim())
@@ -35,14 +48,48 @@ const isBlank = (v: CellValue): boolean => text(v) === '' || text(v) === '-'
 // 라벨 비교는 공백 제거 후 ('항 목', '전 원', '최대 연결 가능 실내기수').
 const squash = (s: string): string => s.replace(/\s+/g, '')
 
-// 모델 코드 판별. 세트 조합('TUW072PA2SR + TNW072PA2UR')은 첫 토큰으로 판정한다.
-// 'UXB'(샤시명) · '단위' · '1 Unit' 같은 값은 걸러진다.
-const MODEL_CODE = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$/
+// 모델 코드 판별. 'UXB'(샤시명) · '단위' · '1 Unit' 같은 값은 걸러진다.
+//
+// 실제 시트가 한 셀에 담는 표기는 세 가지다.
+//   단일   'RPUW281X9P'
+//   병기   'RPUQ0255A2A\nRPUQ0255A2R' · 'VNW0720M2S / VNW0720M2SA'  — 스펙이 같은 형제 모델
+//   세트   'TUW072PA2SR + TNW072PA2UR'                              — 실외기+실내기 조합 상품
+// 괄호('RPUM050(P)S2S')와 점('Z-E0250U2SC.AKM5')도 모델 코드에 쓰인다.
+const MODEL_CODE = /^[A-Z][A-Z0-9().]*(?:-[A-Z0-9().]+)*$/
+const SIBLING_SEP = /[\n\r/]+/ // 개행·슬래시 = 형제 모델 병기
+
+const isOneCode = (s: string): boolean => {
+  const t = s.trim().toUpperCase()
+  if (t.length < 6) return false
+  if (!MODEL_CODE.test(t)) return false
+  return (t.match(/\d/g) ?? []).length >= 2 // 숫자 2자리 이상 — 순수 알파벳 코드 배제
+}
+
+// 'A + B' 세트 표기인가. 세트는 제품(마스터 레코드)이 아니라 조합이다.
+export function isSetCode(raw: string): boolean {
+  if (!raw.includes('+')) return false
+  const parts = raw.split('+').map((p) => p.trim())
+  return parts.length >= 2 && parts.every(isOneCode)
+}
+
+// 한 셀 → 제품이 될 모델 코드들. 세트는 제품이 아니므로 빈 배열.
+export function modelCodesIn(raw: string): string[] {
+  if (isSetCode(raw)) return []
+  const codes = raw.split(SIBLING_SEP).map((p) => p.trim()).filter((p) => p !== '')
+  return codes.every(isOneCode) && codes.length > 0 ? codes : []
+}
+
+// 헤더 행 탐지용 — 세트도 '모델 열'을 표시한다(그 열이 제품이 되지는 않는다).
 export function isModelCode(raw: string): boolean {
-  const head = raw.split('+')[0].trim().toUpperCase()
-  if (head.length < 6) return false
-  if (!MODEL_CODE.test(head)) return false
-  return (head.match(/\d/g) ?? []).length >= 2 // 숫자 2자리 이상 — 순수 알파벳 코드 배제
+  return isSetCode(raw) || modelCodesIn(raw).length > 0
+}
+
+// 세트의 구성 모델 ['TUW072PA2SR', 'TNW072PA2UR']
+export const setMembers = (raw: string): string[] => raw.split('+').map((p) => p.trim())
+
+// 시트에 실린 세트 표기 목록(코드만 — 회귀 테스트용).
+export function setCodesIn(rows: readonly SheetRow[]): string[] {
+  return parseSets(rows).map((s) => s.setCode)
 }
 
 interface Layout {
@@ -146,7 +193,7 @@ interface LabeledRow {
 // 초기화가 없으면 대분류가 바뀔 때 이전 소분류가 새 대분류로 새어 들어간다.
 function toLabeledRows(rows: readonly SheetRow[], layout: Layout): LabeledRow[] {
   const out: LabeledRow[] = []
-  const carried: string[] = new Array(layout.unitCol).fill('')
+  const carried: string[] = new Array<string>(layout.unitCol).fill('')
 
   for (let r = layout.headerRow + 1; r < rows.length; r++) {
     const row = rows[r]
@@ -186,7 +233,17 @@ function specKey(row: LabeledRow, used: Set<string>): string {
 const findCapacityRow = (labeled: LabeledRow[], words: string[]): LabeledRow | undefined =>
   labeled.find((r) => matchesCapacity(r.label, r.unit ?? '', words))
 
-export function parseSpecRows(rows: readonly SheetRow[]): ParsedProduct[] {
+// 모델 열 하나를 읽은 결과. 제품(형제 병기면 여러 개)이거나 세트다.
+interface Column {
+  cell: string // 헤더 원문
+  coolingW: number | null
+  heatingW: number | null
+  maxConnections: number | null
+  specData: Record<string, SpecCell>
+}
+
+// 모델 열 전부를 한 번에 읽는다 — 제품과 세트가 같은 열 구조를 공유하므로 파싱도 공유한다.
+function parseColumns(rows: readonly SheetRow[]): Column[] {
   const layout = detectLayout(rows)
   if (!layout) return []
 
@@ -197,10 +254,7 @@ export function parseSpecRows(rows: readonly SheetRow[]): ParsedProduct[] {
   const heatRow = findCapacityRow(labeled, HEAT_WORDS)
   const connRow = labeled.find((r) => isMaxConnRow(r.label))
 
-  const products: ParsedProduct[] = []
-  models.forEach((modelCode, i) => {
-    if (!isModelCode(modelCode)) return
-
+  return models.map((cell, i) => {
     const specData: Record<string, SpecCell> = {}
     const used = new Set<string>()
     for (const row of labeled) {
@@ -210,18 +264,42 @@ export function parseSpecRows(rows: readonly SheetRow[]): ParsedProduct[] {
       used.add(k)
       specData[k] = { value: text(raw), unit: row.unit }
     }
-
-    const coolingW = coolRow ? toCapacityW(coolRow.values[i], capacityUnit(coolRow.unit ?? '')!) : null
-    const heatingW = heatRow ? toCapacityW(heatRow.values[i], capacityUnit(heatRow.unit ?? '')!) : null
     const conn = connRow ? toNumber(connRow.values[i]) : null
-
-    products.push({
-      modelCode,
-      coolingW,
-      heatingW,
+    return {
+      cell,
+      coolingW: coolRow ? toCapacityW(coolRow.values[i], capacityUnit(coolRow.unit ?? '')!) : null,
+      heatingW: heatRow ? toCapacityW(heatRow.values[i], capacityUnit(heatRow.unit ?? '')!) : null,
       maxConnections: conn === null || !Number.isInteger(conn) || conn < 1 ? null : conn,
       specData,
-    })
+    }
   })
+}
+
+export function parseSpecRows(rows: readonly SheetRow[]): ParsedProduct[] {
+  const products: ParsedProduct[] = []
+  for (const col of parseColumns(rows)) {
+    // 한 열이 여러 모델일 수 있다(형제 병기) — 스펙 열을 공유한다. 세트 열은 빈 배열이라 건너뛴다.
+    for (const modelCode of modelCodesIn(col.cell)) {
+      products.push({
+        modelCode,
+        coolingW: col.coolingW,
+        heatingW: col.heatingW,
+        maxConnections: col.maxConnections,
+        specData: col.specData,
+      })
+    }
+  }
   return products
+}
+
+// 세트 열 → 조합. 단품의 능력은 여기에만 있다.
+export function parseSets(rows: readonly SheetRow[]): ParsedSet[] {
+  return parseColumns(rows)
+    .filter((c) => isSetCode(c.cell))
+    .map((c) => ({
+      setCode: c.cell.replace(/\s+/g, ' ').trim(),
+      models: setMembers(c.cell),
+      coolingW: c.coolingW,
+      heatingW: c.heatingW,
+    }))
 }

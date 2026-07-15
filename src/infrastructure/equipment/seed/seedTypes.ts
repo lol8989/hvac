@@ -15,7 +15,6 @@ export interface SeedSubcategory {
   code: string
   categoryCode: string
   nameKo: string
-  energySource: string // EHP / GHP / AWHP / 수냉식 / Chiller / CDU / ERV
 }
 
 export interface SeedSeries {
@@ -24,6 +23,9 @@ export interface SeedSeries {
   nameKo: string
   mflCode: string | null
   isVrf: boolean // VRF 계열 — 모델명 HP 인코딩 · maxConn 게시 요건 · 생성단 조합 후보 노출
+  // 계열(EHP / GHP / AWHP / 수냉식 / Chiller / CDU / ERV)은 시리즈 속성이다.
+  // 중분류에 두면 '기타 실내기(IN_ETC)'처럼 계열이 섞인 버킷이 첫 적재 파일의 계열로 오염된다.
+  energySource: string
 }
 
 export interface SeedProduct {
@@ -51,6 +53,18 @@ export interface SeedPrice {
   priority: number
 }
 
+// 단품(SINGLE) 세트 — 실외기 1 + 실내기 1 조합 상품.
+// 제품(마스터 레코드)이 아니라 '조합'이다. 능력은 세트 단위로만 정의된다(실외기 시트 단독엔 없다).
+// 아직 SQLite에 적재하지 않는다 — 설계된 product_combinations / indoor_outdoor_compat 테이블의
+// 입력이 될 데이터이며(구현계획서 Phase 3+), 지금은 잃어버리지 않도록 시드에 보존만 한다.
+export interface SeedCombination {
+  setCode: string // 원문 'TUW072PA2SR + TNW072PA2UR'
+  models: string[] // 구성 모델
+  coolingW: number | null
+  heatingW: number | null
+  source: string | null
+}
+
 export interface SeedData {
   hash: string // 내용 해시 — IndexedDB 캐시 무효화 키
   generatedFrom: string // 원본 디렉터리 설명
@@ -59,4 +73,5 @@ export interface SeedData {
   series: SeedSeries[]
   products: SeedProduct[]
   prices: SeedPrice[]
+  combinations: SeedCombination[] // 단품 세트(제품 아님) — 보존용
 }

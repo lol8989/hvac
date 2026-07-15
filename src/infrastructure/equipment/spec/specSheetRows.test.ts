@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import readXlsxFile from 'read-excel-file/node'
 import { resolve } from 'node:path'
-import { parseSpecRows, toParsedSheets, isModelCode, type SheetRow } from './specSheetRows'
+import { parseSpecRows, parseSets, toParsedSheets, isModelCode, modelCodesIn, isSetCode, setCodesIn, type SheetRow } from './specSheetRows'
 
 const readFixture = async (name: string) =>
   (await readXlsxFile(resolve('src/test/fixtures', name))) as unknown as { sheet: string; data: SheetRow[] }[]
@@ -147,10 +147,78 @@ describe('isModelCode (모델 코드 판별)', () => {
     expect(isModelCode('TUW072PA2SR + TNW072PA2UR')).toBe(true)
   })
 
+  // 실제 시트에서 나온 표기들 — 이걸 못 읽어 파일 4개가 통째로 0건이었다
+  it('괄호·점이 든 모델 코드도 통과시킨다', () => {
+    expect(isModelCode('RPUM050(P)S2S')).toBe(true) // MVS 상업 실외기
+    expect(isModelCode('Z-E0250U2SC.AKM5')).toBe(true) // 상업용 환기
+  })
+
+  it('한 셀에 개행으로 병기된 모델도 통과시킨다', () => {
+    expect(isModelCode('RPUQ0255A2A\nRPUQ0255A2R')).toBe(true) // Smart MVS 실외기
+  })
+
   it('라벨·샤시명·단위는 거른다', () => {
     for (const s of ['UXB', '단위', '모델명', '1 Unit', '', '-', 'kW', '380, 3상(4선), 60']) {
       expect(isModelCode(s)).toBe(false)
     }
+  })
+})
+
+describe('modelCodesIn (한 셀 → 모델 코드 목록)', () => {
+  it('단일 모델은 그대로 1개', () => {
+    expect(modelCodesIn('RPUW281X9P')).toEqual(['RPUW281X9P'])
+  })
+
+  // 스펙이 같은 형제 모델을 한 열에 개행/슬래시로 병기한다 → 각각 별도 제품이다
+  it('개행 병기는 형제 모델로 나눈다', () => {
+    expect(modelCodesIn('RPUQ0255A2A\nRPUQ0255A2R')).toEqual(['RPUQ0255A2A', 'RPUQ0255A2R'])
+  })
+
+  it('슬래시 병기도 형제 모델로 나눈다', () => {
+    expect(modelCodesIn('VNW0720M2S / VNW0720M2SA')).toEqual(['VNW0720M2S', 'VNW0720M2SA'])
+  })
+
+  // 'A + B'는 실외기+실내기 세트다. 제품(마스터 레코드)이 아니라 조합이므로 제품으로 만들지 않는다.
+  it('세트 표기는 제품이 아니다 — 빈 배열', () => {
+    expect(modelCodesIn('TUW072PA2SR + TNW072PA2UR')).toEqual([])
+    expect(isSetCode('TUW072PA2SR + TNW072PA2UR')).toBe(true)
+    expect(isSetCode('RPUW281X9P')).toBe(false)
+  })
+})
+
+describe('parseSpecRows — 병기·세트 처리', () => {
+  it('한 열에 형제 모델이 병기되면 스펙을 공유하는 제품 2건을 만든다', () => {
+    const products = parseSpecRows([
+      ['항목', null, '단위', 'RPUQ0255A2A\nRPUQ0255A2R'],
+      ['냉방능력', '정격', 'kW', '7.2'],
+    ])
+    expect(products.map((p) => p.modelCode)).toEqual(['RPUQ0255A2A', 'RPUQ0255A2R'])
+    expect(products.every((p) => p.coolingW === 7200)).toBe(true)
+  })
+
+  it('세트 열은 제품으로 만들지 않고 sets로 보고한다', () => {
+    const rows: SheetRow[] = [
+      ['항목', null, '단위', 'TUW072PA2SR + TNW072PA2UR', 'RPUW281X9P'],
+      ['냉방능력', '정격', 'kW', '7.2', '78.4'],
+    ]
+    expect(parseSpecRows(rows).map((p) => p.modelCode)).toEqual(['RPUW281X9P'])
+    expect(setCodesIn(rows)).toEqual(['TUW072PA2SR + TNW072PA2UR'])
+  })
+
+  // 단품(SINGLE)의 능력은 세트 열에만 있다 — 실외기 시트 단독에는 없다.
+  // 세트를 버리면 그 능력을 잃으므로 구성 모델·능력을 함께 보존한다.
+  it('세트의 구성 모델과 능력을 보존한다', () => {
+    const [set] = parseSets([
+      ['항목', null, '단위', 'TUW072PA2SR + TNW072PA2UR'],
+      ['냉방능력', '정격', 'kW', '7.2'],
+      ['난방능력', '정격', 'kW', '9.0'],
+    ])
+    expect(set).toEqual({
+      setCode: 'TUW072PA2SR + TNW072PA2UR',
+      models: ['TUW072PA2SR', 'TNW072PA2UR'],
+      coolingW: 7200,
+      heatingW: 9000,
+    })
   })
 })
 
@@ -174,17 +242,23 @@ describe('실제 LG 스펙시트 (Air-Cooled Scroll Chiller — 모델이 E열, 
 })
 
 describe('실제 LG 스펙시트 (SINGLE CST — 세트 조합 모델명)', () => {
-  it("'실외기 + 실내기' 세트 모델명을 그대로 모델 코드로 읽는다", async () => {
+  // 규칙 변경(2026-07-14): 세트('TUW072PA2SR + TNW072PA2UR')는 제품이 아니라 조합이다.
+  // 예전에는 이 문자열을 모델 코드로 그대로 저장해, 조회·조인·발주 어디에도 못 쓰는 레코드 59건이 생겼다.
+  it("'실외기 + 실내기' 세트는 제품으로 만들지 않는다", async () => {
     const odu = toParsedSheets(await readFixture('single_cst_set.xlsx')).find((s) => s.sheetName === 'ODU')!
-    expect(odu.products[0].modelCode).toContain('TUW072PA2SR')
-    expect(odu.products[0].modelCode).toContain('+')
-    expect(odu.products[0].coolingW).toBe(7200)
+    expect(odu.products).toHaveLength(0) // 세트뿐인 시트 → 제품 0건
   })
 
-  it("범위값('4.45~14.50')은 정격으로 오인하지 않는다", async () => {
+  it('세트는 구성 모델·능력을 담아 sets로 보존한다', async () => {
     const odu = toParsedSheets(await readFixture('single_cst_set.xlsx')).find((s) => s.sheetName === 'ODU')!
-    expect(odu.products[0].coolingW).toBe(7200) // '최소 ~ 최대' 행이 아니라 '정격' 행
+    const first = odu.sets[0]
+    expect(first.setCode).toContain('+')
+    expect(first.models[0]).toBe('TUW072PA2SR') // 실외기
+    expect(first.models[1]).toBe('TNW072PA2UR') // 실내기
+    expect(first.coolingW).toBe(7200) // 단품 능력은 세트에만 있다
   })
+
+  // 범위값('4.45~14.50') 배제는 위 '구조 규칙' 스위트가 이미 고정한다.
 })
 
 describe('실제 LG 스펙시트 (주거용 ERV — 냉난방 용량이 없는 환기 장비)', () => {
