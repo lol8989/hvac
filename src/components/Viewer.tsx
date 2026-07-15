@@ -94,6 +94,7 @@ interface ViewerProps {
   planW?: number // 도면 정규화 좌표 폭(기본 720 목업 / 실도면은 종횡비 유지 폭)
   planH?: number // 도면 정규화 좌표 높이(기본 470)
   mmPerUnit?: number // 정규화 1단위 = 실 mm (격자 실치수 표기 + DXF 왕복)
+  fitBounds?: ViewBox // 층 전환: 활성 층 실들을 감싸는 bbox. 있으면 여기에 맞춘다(없으면 전체 도면)
   layerFilter?: LayerFilter // 표시 레이어 필터(기본 all)
   onLayerFilterChange?: (f: LayerFilter) => void // 레이어 셀렉트는 뷰어 도구다(상단 툴바 밴드 제거)
   canAddUnit?: boolean // ＋실내기 수동 추가 허용 — 실검출·AI 배치 완료 전에는 비활성
@@ -138,7 +139,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     rooms, selectedIds, onSelectionChange, onEscape, tiles, tileBase,
     indoorSymbols, onUnitsMove, onUnitsRotate, onUnitsDelete, onUnitAdd,
     outdoorSymbols, onOutdoorsMove, onOutdoorsDelete, onOutdoorsAutoPlace,
-    indoorInfo, outdoorGroups, planW, planH, mmPerUnit, layerFilter = 'all', onLayerFilterChange,
+    indoorInfo, outdoorGroups, planW, planH, mmPerUnit, fitBounds, layerFilter = 'all', onLayerFilterChange,
     canAddUnit = true, canPlaceOutdoors = false,
     canSliceRooms = false, onRoomSlice, onSliceUnavailable, onZoneResize,
     canMergeRooms = false, onRoomsMerge, isAdjacent, onMergeUnavailable,
@@ -150,9 +151,11 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const PLAN_W = planW ?? 720
   const PLAN_H = planH ?? 470
   const FIT = useMemo(() => {
-    const px = PLAN_W * 0.05, py = PLAN_H * 0.06
-    return { x: -px, y: -py, w: PLAN_W + 2 * px, h: PLAN_H + 2 * py }
-  }, [PLAN_W, PLAN_H])
+    // 층 전환: 활성 층 bbox가 오면 거기에, 없으면 전체 도면에 맞춘다. 여백은 폭·높이 비례.
+    const b = fitBounds ?? { x: 0, y: 0, w: PLAN_W, h: PLAN_H }
+    const px = b.w * 0.05, py = b.h * 0.06
+    return { x: b.x - px, y: b.y - py, w: b.w + 2 * px, h: b.h + 2 * py }
+  }, [fitBounds, PLAN_W, PLAN_H])
   const BASE_W = FIT.w
   const MIN_W = BASE_W / 8
   const MAX_W = BASE_W * 3
@@ -166,6 +169,8 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     return [nw, nh]
   }, [MIN_W, MAX_W])
   const [view, setView] = useState<ViewBox>(FIT)
+  // 층 전환·도면 로드로 맞춤 범위(FIT)가 바뀌면 그 범위로 뷰를 다시 맞춘다.
+  useEffect(() => { setView(FIT) }, [FIT])
   const [mode, setMode] = useState<Mode>('cassette')
   // 실내기 심볼은 App(Placement)이 소유한다. 드래그·회전 중에는 여기 draft로 그리고,
   // 마우스를 뗄 때 한 번만 커밋한다(60fps마다 App을 리렌더하지 않기 위함).

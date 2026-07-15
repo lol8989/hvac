@@ -33,6 +33,7 @@ import { makeReassignRoom } from './application/generation/ReassignRoom'
 import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoorModel'
 import { makeAddGroup, makeRemoveGroup, makeSplitGroup } from './application/generation/GroupCommands'
 import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, syncPlanUnits, selectOutdoorPlan, indoorUnitsFor } from './presentation/generation/planAdapter'
+import { floorsOf } from './presentation/generation/floors'
 import { DomainError, NotFoundError, NoCompatibleOutdoorError, UnpackableLoadError } from './domain/generation/errors'
 import { Room as DomainRoom } from './domain/generation/Room'
 import { indoorUnitId, type IndoorUnit } from './domain/generation/IndoorUnit'
@@ -254,6 +255,25 @@ export default function App({
       Object.entries(viewRooms).map(([id, r]) => [id, { ...r, points: scalePoints(r.points, scale) }] as const),
     )
   }, [planDims, viewRooms, scale])
+
+  // ── 층 전환: 뷰어는 한 번에 한 층만 보여준다(다층 도면이 나란히 배치되므로).
+  // activeFloor는 뷰 상태다 — World(되돌리기 단위) 밖에 둔다. Ctrl+Z가 층 전환을 되돌리면 안 된다.
+  // 설계: doc/05_설계결정/층_전환_설계_v1.md
+  const floors = useMemo(() => floorsOf(domainRooms, roomGeom), [domainRooms, roomGeom])
+  const [activeFloor, setActiveFloor] = useState('')
+  // 검출·자르기로 층 목록이 바뀌면 활성 층을 유효하게 유지(사라졌으면 첫 층으로).
+  useEffect(() => {
+    if (floors.length && !floors.some((f) => f.floor === activeFloor)) setActiveFloor(floors[0].floor)
+  }, [floors, activeFloor])
+  const activeRoomIds = useMemo(
+    () => new Set(Object.keys(domainRooms).filter((id) => domainRooms[id].floor === activeFloor)),
+    [domainRooms, activeFloor],
+  )
+  // 층 탭 클릭: 활성 층 전환 + 선택 초기화(다른 층 실이 선택에 남으면 파생값·헤더가 어긋난다).
+  const switchFloor = (f: string) => {
+    setActiveFloor(f)
+    setSelRooms([])
+  }
 
   // 심볼 좌표(도면 좌표계)로 실 폴리곤을 판정할 때 쓴다.
   const worldPolyOf = (roomId: string): Polygon | null => {
@@ -774,6 +794,41 @@ export default function App({
   // CTA는 항상 활성이고, 클릭하면 도메인 가드가 낸 사유·해결법을 팝업으로 보여준다.
   const activeGroups = groups.filter((g) => g.items.length)
 
+  // ── 활성 층만 뷰어에 넘긴다(뷰어는 받은 것만 렌더 — SRP). ──
+  const floorRooms = useMemo(
+    () => Object.fromEntries(Object.entries(worldRooms).filter(([id]) => activeRoomIds.has(id))),
+    [worldRooms, activeRoomIds],
+  )
+  const floorIndoorSymbols = useMemo(
+    () => indoorSymbols.filter((s) => s.roomId != null && activeRoomIds.has(s.roomId)),
+    [indoorSymbols, activeRoomIds],
+  )
+  // 실외기 그룹의 층 = 연결된 실의 층(버킷 = 층×계열이라 한 그룹은 한 층). 그 그룹 심볼만 남긴다.
+  const activeFloorGroupKeys = useMemo(
+    () => new Set(activeGroups.filter((g) => g.items.some((rid) => activeRoomIds.has(rid))).map((g) => g.key)),
+    [activeGroups, activeRoomIds],
+  )
+  const floorOutdoorSymbols = useMemo(
+    () => outdoorSymbols.filter((s) => activeFloorGroupKeys.has(s.id)),
+    [outdoorSymbols, activeFloorGroupKeys],
+  )
+  const floorSelectedIds = useMemo(() => selRooms.filter((id) => activeRoomIds.has(id)), [selRooms, activeRoomIds])
+  const floorOutdoorGroups = useMemo(
+    () => activeGroups.filter((g) => activeFloorGroupKeys.has(g.key)).map((g) => ({ key: g.key, label: g.label, model: g.model })),
+    [activeGroups, activeFloorGroupKeys],
+  )
+  // 활성 층 실들의 bbox(뷰어 좌표계) — 뷰어가 이 범위에 맞춘다.
+  const fitBounds = useMemo(() => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const id of activeRoomIds) {
+      for (const p of floorRooms[id]?.points ?? []) {
+        minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
+        maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
+      }
+    }
+    return minX === Infinity ? undefined : { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+  }, [floorRooms, activeRoomIds])
+
   // 이격거리는 실치수(mm) 규칙이다. 뷰어 좌표는 정규화 단위라 mmPerUnit으로 환산한다.
   // 실도면 타일이 없으면(목업 좌표계) 실치수를 알 수 없어 검사하지 않는다.
   const clearanceViolations = useMemo(() => {
@@ -1138,14 +1193,32 @@ export default function App({
       {/* 도면은 모든 단계에서 보인다. 산출물 단계도 도면을 보며 내려받는다. */}
       <div className="stage">
         <div className="main-col">
+          {/* 층 전환 탭 — 다층일 때만. 단층이면 숨겨 현재 화면과 동일하게 둔다. */}
+          {floors.length > 1 && (
+            <div className="floor-tabs" role="tablist" aria-label="층 선택">
+              {floors.map((f) => (
+                <button
+                  key={f.floor}
+                  type="button"
+                  role="tab"
+                  aria-selected={f.floor === activeFloor}
+                  className={f.floor === activeFloor ? 'floor-tab active' : 'floor-tab'}
+                  onClick={() => switchFloor(f.floor)}
+                >
+                  {f.floor} <span className="floor-tab-n">{f.roomIds.length}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <Viewer
             key={planDims ? 'dxf' : 'mock'}
             ref={viewerRef}
-            rooms={worldRooms}
+            rooms={floorRooms}
             planW={planDims?.w}
             planH={planDims?.h}
             mmPerUnit={planDims?.mmPerUnit}
-            selectedIds={selRooms}
+            fitBounds={fitBounds}
+            selectedIds={floorSelectedIds}
             onSelectionChange={setSelRooms}
             onEscape={() => setMapOpen(false)}
             history={{
@@ -1156,12 +1229,12 @@ export default function App({
               onUndo: doUndo,
               onRedo: doRedo,
             }}
-            indoorSymbols={indoorSymbols}
+            indoorSymbols={floorIndoorSymbols}
             onUnitsMove={moveUnits}
             onUnitsRotate={rotateUnits}
             onUnitsDelete={deleteUnits}
             onUnitAdd={addUnitToRoom}
-            outdoorSymbols={outdoorSymbols}
+            outdoorSymbols={floorOutdoorSymbols}
             onOutdoorsMove={moveOutdoors}
             onOutdoorsDelete={deleteOutdoors}
             onOutdoorsAutoPlace={autoPlaceOutdoors}
@@ -1172,7 +1245,7 @@ export default function App({
             onLayerFilterChange={setLayerFilter}
             canAddUnit={step === 'place' && placed}
             canPlaceOutdoors={step === 'outdoor'}
-            outdoorGroups={activeGroups.map((g) => ({ key: g.key, label: g.label, model: g.model }))}
+            outdoorGroups={floorOutdoorGroups}
             // 실 자르기(V)는 검출 단계 도구다 — 검출 결과를 다듬는다.
             canSliceRooms={step === 'detect' && Object.keys(domainRooms).length > 0}
             onRoomSlice={doSlice}

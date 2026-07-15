@@ -65,6 +65,12 @@ button{font-family:inherit;cursor:pointer;}
 .gnb{flex-shrink:0;}
 .stage{display:flex;flex:1;min-height:0;}
 .main-col{flex:1;min-width:0;display:flex;flex-direction:column;}
+/* 층 전환 탭 — 생성 영역이라 무채색 유지(Red 액센트는 관리자 전용, CLAUDE.md). */
+.floor-tabs{display:flex;gap:4px;padding:6px 8px;background:#fff;border-bottom:1px solid #e5e5e5;overflow-x:auto;flex-shrink:0;}
+.floor-tab{border:1px solid #d5d5d5;background:#fff;color:#555;border-radius:6px;padding:5px 12px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;}
+.floor-tab:hover{background:#f2f2f2;}
+.floor-tab.active{background:#262626;color:#fff;border-color:#262626;}
+.floor-tab-n{font-weight:400;opacity:.7;font-size:11px;margin-left:2px;}
 .viewer{flex:1;position:relative;background:#F7F7F8;overflow:hidden;}
 .plan{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);width:720px;height:470px;background:#fff;border:1px solid #CFCFCF;}
 .room{position:absolute;border:1px solid #C9C9C9;background:#FCFCFC;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:.2s;}
