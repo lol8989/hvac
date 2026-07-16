@@ -36,7 +36,16 @@ export interface SelectionRow {
   floor: string
   roomName: string
   areaM2: number
-  unitLoad: { coolKcal: number; heatKcal: number; coolW: number; heatW: number; overridden: boolean }
+  unitLoad: {
+    coolKcal: number
+    heatKcal: number
+    coolW: number
+    heatW: number
+    overridden: boolean
+    // 사용자가 이 실의 단위부하를 직접 고쳤을 때 '적정 수치'인지 판정하는 근거 범위(kcal/h·㎡).
+    // 그 실명·시설군에 단위부하표가 정의한 강도 칸의 최소~최대. 표에 없는 실은 null(판정 안 함).
+    reasonableCoolKcal: { min: number; max: number } | null
+  }
   requiredW: { cool: number; heat: number }
   indoor: null | {
     code: string

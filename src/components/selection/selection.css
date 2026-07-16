@@ -23,6 +23,9 @@
 .selgrid .badge{display:inline-block;font-size:9.5px;line-height:1;padding:2px 4px;border-radius:2px;margin-left:4px;vertical-align:1px;}
 .selgrid .badge.manual{background:#333333;color:#fff;}
 .selgrid .badge.warn{background:#555555;color:#fff;}
+/* 단위부하 오버라이드 적정 판정 — 생성 영역 무채색 규칙(CLAUDE.md §6): 색이 아니라 명도로 구분한다. */
+.selgrid .badge.range.ok{background:transparent;border:1px solid #bbb;color:#777;padding:1px 3px;}
+.selgrid .badge.range.oor{background:#111;color:#fff;font-weight:600;}
 .selgrid button.reset{border:none;background:transparent;color:#999;cursor:pointer;font-size:11px;padding:0 2px;}
 .selgrid button.reset:hover{color:#111;}
 .selgrid td.combo-ok{color:#111;}

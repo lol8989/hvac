@@ -41,6 +41,12 @@ export default function SelectionRowView({
   const num = (v: string) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null }
   const qty = (v: string) => { const n = Number(v); return Number.isInteger(n) && n >= 1 ? n : null }
 
+  // 사용자가 단위부하를 직접 고친 행에서만 '적정 수치'인지 표기한다(AI 기본값은 표에서 나와 항상 적정).
+  // 근거 범위(min~max)는 도메인이 실어 준다 — 표에 없는 실은 null이라 판정하지 않는다.
+  const range = unitLoad.reasonableCoolKcal
+  const showRange = unitLoad.overridden && range !== null
+  const coolInRange = range ? unitLoad.coolKcal >= range.min && unitLoad.coolKcal <= range.max : true
+
   const commitUnitLoad = (cool: number | null, heat: number | null) => {
     if (cool === null || heat === null) return // 잘못된 입력은 무시(리마운트로 원복)
     onOverrideUnitLoad(row.roomId, cool, heat)
@@ -55,6 +61,14 @@ export default function SelectionRowView({
       <td>{row.areaM2.toFixed(2)}</td>
       <td>
         <EditCell value={String(unitLoad.coolKcal)} onCommit={(v) => commitUnitLoad(num(v), unitLoad.heatKcal)} />
+        {showRange && (
+          <span
+            className={'badge range' + (coolInRange ? ' ok' : ' oor')}
+            title={`적정 단위부하 범위 ${range!.min}~${range!.max} kcal/h·㎡ (실명·시설군 기준)`}
+          >
+            {coolInRange ? '적정' : `범위밖 ${range!.min}~${range!.max}`}
+          </span>
+        )}
       </td>
       <td>
         <EditCell value={String(unitLoad.heatKcal)} onCommit={(v) => commitUnitLoad(unitLoad.coolKcal, num(v))} />

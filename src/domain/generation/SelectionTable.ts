@@ -4,6 +4,7 @@
 // 계약 타입은 SelectionTable.types.ts 참조(여기서 재수출).
 
 import { ComboRange } from '../shared/ComboRange'
+import { reasonableUnitLoadKcalRange } from '../shared/unitLoadTable'
 import type { Room } from './Room'
 import type { Placement } from './Placement'
 import type { IndoorModel } from './IndoorModel'
@@ -77,6 +78,7 @@ const buildBaseRow = (
       coolW: u.coolW,
       heatW: u.heatW,
       overridden: room.isUnitLoadOverridden,
+      reasonableCoolKcal: reasonableUnitLoadKcalRange(room.facility, room.usage),
     },
     requiredW: room.requiredLoadW,
     indoor,

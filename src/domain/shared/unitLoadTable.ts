@@ -132,3 +132,19 @@ export function lookupUnitLoadKcal(facility: FacilityType, usage: string, intens
 export function specialNoteOf(facility: FacilityType, usage: string): string | null {
   return rowOf(facility, usage)?.specialNote ?? null
 }
+
+// 사용자가 단위부하를 직접 고칠 때 '적정 수치'인지 판정하는 근거 범위(kcal/h·㎡).
+// 그 실명·시설군에 표가 정의한 강도 칸(표준/저/고/특수)의 최소~최대. AI 기본값은 이 표에서
+// 나오므로 항상 범위 안이고, 벗어날 수 있는 것은 사용자 오버라이드뿐이다.
+// 표에 없는 실명(FALLBACK로 떨어지는 실)은 근거가 없어 null — 이때는 적정 여부를 판정하지 않는다.
+export function reasonableUnitLoadKcalRange(
+  facility: FacilityType,
+  usage: string,
+): { min: number; max: number } | null {
+  const row = rowOf(facility, usage)
+  if (!row) return null
+  const vals = [row.standard, row.low, row.high, row.special].filter(
+    (v): v is number => typeof v === 'number',
+  )
+  return { min: Math.min(...vals), max: Math.max(...vals) }
+}

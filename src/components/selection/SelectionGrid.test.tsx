@@ -8,6 +8,7 @@ import { Room } from '../../domain/generation/Room'
 import { Placement } from '../../domain/generation/Placement'
 import { POS } from '../../test/positions'
 import { IndoorModel } from '../../domain/generation/IndoorModel'
+import { UnitLoad } from '../../domain/shared/UnitLoad'
 
 // 픽스처: 엑셀 지하1층 축약(시청각실 40C×3 → 8HP, 조합비 0.7725 근처 시나리오)
 const models = [
@@ -119,5 +120,33 @@ describe('SelectionGrid', () => {
     expect(screen.getByText('실내기 집계')).toBeInTheDocument()
     expect(screen.getByText('HP 합계')).toBeInTheDocument()
     expect(screen.getAllByText('8HP').length).toBeGreaterThan(0) // 그룹 소계 행 + BOM
+  })
+
+  // 유저가 단위부하를 직접 고쳤을 때만 '적정 수치'인지 표기한다(주인님 지시 2026-07-16).
+  // 근거: 사무실(OFFICE) 적정범위 145~200 kcal/h·㎡ (표의 저~특수 칸).
+  describe('단위부하 오버라이드 적정 판정', () => {
+    const officeTable = (coolKcal: number | null) => {
+      let room = Room.create({ id: 'X', floor: '1층', name: '사무실', areaM2: 10, usage: '사무실', facility: 'OFFICE', shortSideM: 2.5, longSideM: 4 })
+      if (coolKcal !== null) room = room.overrideUnitLoad(new UnitLoad(coolKcal, coolKcal))
+      return buildSelectionTable({ rooms: [room], placements: {}, groups: [], indoorModels: models, outdoorSpecs: [] })
+    }
+    const renderOffice = (coolKcal: number | null) =>
+      render(<SelectionGrid table={officeTable(coolKcal)} groupOptions={[]} indoorModels={models} {...noop} />)
+
+    it('오버라이드 값이 적정 범위를 벗어나면 범위를 함께 알린다', () => {
+      renderOffice(300)
+      expect(screen.getByText(/범위밖 145~200/)).toBeInTheDocument()
+    })
+
+    it('오버라이드 값이 적정 범위 안이면 적정으로 표기한다', () => {
+      renderOffice(160)
+      expect(screen.getByText('적정')).toBeInTheDocument()
+    })
+
+    it('오버라이드하지 않은 실은 적정/범위밖 뱃지를 달지 않는다', () => {
+      renderOffice(null)
+      expect(screen.queryByText('적정')).toBeNull()
+      expect(screen.queryByText(/범위밖/)).toBeNull()
+    })
   })
 })

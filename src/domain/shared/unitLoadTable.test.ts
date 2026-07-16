@@ -1,7 +1,7 @@
 // 용도별 단위부하표 (kcal/h·㎡).
 // 근거: doc/03_데이터/LG전자_단위부하_참고자료.pdf (주인님 제공 2026-07-10)
 import { describe, it, expect } from 'vitest'
-import { FACILITY_TYPES, LOAD_INTENSITIES, FALLBACK_KCAL, lookupUnitLoadKcal, resolveUsageAlias } from './unitLoadTable'
+import { FACILITY_TYPES, LOAD_INTENSITIES, FALLBACK_KCAL, lookupUnitLoadKcal, resolveUsageAlias, reasonableUnitLoadKcalRange } from './unitLoadTable'
 
 describe('부하표 — Standard 값', () => {
   it('시설군별 표준 부하를 낸다', () => {
@@ -86,6 +86,41 @@ describe('resolveUsageAlias — 동의어 매핑', () => {
     expect(lookupUnitLoadKcal('숙박시설', '세미나실', 'HIGH')).toBe(245)
     // 표에 없는 시설군에서는 동의어로 흡수된다
     expect(lookupUnitLoadKcal('OFFICE', '세미나실')).toBe(150)
+  })
+})
+
+describe('reasonableUnitLoadKcalRange — 단위부하 오버라이드 적정 범위', () => {
+  // 근거 범위 = 그 실의 강도 칸(표준/저/고/특수)의 최소~최대.
+  it('정의된 강도 칸의 최소·최대를 낸다', () => {
+    // 사무실: standard 150 · low 145 · high 170 · special 200
+    expect(reasonableUnitLoadKcalRange('OFFICE', '사무실')).toEqual({ min: 145, max: 200 })
+    // 거실: 140 · 130 · 150 · 200
+    expect(reasonableUnitLoadKcalRange('주거시설', '거실')).toEqual({ min: 130, max: 200 })
+  })
+
+  // 강도 칸이 standard 하나뿐이면 범위는 그 한 점(min=max)이다.
+  it('표준 칸만 있는 실은 min=max', () => {
+    const r = reasonableUnitLoadKcalRange('OFFICE', '관리실') // standard 150, 저·고·특수 없음
+    expect(r).toEqual({ min: 150, max: 150 })
+  })
+
+  // 특수부하 칸이 주석(숫자 아님)인 행은 그 칸을 범위에 넣지 않는다.
+  it('특수부하가 주석인 행은 숫자 칸만으로 범위를 만든다', () => {
+    const r = reasonableUnitLoadKcalRange('대공간', '판매장') // special은 '대형매장' 주석
+    expect(r).not.toBeNull()
+    expect(Number.isFinite(r!.min)).toBe(true)
+    expect(Number.isFinite(r!.max)).toBe(true)
+  })
+
+  // 표에 없는 실명(FALLBACK로 떨어지는 실)은 근거가 없어 판정하지 않는다.
+  it('표에 없는 실명은 null(적정 여부 판정 안 함)', () => {
+    expect(reasonableUnitLoadKcalRange('OFFICE', '없는실')).toBeNull()
+    expect(reasonableUnitLoadKcalRange('주거시설', '탕비실')).toBeNull()
+  })
+
+  // 동의어로 흡수되는 실명은 흡수된 표준 실의 범위를 따른다.
+  it('동의어는 흡수된 실의 범위를 따른다', () => {
+    expect(reasonableUnitLoadKcalRange('OFFICE', '강당')).toEqual(reasonableUnitLoadKcalRange('OFFICE', '회의실'))
   })
 })
 
