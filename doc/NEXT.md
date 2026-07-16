@@ -2,6 +2,31 @@
 
 > 세션 시작 시 이 파일부터 확인한다. 완료한 항목은 지우지 말고 `[x]` + 완료일·커밋을 남기고, 새 항목은 위에 추가한다.
 
+## ▶ 월요일(2026-07-20) 이어서 — 조합관리 "카탈로그-파생 축" 미완 WIP
+
+> 상태: **미커밋 WIP 3파일**. tsc 클린이지만 **테스트 미갱신 → 실패 예상**. 목표: 조합관리 매트릭스가
+> 게시 카탈로그(product_series)에서 축을 파생 → 장비마스터에 **새 시리즈가 생기면 조합관리에 자동 등장**.
+> (주인님 승인 2026-07-16. 배경: 목록관리→조합비정책은 이미 자동 연결, 조합관리만 축이 시드 고정이었다.)
+
+**한 것(미커밋):**
+- `infrastructure/equipment/sqlite/readCompatMatrix.ts` — 재작성. 축=카탈로그(OUTDOOR 행·INDOOR 열, `AXES_SQL` GROUP BY 중분류·시리즈). 값 = override ?? `compatDefaultValue`(=시드 ?? 'X'). 카탈로그 비면 `compatMatrixFromSeed` 폴백. `compatAxisExists`·`compatDefaultValue` export 추가.
+- `SqliteEquipmentAdminRepository.ts` — `setCompatCell` 축 검증을 시드→**카탈로그**(`compatAxisExists`)로, 삭제 판정을 시드값→**실효 기본값**(`compatDefaultValue`)으로. import 정리(seedValueAt 제거).
+- `compatMatrixFromSeed.ts` — `seedValueAt`가 시드 라벨의 현업 주석을 떼고 조회(`cleanSeedLabel`): "Multi V S(주거)->..." → "Multi V S(주거)", "천장형(확인요망)" → "천장형" 등 5개. 정당한 괄호((고급형) 등)는 보존.
+
+**남은 것 (월요일):**
+1. [ ] `SqliteEquipmentAdminRepository.compat.test.ts` 갱신 — 현재 35×39 고정 단언이 깨진다. 카탈로그-파생 기준으로: 정확한 개수 대신 **GHP Super III × 대공간덕트=O**·GHP×4WAY=false·수냉칠러 전부 false 등 의미 단언으로. delete-on-equal은 실효 기본값(compatDefaultValue) 기준.
+2. [ ] **신규 시리즈 자동 등장** 회귀 테스트 — 테스트 DB에 새 product_series(OUTDOOR) 1개 INSERT → `getCompatMatrix().outdoorRows`에 등장 + 기본값 X 확인.
+3. [ ] `cleanSeedLabel` 정규화가 5개 주석 라벨을 카탈로그 실제 이름과 맞추는지 확인(실제 카탈로그 series명 조회해 대조). 안 맞으면 override 시드로 보정하거나 매핑.
+4. [ ] 전체 스위트·tsc·build 그린 확인 → 브라우저에서 조합관리 렌더(카탈로그 축, GHP 예외 유지) 재검증 → 커밋.
+5. [ ] (선택) 성능 — seedValueAt이 카탈로그 셀마다 findIndex×2. 축이 커지면 시드 룩업 맵 프리컴퓨트 고려.
+
+**되돌리려면**: `git checkout -- src/infrastructure/equipment/sqlite/readCompatMatrix.ts src/infrastructure/equipment/sqlite/SqliteEquipmentAdminRepository.ts src/infrastructure/equipment/seed/compatMatrixFromSeed.ts` (안내문 일반화 6a0ef8e는 유지).
+
+### 그 밖의 열린 항목(우선순위, "생성+관리자 완성" 마감)
+- [ ] **이격거리 좌표계** — `snap()` GRID 상수가 좌표계 무관 + `mmPerUnit`(타일) 부재로 실외기 이격(200/900mm) 검증이 목업에서 미발화. 레퍼런스로선 실외기 배치 검증이 잠들어 있음. (`clearanceRules.ts`, `App.tsx:857-865`)
+- [ ] QA 잔여: 심볼 실 밖 드래그 검증 없음 / 산출 도면 실 라벨 centroid 겹침.
+- [x] **생성 파이프라인 스텝1~4 end-to-end 검증** (2026-07-16) — 배치→선정(6/6·조합비0.81)→실외기 자동배치(1/1)→산출물. 선정표(23컬럼·집계 정상)·일람표(SQLite 롱테일 실측값, '-'는 스펙시트 부재분만)·도면 SVG 모두 정상. 앱 콘솔 에러 0.
+
 ## 2026-07-16 — 현업 조합확인표 회신 반영 + 실내외기 조합관리
 
 > 근거: [`doc/실내기_실외기_조합_확인표_260716_현업회신.xlsx`](실내기_실외기_조합_확인표_260716_현업회신.xlsx), 검토·결정 [`doc/05_설계결정/실내외기_조합_확인표_현업회신_반영_2026-07-16.md`](05_설계결정/실내외기_조합_확인표_현업회신_반영_2026-07-16.md)

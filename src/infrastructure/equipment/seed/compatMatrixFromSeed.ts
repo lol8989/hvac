@@ -25,11 +25,21 @@ export function compatMatrixFromSeed(overrides?: ReadonlyMap<string, CompatValue
   return new CompatMatrix(rows, cols, rowValues)
 }
 
-// 시드 기본값 한 칸을 매트릭스를 만들지 않고 직접 조회한다. 없는 축이면 null.
-// (검증·되돌리기 판정용 — 전체 매트릭스 조립 비용을 피한다.)
+// 시드 라벨에 섞인 현업 주석을 떼어 카탈로그의 깨끗한 시리즈명과 매칭되게 한다.
+//   "Multi V S(주거) (4way->1way수정)" → "Multi V S(주거)",  "천장형(확인요망)" → "천장형",
+//   "Multi V S(주거)->주거가 아니라 냉방전용인듯합니다" → "Multi V S(주거)".
+// 정당한 괄호((고급형)·(R32)·(주거) 등)는 보존한다 — '확인요망/수정'이 든 꼬리 괄호와 '->' 이후만 뗀다.
+const cleanSeedLabel = (s: string): string =>
+  s
+    .replace(/\s*\([^)]*(확인요망|수정)[^)]*\)\s*$/, '')
+    .replace(/->.*$/, '')
+    .trim()
+
+// 시드 기본값 한 칸을 매트릭스를 만들지 않고 직접 조회한다(카탈로그의 깨끗한 라벨로 조회). 없는 축이면 null.
+// (카탈로그-파생 매트릭스의 기본값·되돌리기 판정용 — 전체 매트릭스 조립 비용을 피한다.)
 export function seedValueAt(outdoor: AxisLabel, indoor: AxisLabel): CompatValue | null {
-  const r = COMPAT_OUTDOOR_ROWS.findIndex((o) => o.subcategory === outdoor.subcategory && o.series === outdoor.series)
-  const c = COMPAT_INDOOR_COLUMNS.findIndex((i) => i.subcategory === indoor.subcategory && i.series === indoor.series)
+  const r = COMPAT_OUTDOOR_ROWS.findIndex((o) => cleanSeedLabel(o.subcategory) === outdoor.subcategory && cleanSeedLabel(o.series) === outdoor.series)
+  const c = COMPAT_INDOOR_COLUMNS.findIndex((i) => cleanSeedLabel(i.subcategory) === indoor.subcategory && cleanSeedLabel(i.series) === indoor.series)
   if (r < 0 || c < 0) return null
   return [...COMPAT_OUTDOOR_ROWS[r].values][c] as CompatValue
 }

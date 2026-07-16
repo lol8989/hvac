@@ -9,8 +9,7 @@ import type { PublishStatus } from '../../../domain/equipment/PublishStatus'
 import { assertTransition, assertSpecEditable, canTransition, PUBLISH_STATUS } from '../../../domain/equipment/PublishStatus'
 import { ComboPolicy } from '../../../domain/equipment/ComboPolicy'
 import { isCompatValue, type CompatMatrix, type CompatValue, type CompatAxis } from '../../../domain/equipment/CompatMatrix'
-import { seedValueAt } from '../seed/compatMatrixFromSeed'
-import { readCompatMatrix } from './readCompatMatrix'
+import { readCompatMatrix, compatAxisExists, compatDefaultValue } from './readCompatMatrix'
 import { ComboRange } from '../../../domain/shared/ComboRange'
 import { isHpSource } from '../../../domain/equipment/HpSource'
 import { COMBO_MAX_KEY, COMBO_MIN_KEY } from './settingsKeys'
@@ -328,15 +327,15 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
     indoor: Pick<CompatAxis, 'subcategory' | 'series'>,
     value: CompatValue,
   ): void {
-    // 값이 유효하고 축이 실재하는지 경량 검증(전체 매트릭스 조립 없이 시드에서 직접 조회).
+    // 값이 유효하고 축이 카탈로그에 실재하는지 검증한다. 축은 게시 시리즈에서 오므로 시드가 아니라 카탈로그로 확인한다.
     if (!isCompatValue(value)) throw new EquipmentDomainError('INVALID_FIELD', `유효하지 않은 조합 값입니다: ${value}`)
-    const seedValue = seedValueAt(outdoor, indoor)
-    if (seedValue === null) {
+    if (!compatAxisExists(this.db, outdoor, 'OUTDOOR') || !compatAxisExists(this.db, indoor, 'INDOOR')) {
       throw new EquipmentDomainError('INVALID_FIELD', `알 수 없는 축: 실외기 '${outdoor.series}' × 실내기 '${indoor.series}'`)
     }
+    const defaultValue = compatDefaultValue(outdoor, indoor) // 시드 ?? 'X' — getCompatMatrix와 같은 기본값
     this.inTransaction(() => {
-      if (value === seedValue) {
-        // 시드 기본값과 같아지면 override를 걷어낸다 — series_compat엔 '바꾼 칸만' 남는다(스키마 불변식).
+      if (value === defaultValue) {
+        // 기본값과 같아지면 override를 걷어낸다 — series_compat엔 '바꾼 칸만' 남는다(스키마 불변식).
         // 안 그러면 스테일 override가 훗날 시드 개정을 조용히 마스킹한다(조합비 override의 null 되돌리기와 동일 정책).
         this.db.run(
           `DELETE FROM series_compat WHERE outdoor_subcategory=? AND outdoor_series=? AND indoor_subcategory=? AND indoor_series=?`,
