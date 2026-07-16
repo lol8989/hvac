@@ -109,8 +109,7 @@ export default function CompatMatrixPage({ admin }: { admin: EquipmentAdminRepos
   return (
     <AdminShell active="compat">
       <p className="cm-note">
-        실외기 시리즈별로 연결 가능한 실내기 유형을 관리합니다. 왼쪽에서 <b>실외기 시리즈</b>를 고르면, 그 시리즈에 <b>연결 가능한 실내기 유형</b>을 오른쪽에서 켜고 끕니다. 냉매
-        종류(R32/R410A)는 조합을 가르지 않으며, FCU는 물 기반이라 생성 실내기 후보에서 제외됩니다. <b>전용</b>은 전용 실내기만 붙는 조합으로, 연결 가능으로 취급됩니다.
+        실외기 시리즈별로 연결 가능한 실내기 유형을 관리합니다. 왼쪽에서 <b>실외기 시리즈</b>를 고르면, 그 시리즈에 <b>연결 가능한 실내기 유형</b>을 오른쪽에서 켜고 끕니다.
       </p>
 
       <div className="cm-split">
