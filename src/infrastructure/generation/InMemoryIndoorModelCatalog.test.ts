@@ -3,6 +3,8 @@
 
 import { describe, it, expect } from 'vitest'
 import { InMemoryIndoorModelCatalog } from './InMemoryIndoorModelCatalog'
+import type { EquipmentMaster } from '../../domain/equipment/EquipmentMaster'
+import type { IndoorSpecFields, OutdoorSpecFields } from '../../domain/equipment/MasterRecord'
 
 describe('InMemoryIndoorModelCatalog', () => {
   const catalog = new InMemoryIndoorModelCatalog()
@@ -28,6 +30,23 @@ describe('InMemoryIndoorModelCatalog', () => {
     it('반환 목록은 불변이다 (push 시 throw)', () => {
       const list = catalog.list()
       expect(() => (list as unknown[]).push(null)).toThrow()
+    })
+
+    // 현업 확인 2026-07-16: FCU는 물 기반이라 냉매식 실외기와 조합 불가 → 생성 실내기 풀에서 제외.
+    it('FCU 실내기가 게시돼 있어도 생성 풀에서 뺀다', () => {
+      const indoor = (over: Partial<IndoorSpecFields>): IndoorSpecFields => ({
+        code: 'X', model: 'X', coolW: 5200, heatW: 6000, type: '4WAY 카세트', series: 'S', energySource: 'EHP', ...over,
+      })
+      const stubMaster: EquipmentMaster = {
+        publishedIndoor: () => [
+          indoor({ code: '52T', model: 'RNW0521M2S', type: '4WAY 카세트' }),
+          indoor({ code: 'FCU08', model: 'WF1A008L2T4', type: 'FCU(팬코일 유닛)', series: 'FCU' }),
+        ],
+        publishedOutdoor: (): readonly OutdoorSpecFields[] => [],
+      }
+      const list = new InMemoryIndoorModelCatalog(stubMaster).list()
+      expect(list.map((m) => m.code)).toEqual(['52T'])
+      expect(list.some((m) => m.type.includes('FCU'))).toBe(false)
     })
   })
 

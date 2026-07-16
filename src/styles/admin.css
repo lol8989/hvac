@@ -841,3 +841,230 @@
   color: var(--n-800);
   line-height: 1.8;
 }
+
+/* ── 실내외기 조합관리(마스터·디테일) ── */
+.cm-note {
+  margin: 0 var(--sp-5) var(--sp-3);
+  padding: 10px var(--sp-4);
+  background: var(--n-50);
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-md);
+  color: var(--n-800);
+  font-size: var(--fs-md);
+  line-height: 1.7;
+}
+.cm-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-5) var(--sp-5);
+}
+/* 좌: 실외기 시리즈 목록 */
+.cm-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--n-0);
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.cm-list-search {
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--n-150);
+}
+.cm-list-search .field {
+  width: 100%;
+}
+.cm-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-2);
+}
+.cm-group + .cm-group {
+  margin-top: 2px;
+}
+.cm-group-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px var(--sp-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--n-700);
+}
+.cm-caret {
+  color: var(--n-400, #a89ea3);
+  font-size: 12px;
+  width: 12px;
+}
+.cm-group-name {
+  flex: 1;
+  text-align: left;
+}
+.cm-group-count {
+  color: var(--n-500);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+.cm-item {
+  display: block;
+  width: 100%;
+  padding: 7px var(--sp-3) 7px 26px;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.cm-item:hover {
+  background: var(--n-50);
+}
+.cm-item.on {
+  background: var(--lg-red-wash);
+  box-shadow: inset 3px 0 0 var(--lg-red);
+}
+.cm-item-ser {
+  display: block;
+  font-size: var(--fs-md);
+  color: var(--n-900);
+  line-height: 1.35;
+}
+.cm-item.on .cm-item-ser {
+  color: var(--lg-red-deep);
+  font-weight: 700;
+}
+.cm-item-sub {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--n-500);
+}
+/* 우: 선택 시리즈의 실내기 체크리스트 */
+.cm-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0; /* grid 1fr가 콘텐츠 min-content로 늘어나 가로 오버플로하는 것을 막는다 */
+  background: var(--n-0);
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.cm-detail-h {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--n-150);
+}
+.cm-detail-title {
+  margin: 0;
+  font-size: var(--fs-lg, 18px);
+  font-weight: 800;
+  color: var(--n-900);
+}
+.cm-detail-meta {
+  margin-top: 4px;
+  font-size: var(--fs-md);
+  color: var(--n-600);
+}
+.cm-es {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--lg-red-wash);
+  color: var(--lg-red);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.cm-detail-count {
+  color: var(--n-500);
+}
+.cm-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4);
+}
+.cm-empty-detail {
+  padding: var(--sp-5);
+  color: var(--n-600);
+  font-size: var(--fs-md);
+}
+.cm-sub {
+  border: none;
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+}
+.cm-sub-h {
+  padding: 0 0 6px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: var(--tracking-label);
+  color: var(--n-600);
+  border-bottom: 1px solid var(--n-150);
+  width: 100%;
+}
+.cm-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding-top: 8px;
+}
+.cm-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  font-size: var(--fs-md);
+  color: var(--n-700);
+  background: var(--n-0);
+}
+.cm-check:hover {
+  border-color: var(--n-300);
+}
+.cm-check.on {
+  background: var(--ok-bg);
+  border-color: var(--ok-line);
+  color: var(--ok);
+  font-weight: 600;
+}
+.cm-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--ok);
+  cursor: pointer;
+}
+.cm-tag {
+  padding: 0 6px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--lg-red-wash);
+  color: var(--lg-red);
+  border: 1px solid var(--lg-red-line);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.cm-na-note {
+  margin: var(--sp-2) 0 0;
+  color: var(--n-500);
+  font-size: var(--fs-sm);
+}
+@media (max-width: 900px) {
+  .cm-split {
+    grid-template-columns: 1fr;
+  }
+}

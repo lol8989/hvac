@@ -6,6 +6,7 @@ import ComboPolicyPage from './ComboPolicyPage'
 import type { EquipmentAdminRepository, ProductRow } from '../../application/equipment/adminPorts'
 import { ComboPolicy } from '../../domain/equipment/ComboPolicy'
 import { ComboRange } from '../../domain/shared/ComboRange'
+import { compatMatrixFromSeed } from '../../infrastructure/equipment/seed/compatMatrixFromSeed'
 
 const mk = (over: Partial<ProductRow>): ProductRow => ({
   id: 0, categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP',
@@ -34,6 +35,9 @@ const makeAdmin = (over: Partial<EquipmentAdminRepository> = {}): EquipmentAdmin
   getComboPolicy: () => policy,
   saveGlobalComboRange: vi.fn(),
   setProductComboRange: vi.fn(),
+  getCompatMatrix: () => compatMatrixFromSeed(),
+  setCompatCell: vi.fn(),
+  clearCompatForOutdoor: vi.fn(),
   ...over,
 })
 

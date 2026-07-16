@@ -3,6 +3,7 @@
 // 구현: infrastructure/equipment/sqlite/SqliteEquipmentAdminRepository (POC), 추후 마스터 API로 교체.
 
 import type { ComboPolicy } from '../../domain/equipment/ComboPolicy'
+import type { CompatMatrix, CompatValue, CompatAxis } from '../../domain/equipment/CompatMatrix'
 import type { ComboRange } from '../../domain/shared/ComboRange'
 import type { HpSource } from '../../domain/equipment/HpSource'
 import type { PublishStatus } from '../../domain/equipment/PublishStatus'
@@ -79,6 +80,18 @@ export interface EquipmentAdminRepository {
   // 모델별 override 저장. range가 null이면 override를 걷어내 전역 기본으로 되돌린다.
   // throws NOT_FOUND(모델), INVALID_FIELD
   setProductComboRange(modelCode: string, range: ComboRange | null): void
+
+  // ── 실내기↔실외기 호환 기준표 ──
+  // 현업 확정 조합표(시드) + 관리자 편집 override를 합친 현재 매트릭스.
+  getCompatMatrix(): CompatMatrix
+
+  // 한 칸(실외기 시리즈 × 실내기 시리즈)의 값을 저장한다(O/X/-/D).
+  // 값이 시드 기본값과 같아지면 override를 걷어낸다(series_compat엔 '바꾼 칸만' 남는다).
+  // throws INVALID_FIELD(알 수 없는 축 · 잘못된 값)
+  setCompatCell(outdoor: Pick<CompatAxis, 'subcategory' | 'series'>, indoor: Pick<CompatAxis, 'subcategory' | 'series'>, value: CompatValue): void
+
+  // 한 실외기 시리즈의 모든 override를 걷어내 시드(현업 확정 기본값)로 되돌린다.
+  clearCompatForOutdoor(outdoor: Pick<CompatAxis, 'subcategory' | 'series'>): void
 
   // 스펙시트 업로드 일괄 등록. verdict==='OK' 행만 DRAFT로 적재하고 롱테일 스펙을 product_specs에 저장한다.
   // 오류·중복 행은 조용히 건너뛴다(사유는 미리보기에서 이미 제시됨). 반환값: 실제 적재 건수.

@@ -5,6 +5,7 @@ import SelectionReviewWindow from './components/selection/SelectionReviewWindow'
 import ScheduleWindow from './components/schedule/ScheduleWindow'
 import EquipmentAdminPage from './components/equipment/EquipmentAdminPage'
 import ComboPolicyPage from './components/equipment/ComboPolicyPage'
+import CompatMatrixPage from './components/equipment/CompatMatrixPage'
 import ForbiddenPage from './components/equipment/ForbiddenPage'
 import { canManageEquipment } from './domain/auth/Permission'
 import { CURRENT_USER } from './data'
@@ -68,7 +69,7 @@ const render = (node: React.ReactNode) => root.render(<React.StrictMode>{node}</
 
 // 관리 영역(장비 목록관리·조합비 정책)은 모두 ADMIN 전용이고 SQLite DB 핸들이 필요하다
 // (인메모리 폴백은 읽기 전용 → 편집 불가).
-const ADMIN_VIEWS = ['equipment', 'combo']
+const ADMIN_VIEWS = ['equipment', 'combo', 'compat']
 
 if (view === 'selection') {
   render(<SelectionReviewWindow />)
@@ -88,7 +89,15 @@ if (view === 'selection') {
     )
   } else {
     const admin = new SqliteEquipmentAdminRepository(handle.db, { onChange: persistOn(handle) })
-    render(view === 'combo' ? <ComboPolicyPage admin={admin} /> : <EquipmentAdminPage admin={admin} />)
+    render(
+      view === 'combo' ? (
+        <ComboPolicyPage admin={admin} />
+      ) : view === 'compat' ? (
+        <CompatMatrixPage admin={admin} />
+      ) : (
+        <EquipmentAdminPage admin={admin} />
+      ),
+    )
   }
 } else {
   // 생성/검도는 PUBLISHED만 읽으므로 SQLite 실패 시 인메모리 기본으로 폴백(앱은 항상 렌더).

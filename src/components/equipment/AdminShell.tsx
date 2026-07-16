@@ -9,7 +9,7 @@
 import type { ReactNode } from 'react'
 import { CURRENT_USER, GNB_MENUS } from '../../data'
 
-export type AdminMenuKey = 'products' | 'combo'
+export type AdminMenuKey = 'products' | 'combo' | 'compat'
 
 interface AdminMenu {
   key: AdminMenuKey
@@ -20,6 +20,7 @@ interface AdminMenu {
 const ADMIN_MENUS: readonly AdminMenu[] = [
   { key: 'products', label: '장비 목록관리', href: '?view=equipment' },
   { key: 'combo', label: '조합비 정책', href: '?view=combo' },
+  { key: 'compat', label: '실내외기 조합관리', href: '?view=compat' },
 ]
 
 const HOME_HREF = './'

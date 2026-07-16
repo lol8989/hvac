@@ -3,6 +3,7 @@
 // (마스터가 SSOT, 생성 단은 참조만 — CLAUDE.md §1). 마스터 레코드 → 도메인 VO(IndoorModel) 변환.
 
 import { IndoorModel } from '../../domain/generation/IndoorModel'
+import { isRefrigerantCombinableIndoor } from '../../domain/generation/indoorCombinability'
 import type { IndoorModelCatalog } from '../../application/generation/ports'
 import type { EquipmentMaster } from '../../domain/equipment/EquipmentMaster'
 import { defaultEquipmentMaster } from '../equipment/InMemoryEquipmentMaster'
@@ -12,9 +13,13 @@ export class InMemoryIndoorModelCatalog implements IndoorModelCatalog {
 
   constructor(master: EquipmentMaster = defaultEquipmentMaster) {
     this.models = Object.freeze(
-      master.publishedIndoor().map(
-        (m) => new IndoorModel({ code: m.code, model: m.model, coolW: m.coolW, heatW: m.heatW, type: m.type, series: m.series, energySource: m.energySource }),
-      ),
+      master
+        .publishedIndoor()
+        // 물 기반(FCU 등)은 냉매식 실외기 조합 후보가 아니다 → 생성 실내기 풀에서 뺀다(현업 확인 2026-07-16).
+        .filter((m) => isRefrigerantCombinableIndoor(m.type))
+        .map(
+          (m) => new IndoorModel({ code: m.code, model: m.model, coolW: m.coolW, heatW: m.heatW, type: m.type, series: m.series, energySource: m.energySource }),
+        ),
     )
   }
 

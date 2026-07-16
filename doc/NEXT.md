@@ -2,6 +2,21 @@
 
 > 세션 시작 시 이 파일부터 확인한다. 완료한 항목은 지우지 말고 `[x]` + 완료일·커밋을 남기고, 새 항목은 위에 추가한다.
 
+## 2026-07-16 — 현업 조합확인표 회신 반영 + 실내외기 조합관리
+
+> 근거: [`doc/실내기_실외기_조합_확인표_260716_현업회신.xlsx`](실내기_실외기_조합_확인표_260716_현업회신.xlsx), 검토·결정 [`doc/05_설계결정/실내외기_조합_확인표_현업회신_반영_2026-07-16.md`](05_설계결정/실내외기_조합_확인표_현업회신_반영_2026-07-16.md)
+> 현업은 격자(O/X 가정)를 수용하고 질문 5건에만 회신. 격자는 사실상 "EHP·VRF ↔ Multi V 실내기 = O, 그 외 계열 = X/–"로 수렴(우리 계열+is_vrf 규칙과 대체로 일치)하나, GHP↔대공간덕트·냉방전용 전용실내기 등 시리즈 예외가 있어 기준데이터화가 정당.
+
+- [x] **Stage A — FCU 제외 + 냉매 불변식** (2026-07-16, 미커밋) — `domain/generation/indoorCombinability.ts`(신규): FCU(물 기반)를 생성 실내기 풀에서 제외(질문 2). 냉매 종류(R32/R410A)로 조합을 가르지 않음(질문 1)을 주석·테스트로 고정. `InMemoryIndoorModelCatalog`가 필터 적용.
+- [x] **B1 시드** — `infrastructure/equipment/seed/compatMatrixSeed.ts`: 회신 xlsx에서 추출한 확정 조합표(실외기 35 × 실내기 39, 값 O/X/-/D).
+- [x] **B2 도메인** — `domain/equipment/CompatMatrix.ts`: 불변 VO(축=중분류·시리즈, valueAt/isCompatible/withValue). 조립 팩토리 `compatMatrixFromSeed`(infra).
+- [x] **B3 관리자 조합관리 페이지** — 스키마 v6 `series_compat`(override 전용, 기본=시드) + admin 포트 `getCompatMatrix`/`setCompatCell`/`clearCompatForOutdoor` + AdminShell 메뉴 `?view=compat` + main 라우팅. 전체 1130 그린·tsc·build 클린.
+  - **화면은 마스터·디테일**(주인님 지시 2026-07-16): 격자(엑셀 시트 복사)가 아니라 좌: 실외기 시리즈 목록(계열 그룹·검색) / 우: 그 시리즈의 연결 가능 실내기 유형 체크리스트(중분류 묶음)·확정 기본값 복원. 브라우저 실검증(선택·검색·토글→저장→리로드 유지·복원). `CompatMatrixPage.tsx`.
+  - **적대적 코드리뷰(38에이전트) 21건 반영**: 구분자 AXIS_SEP 통일, setCompatCell 시드=값이면 삭제, 중복축 거부, 경량 검증, 접근성·14px, 토스트 타이머 등. 격자 특화 지적은 마스터·디테일 재설계로 자연 해소.
+- [ ] **B4 (후속) — 생성단 소비 연결** — `selectOutdoorUnits`가 계열 축만 본다. CompatMatrix를 참조해 시리즈-특정 예외(GHP↔대공간덕트만, 냉방전용 전용실내기)를 반영하려면: 실외기 후보/실내기 유닛에 (중분류·시리즈) 라벨을 실어 매트릭스로 조인. 생성 동작 변경이라 별도 TDD 사이클. 라벨 정규화(시드의 "(4way->1way수정)" 등 주석) 주의.
+- [ ] **B4 후속 — SINGLE(단품) 1:1 + product_combinations** (질문 3·5) — 단품은 1:1, 능력은 세트 단위. `product_combinations` 적재 + T/P/V/B 앞글자 유형 분류(T=카세트·P=스탠드·V=상업용 천장형·B=덕트형). 현재 단품 실외기는 is_vrf=0로 조합 후보에서 제외돼 있음(오작동 아님).
+- [ ] 민수/조달 실내기 중복 라인 dedup(질문 4: 스펙 동일·거의 안 섞음) — 경미.
+
 ## 2026-07-15 — 층 전환(Floor Switching)
 
 > 설계·근거: [`doc/05_설계결정/층_전환_설계_v1.md`](05_설계결정/층_전환_설계_v1.md)

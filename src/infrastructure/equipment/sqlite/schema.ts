@@ -8,7 +8,8 @@
 // v3: product_series.is_vrf(계열별 게시 요건·HP 유도 분기) + products.hp_source(마력 출처).
 // v4: system_settings(전역 조합비 기본) + products.combo_min/combo_max(실외기 모델별 override).
 // v5: 계열(energy_source)을 subcategory→series로 이동. '기타 실내기' 버킷이 계열을 오염시키던 버그 차단.
-export const SCHEMA_VERSION = 5
+// v6: series_compat(실내기↔실외기 호환 기준표의 관리자 편집 override). 기본값은 현업 확정 시드(compatMatrixSeed).
+export const SCHEMA_VERSION = 6
 
 export const SCHEMA_SQL = `
 PRAGMA foreign_keys = ON;
@@ -79,6 +80,19 @@ CREATE TABLE products (
 CREATE TABLE system_settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+
+-- 실내기↔실외기 호환 기준표(실외기 시리즈 × 실내기 중분류·시리즈)의 관리자 편집 override.
+-- 기본값은 현업 확정 시드(compatMatrixSeed)라 여기엔 '바꾼 칸만' 남는다(빈 테이블 = 시드 그대로).
+-- 축을 제품 id가 아니라 (중분류·시리즈) 라벨로 잡는다 — 조합표가 시리즈 단위이고, 시드 라벨의
+-- 현업 주석("(4way->1way수정)" 등)이 섞여 제품 id 조인이 취약하기 때문. 생성단 소비 시 라벨로 조인한다.
+CREATE TABLE series_compat (
+  outdoor_subcategory TEXT NOT NULL,
+  outdoor_series      TEXT NOT NULL,
+  indoor_subcategory  TEXT NOT NULL,
+  indoor_series       TEXT NOT NULL,
+  value               TEXT NOT NULL CHECK (value IN ('O','X','-','D')),
+  PRIMARY KEY (outdoor_subcategory, outdoor_series, indoor_subcategory, indoor_series)
 );
 
 CREATE TABLE product_specs (
