@@ -74,7 +74,18 @@
       "Bash(awk '{print \"seed:\", $1}')",
       "Bash(git stash *)",
       "Bash(ngrok config *)",
-      "Bash(ngrok http *)"
+      "Bash(ngrok http *)",
+      "PowerShell(node scripts/buildCompatSheet.mjs; Get-ChildItem doc -Filter *.xlsx | Select-Object Name, Length)",
+      "Bash(export SCRATCH=\"C:/Users/lolfr/AppData/Local/Temp/claude/C--Users-lolfr-Desktop---------POC/4f854ddb-588d-484a-b24f-3688c73b6188/scratchpad\")",
+      "mcp__claude_ai_Figma__get_figma_skill",
+      "mcp__claude_ai_Figma__use_figma",
+      "Bash(curl -sL -o fig_v1.png \"https://www.figma.com/api/mcp/asset/684c2a98-53b0-475c-8508-6ae4b2248633\")",
+      "Bash(curl -sL -o fig_final.png \"https://www.figma.com/api/mcp/asset/4e1e788b-472f-4fa5-9b55-53296d73fa01\")",
+      "Bash(curl -sL -o fig_final2.png \"https://www.figma.com/api/mcp/asset/2af6d643-db1e-4113-84cb-8fb3eee9502e\")",
+      "Bash(curl -sL -o fig_final3.png \"https://www.figma.com/api/mcp/asset/1c219765-bb86-42db-9daf-02a63f300d74\")",
+      "Bash(claude --version)",
+      "Read(//c/Users/lolfr/**)",
+      "Bash(npm -g config get prefix)"
     ]
   },
   "prefersReducedMotion": true
