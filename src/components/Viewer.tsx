@@ -39,13 +39,16 @@ const SHORTCUTS: readonly { key: string; desc: string }[] = [
   { key: 'Esc', desc: '선택 해제' },
 ]
 
-// 레이어 필터: 툴바 셀렉트에서 선택 — 해당 레이어만 표시(도면 배경은 항상 표시).
-export type LayerFilter = 'all' | 'zone' | 'indoor' | 'outdoor'
-export const LAYER_OPTIONS: readonly { value: LayerFilter; label: string }[] = [
-  { value: 'all', label: '레이어: 전체' },
-  { value: 'indoor', label: '실내기' },
-  { value: 'outdoor', label: '실외기' },
-  { value: 'zone', label: '실 경계' },
+// 레이어 표시: 각 레이어를 독립적으로 켜고 끈다(도면 배경은 항상 표시).
+// 예전엔 하나만 고르는 단일 필터('all' | 하나)였는데, 여러 레이어를 동시에 보며
+// 작업하려면 레이어별 on/off가 맞다 — 그래서 레이어별 boolean 맵으로 바꿨다.
+export type LayerName = 'zone' | 'indoor' | 'outdoor'
+export type LayerVisibility = Record<LayerName, boolean>
+export const ALL_LAYERS_ON: LayerVisibility = { zone: true, indoor: true, outdoor: true }
+export const LAYER_TOGGLES: readonly { name: LayerName; label: string }[] = [
+  { name: 'indoor', label: '실내기' },
+  { name: 'outdoor', label: '실외기' },
+  { name: 'zone', label: '실 경계' },
 ]
 
 // 실외기 배치용 그룹 요약(도면 심볼 라벨·모델).
@@ -95,11 +98,11 @@ interface ViewerProps {
   planH?: number // 도면 정규화 좌표 높이(기본 470)
   mmPerUnit?: number // 정규화 1단위 = 실 mm (격자 실치수 표기 + DXF 왕복)
   fitBounds?: ViewBox // 층 전환: 활성 층 실들을 감싸는 bbox. 있으면 여기에 맞춘다(없으면 전체 도면)
-  layerFilter?: LayerFilter // 표시 레이어 필터(기본 all)
-  onLayerFilterChange?: (f: LayerFilter) => void // 레이어 셀렉트는 뷰어 도구다(상단 툴바 밴드 제거)
+  layers?: LayerVisibility // 레이어별 표시 여부(기본 전부 ON)
+  onLayersChange?: (v: LayerVisibility) => void // 레이어 토글은 뷰어 도구다(상단 툴바 밴드 제거)
   canAddUnit?: boolean // ＋실내기 수동 추가 허용 — 실검출·AI 배치 완료 전에는 비활성
   canPlaceOutdoors?: boolean // ＋실외기 배치 허용 — '실외기 배치' 단계에서만 활성
-  // 실 자르기(V): 검출 단계에서만 허용한다(실_슬라이싱_설계_v1 §D2).
+  // 실 자르기(V): 실내기 배치 단계에서만 허용한다(실_슬라이싱_설계_v1 §D2).
   canSliceRooms?: boolean
   onRoomSlice?: (roomId: string, line: SliceLine) => void
   onSliceUnavailable?: () => void // 허용되지 않는 단계에서 V를 눌렀을 때(App이 안내한다)
@@ -139,7 +142,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     rooms, selectedIds, onSelectionChange, onEscape, tiles, tileBase,
     indoorSymbols, onUnitsMove, onUnitsRotate, onUnitsDelete, onUnitAdd,
     outdoorSymbols, onOutdoorsMove, onOutdoorsDelete, onOutdoorsAutoPlace,
-    indoorInfo, outdoorGroups, planW, planH, mmPerUnit, fitBounds, layerFilter = 'all', onLayerFilterChange,
+    indoorInfo, outdoorGroups, planW, planH, mmPerUnit, fitBounds, layers = ALL_LAYERS_ON, onLayersChange,
     canAddUnit = true, canPlaceOutdoors = false,
     canSliceRooms = false, onRoomSlice, onSliceUnavailable, onZoneResize,
     canMergeRooms = false, onRoomsMerge, isAdjacent, onMergeUnavailable,
@@ -258,10 +261,10 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   }), [placeOutdoorsFn])
 
   // window 리스너(1회 등록)에서 읽는 최신 상태 스냅샷. 렌더 중이 아닌 effect에서 갱신(refs 규칙 준수).
-  // layerFilter도 싣는다 — 숨긴 레이어의 객체를 마퀴로 잡거나 Del로 지울 수 없어야 한다(적대적 QA).
-  const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layerFilter })
-  useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layerFilter } })
-  const layerVisible = (name: LayerFilter, f: LayerFilter): boolean => f === 'all' || f === name
+  // layers도 싣는다 — 숨긴 레이어의 객체를 마퀴로 잡거나 Del로 지울 수 없어야 한다(적대적 QA).
+  const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layers })
+  useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layers } })
+  const layerVisible = (name: LayerName, v: LayerVisibility): boolean => v[name]
 
   // SVG 화면 폭(px) 추적 — 타일 레벨 선택(화면 해상도 ≒ 타일 해상도)에 사용.
   useEffect(() => {
@@ -447,12 +450,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
             const big = rect.w > 3 || rect.h > 3
             const s = st.current
             if (s.mode === 'zone') {
-              if (big && layerVisible('zone', s.layerFilter)) {
+              if (big && layerVisible('zone', s.layers)) {
                 const hits = s.zones.filter((z) => zoneHitsRect(rect, z)).map((z) => z.id)
                 onSelectionChange(Array.from(new Set([...(m.additive ? s.selectedIds : []), ...hits])))
               } else if (!m.additive) onSelectionChange([])
             } else if (s.mode === 'cassette') {
-              if (big && layerVisible('indoor', s.layerFilter)) {
+              if (big && layerVisible('indoor', s.layers)) {
                 const hits = s.symbols.filter((u) => u.x >= rect.x && u.x <= rect.x + rect.w && u.y >= rect.y && u.y <= rect.y + rect.h).map((u) => u.id)
                 const base = m.additive ? new Set(s.selUnits) : new Set<string>()
                 hits.forEach((id) => base.add(id))
@@ -548,12 +551,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         }
       } else if (k === 'delete' || k === 'backspace') {
         // 숨긴 레이어는 지울 수 없다 — 안 보이는 실내기가 사라지면 대수·조합비가 조용히 틀어진다.
-        if (st.current.mode === 'cassette' && layerVisible('indoor', st.current.layerFilter)) {
+        if (st.current.mode === 'cassette' && layerVisible('indoor', st.current.layers)) {
           e.preventDefault()
           const sel = st.current.selUnits
           // 심볼 삭제 = 실내기 대수 감소. 선정표·조합비가 즉시 따라온다.
           if (sel.size) { cbRef.current.onUnitsDelete?.(Array.from(sel)); setSelUnits(new Set()) }
-        } else if (st.current.mode === 'outdoor' && layerVisible('outdoor', st.current.layerFilter)) {
+        } else if (st.current.mode === 'outdoor' && layerVisible('outdoor', st.current.layers)) {
           e.preventDefault()
           const id = st.current.selOdu
           // 실외기 심볼 삭제 = 도면에서 뺀 것. 그룹 자체는 남는다(가드가 '미배치'로 잡는다).
@@ -721,8 +724,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const isOutdoor = mode === 'outdoor'
   const isSlice = mode === 'slice'
   const isMerge = mode === 'merge'
-  // 레이어 필터: 선택된 레이어만 표시(전체면 모두).
-  const layerOn = (name: LayerFilter): boolean => layerFilter === 'all' || layerFilter === name
+  // 레이어 표시: 켜 둔 레이어만 그리고 편집을 받는다.
+  const layerOn = (name: LayerName): boolean => layers[name]
+  // '전체' 마스터 토글: 모두 켜짐/모두 꺼짐/일부만(중간)을 반영하고 한 번에 켜거나 끈다.
+  const allLayersOn = LAYER_TOGGLES.every((l) => layers[l.name])
+  const someLayersOn = LAYER_TOGGLES.some((l) => layers[l.name])
+  const setAllLayers = (on: boolean) => onLayersChange?.({ zone: on, indoor: on, outdoor: on })
   const MODE_LABEL: Record<Mode, string> = {
     cassette: '에어컨',
     zone: '존(실)',
@@ -758,12 +765,29 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     <div className="viewer">
       {/* 좌상단 뷰어 도구: 레이어 필터 + 격자. (조작 힌트는 우상단 단축키 위젯에 있다 — 중복 제거) */}
       <div className="vtools">
-        {onLayerFilterChange && (
-          <select className="field" value={layerFilter} onChange={(e) => onLayerFilterChange(e.target.value as LayerFilter)} aria-label="레이어 필터">
-            {LAYER_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+        {onLayersChange && (
+          <div className="vlayers" role="group" aria-label="레이어 표시">
+            <span className="vlayers-h">레이어</span>
+            <label className="vtoggle vtoggle-all" title={allLayersOn ? '전체 끄기' : '전체 켜기'}>
+              <input
+                type="checkbox"
+                // indeterminate(중간 상태)는 JSX 속성이 없어 DOM에 직접 세팅한다 — 일부만 켜졌을 때.
+                ref={(el) => { if (el) el.indeterminate = someLayersOn && !allLayersOn }}
+                checked={allLayersOn}
+                onChange={() => setAllLayers(!allLayersOn)}
+              /> 전체
+            </label>
+            <span className="vlayers-sep" aria-hidden="true" />
+            {LAYER_TOGGLES.map((l) => (
+              <label className="vtoggle" key={l.name}>
+                <input
+                  type="checkbox"
+                  checked={layers[l.name]}
+                  onChange={(e) => onLayersChange({ ...layers, [l.name]: e.target.checked })}
+                /> {l.label}
+              </label>
             ))}
-          </select>
+          </div>
         )}
         <label className="vtoggle"><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> 격자{gridLabel ? ` (${gridLabel})` : ''}</label>
       </div>

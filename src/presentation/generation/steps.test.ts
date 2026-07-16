@@ -3,9 +3,9 @@ import { STEPS, stepIndex, nextStep, prevStep, isFirstStep, isLastStep } from '.
 import { STEP_ORDER } from '../../domain/generation/StepGuard'
 
 describe('generation steps', () => {
-  it('5단계가 정의된 순서대로다 (선정표 검토는 스텝이 아니라 새 창)', () => {
-    expect(STEPS.map((s) => s.id)).toEqual(['detect', 'place', 'combine', 'outdoor', 'output'])
-    expect(STEPS.map((s) => s.no)).toEqual([1, 2, 3, 4, 5])
+  it('4단계가 정의된 순서대로다 (실 검출은 스텝이 아니라 초기 상태, 선정표 검토는 새 창)', () => {
+    expect(STEPS.map((s) => s.id)).toEqual(['place', 'combine', 'outdoor', 'output'])
+    expect(STEPS.map((s) => s.no)).toEqual([1, 2, 3, 4])
   })
 
   it('표시 순서는 도메인의 파이프라인 순서(STEP_ORDER)와 같다', () => {
@@ -19,16 +19,16 @@ describe('generation steps', () => {
   })
 
   it('nextStep/prevStep은 양 끝에서 클램프된다', () => {
-    expect(nextStep('detect')).toBe('place')
+    expect(nextStep('place')).toBe('combine')
     expect(nextStep('output')).toBe('output') // 마지막
-    expect(prevStep('place')).toBe('detect')
-    expect(prevStep('detect')).toBe('detect') // 처음
+    expect(prevStep('combine')).toBe('place')
+    expect(prevStep('place')).toBe('place') // 처음
   })
 
   it('첫/마지막 단계 판별', () => {
-    expect(isFirstStep('detect')).toBe(true)
+    expect(isFirstStep('place')).toBe(true)
     expect(isLastStep('output')).toBe(true)
-    expect(isFirstStep('place')).toBe(false)
-    expect(isLastStep('place')).toBe(false)
+    expect(isFirstStep('combine')).toBe(false)
+    expect(isLastStep('combine')).toBe(false)
   })
 })

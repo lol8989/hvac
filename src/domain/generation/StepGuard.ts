@@ -11,10 +11,11 @@
 
 // 파이프라인 단계는 도메인 어휘다(라벨·표시 순서만 presentation이 갖는다).
 // 도메인은 상위 레이어를 import하지 않는다(CLAUDE.md §5.1 규칙 1).
-export type StepId = 'detect' | 'place' | 'combine' | 'outdoor' | 'output'
+// 실 검출은 스텝이 아니다 — 도면을 열면 실이 이미 검출돼 있고, 첫 스텝은 실내기 배치다.
+export type StepId = 'place' | 'combine' | 'outdoor' | 'output'
 
 // 파이프라인 진행 순서. 뒤로 가기 판정의 근거.
-export const STEP_ORDER: readonly StepId[] = ['detect', 'place', 'combine', 'outdoor', 'output']
+export const STEP_ORDER: readonly StepId[] = ['place', 'combine', 'outdoor', 'output']
 
 export type GuardCode =
   | 'NO_ROOMS'
@@ -27,7 +28,6 @@ export type GuardCode =
   | 'EMPTY_GROUPS'
   | 'CLEARANCE'
   | 'REGRESS_INVALIDATES'
-  | 'REDETECT'
   | 'FACILITY_CHANGE'
   | 'ROOM_SLICE'
   | 'ROOM_MERGE'
@@ -71,7 +71,7 @@ const NO_ROOMS = block(
   'NO_ROOMS',
   '진행할 수 없습니다',
   '도면에서 검출된 실이 없습니다.',
-  "'실 검출 실행'을 눌러 도면에서 실을 찾으세요.",
+  '도면을 다시 불러오세요.',
 )
 
 const noOutdoor = block(
@@ -85,9 +85,6 @@ const noOutdoor = block(
 // 차단 사유가 확인 사유보다 앞선다 — 못 가는 걸 먼저 알려야 한다.
 export const guardAdvance = (from: StepId, c: GuardContext): GuardVerdict => {
   switch (from) {
-    case 'detect':
-      return c.roomCount === 0 ? NO_ROOMS : ALLOW
-
     case 'place': {
       if (c.roomCount === 0) return NO_ROOMS
       if (c.roomsWithoutIndoor.length > 0) {
@@ -159,7 +156,7 @@ export const guardAdvance = (from: StepId, c: GuardContext): GuardVerdict => {
             'EMPTY_SELECTION',
             '생성할 산출물이 없습니다',
             '장비선정표에 행이 없습니다.',
-            '실 검출과 실내기 배치를 먼저 완료하세요.',
+            '실내기 배치를 먼저 완료하세요.',
           )
         : ALLOW
   }
@@ -168,22 +165,17 @@ export const guardAdvance = (from: StepId, c: GuardContext): GuardVerdict => {
 // 뒤로 갈 때: 하류(실외기 조합·배치)를 무효로 만들 수 있으면 확인을 받는다.
 export const guardRegress = (from: StepId, to: StepId, c: GuardContext): GuardVerdict => {
   if (STEP_ORDER.indexOf(to) >= STEP_ORDER.indexOf(from)) return ALLOW // 뒤로 가는 게 아니다
-
-  const losesGroups = c.activeGroupCount > 0
-  const losesPlacements = to === 'detect' && c.placedRoomCount > 0
-  if (!losesGroups && !losesPlacements) return ALLOW
+  if (c.activeGroupCount === 0) return ALLOW // 흔들릴 하류(조합)가 없다
 
   return confirm(
     'REGRESS_INVALIDATES',
     '앞 단계로 돌아갑니다',
-    to === 'detect'
-      ? '실을 다시 검출하면 실내기 배치와 실외기 조합이 초기화될 수 있습니다.'
-      : '실내기를 다시 배치하면 실외기 선정·조합이 흔들릴 수 있습니다.',
+    '실내기를 다시 배치하면 실외기 선정·조합이 흔들릴 수 있습니다.',
     '지금까지의 조정 내용(수정한 대수·모델·배정)이 바뀔 수 있습니다.',
   )
 }
 
-export type DestructiveAction = 'REDETECT' | 'FACILITY_CHANGE' | 'ROOM_SLICE' | 'ROOM_MERGE'
+export type DestructiveAction = 'FACILITY_CHANGE' | 'ROOM_SLICE' | 'ROOM_MERGE'
 
 // 되돌리기 어려운 액션: 실행 전에 무엇을 잃는지 알린다.
 export const guardDestructive = (action: DestructiveAction, c: GuardContext): GuardVerdict => {
@@ -211,19 +203,9 @@ export const guardDestructive = (action: DestructiveAction, c: GuardContext): Gu
             '잘린 실은 실외기 배정이 풀려 미배정으로 돌아갑니다(조합을 다시 확인해야 합니다).',
           )
 
-    case 'REDETECT':
-      return c.placedRoomCount === 0
-        ? ALLOW // 잃을 배치가 없다
-        : confirm(
-            'REDETECT',
-            '실을 다시 검출합니다',
-            `실내기 배치(${c.placedRoomCount}실)와 실외기 조합이 초기화됩니다.`,
-            '직접 수정한 모델·대수·배정도 함께 사라집니다.',
-          )
-
     case 'FACILITY_CHANGE':
-      return c.roomCount === 0
-        ? ALLOW // 검출 전이면 자유롭게 바꾼다
+      return c.placedRoomCount === 0
+        ? ALLOW // 배치 전이면 자유롭게 바꾼다 — 잃을 것이 없다
         : confirm(
             'FACILITY_CHANGE',
             '시설군을 바꿉니다',

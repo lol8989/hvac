@@ -22,12 +22,13 @@ export interface StepDef {
   hint: string // 스텝 점 툴팁/설명
 }
 
+// 실 검출은 파이프라인 스텝에서 뺐다 — 도면을 열면 실이 이미 검출된 상태로 시작한다.
+// (검출 결과 다듬기(시설군·자르기·병합)는 첫 스텝인 '실내기 배치'에서 이어서 한다)
 export const STEPS: StepDef[] = [
-  { id: 'detect', no: 1, label: '실 검출', hint: 'AI가 도면에서 실(공간)을 검출' },
-  { id: 'place', no: 2, label: '실내기 배치', hint: 'AI가 실 면적·부하에 맞춰 실내기 자동 배치' },
-  { id: 'combine', no: 3, label: '실외기 선정·조합', hint: '확정된 실내기 정격용량으로 실외기를 선정하고 조합을 정한다' },
-  { id: 'outdoor', no: 4, label: '실외기 배치', hint: '선정된 실외기 심벌을 도면(건물 외부)에 배치' },
-  { id: 'output', no: 5, label: '산출물 생성', hint: '장비선정표·장비일람표·도면 산출' },
+  { id: 'place', no: 1, label: '실내기 배치', hint: 'AI가 실 면적·부하에 맞춰 실내기 자동 배치' },
+  { id: 'combine', no: 2, label: '실외기 선정·조합', hint: '확정된 실내기 정격용량으로 실외기를 선정하고 조합을 정한다' },
+  { id: 'outdoor', no: 3, label: '실외기 배치', hint: '선정된 실외기 심벌을 도면(건물 외부)에 배치' },
+  { id: 'output', no: 4, label: '산출물 생성', hint: '장비선정표·장비일람표·도면 산출' },
 ]
 
 export const stepIndex = (id: StepId): number => STEPS.findIndex((s) => s.id === id)

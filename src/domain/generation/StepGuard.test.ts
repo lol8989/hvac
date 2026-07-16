@@ -1,6 +1,7 @@
 // 스텝 가드 테스트 (Generation 컨텍스트 · 순수 도메인).
 // "다음 단계로 가기 전에 해야 할 일을 안 했으면 막고, 왜 못 가는지·어떻게 풀지 알려준다."
-// 되돌리기 어려운 파괴적 액션(재검출·시설군 변경)은 확인을 받는다.
+// 되돌리기 어려운 파괴적 액션(시설군 변경·실 자르기·병합)은 확인을 받는다.
+// (실 검출은 더 이상 스텝이 아니다 — 도면을 열면 실이 이미 검출된 상태다.)
 
 import { describe, it, expect } from 'vitest'
 import { guardAdvance, guardRegress, guardDestructive, emptyGuardContext } from './StepGuard'
@@ -24,19 +25,13 @@ const healthy = (over: Partial<GuardContext> = {}): GuardContext =>
     ...over,
   })
 
-describe('guardAdvance — detect(실 검출)', () => {
-  it('실을 하나도 못 찾았으면 막는다', () => {
-    const v = guardAdvance('detect', ctx({ roomCount: 0 }))
+describe('guardAdvance — place(실내기 배치)', () => {
+  it('검출된 실이 없으면 막는다(실은 초기 상태에서 시딩되므로 방어적 케이스)', () => {
+    const v = guardAdvance('place', ctx({ roomCount: 0 }))
     expect(v.kind).toBe('BLOCK')
     if (v.kind === 'BLOCK') expect(v.code).toBe('NO_ROOMS')
   })
 
-  it('실이 있으면 통과', () => {
-    expect(guardAdvance('detect', ctx({ roomCount: 3 })).kind).toBe('ALLOW')
-  })
-})
-
-describe('guardAdvance — place(실내기 배치)', () => {
   it('실내기 없는 실이 있으면 막고, 실명을 사유에 담는다', () => {
     const v = guardAdvance('place', healthy({ roomsWithoutIndoor: ['로비', '탕비실'] }))
     expect(v.kind).toBe('BLOCK')
@@ -150,30 +145,9 @@ describe('guardRegress — 뒤로 가기', () => {
     expect(guardRegress('place', 'place', healthy()).kind).toBe('ALLOW')
     expect(guardRegress('place', 'combine', healthy()).kind).toBe('ALLOW')
   })
-
-  it('실 검출로 돌아가면 배치까지 초기화된다고 확인을 받는다', () => {
-    const v = guardRegress('combine', 'detect', healthy())
-    expect(v.kind).toBe('CONFIRM')
-    if (v.kind === 'CONFIRM') expect(v.code).toBe('REGRESS_INVALIDATES')
-  })
 })
 
 describe('guardDestructive — 되돌리기 어려운 액션', () => {
-  it('배치 결과가 있는데 재검출하면 확인을 받는다', () => {
-    const v = guardDestructive('REDETECT', healthy())
-    expect(v.kind).toBe('CONFIRM')
-    if (v.kind === 'CONFIRM') expect(v.code).toBe('REDETECT')
-  })
-
-  it('검출 전 재검출은 확인 없이 통과', () => {
-    expect(guardDestructive('REDETECT', ctx({ roomCount: 0 })).kind).toBe('ALLOW')
-  })
-
-  it('실은 있으나 실내기가 없으면 재검출은 잃을 게 없다', () => {
-    const v = guardDestructive('REDETECT', ctx({ roomCount: 3, roomsWithoutIndoor: ['a', 'b', 'c'], selectionRowCount: 0 }))
-    expect(v.kind).toBe('ALLOW')
-  })
-
   it('배치가 없으면 실을 자르는 데 확인이 필요 없다', () => {
     expect(guardDestructive('ROOM_SLICE', ctx({ roomCount: 6 })).kind).toBe('ALLOW')
   })
@@ -196,20 +170,20 @@ describe('guardDestructive — 되돌리기 어려운 액션', () => {
     }
   })
 
-  it('검출 전 시설군 변경은 자유롭다', () => {
-    expect(guardDestructive('FACILITY_CHANGE', ctx({ roomCount: 0 })).kind).toBe('ALLOW')
+  it('배치 전 시설군 변경은 자유롭다(잃을 배치가 없다)', () => {
+    expect(guardDestructive('FACILITY_CHANGE', ctx({ placedRoomCount: 0 })).kind).toBe('ALLOW')
   })
 })
 
 describe('[적대] 빈 컨텍스트', () => {
   it('아무것도 안 한 상태에서 모든 전진은 막힌다(빈 산출물 방지)', () => {
-    for (const step of ['detect', 'place', 'combine', 'outdoor', 'output'] as const) {
+    for (const step of ['place', 'combine', 'outdoor', 'output'] as const) {
       expect(guardAdvance(step, emptyGuardContext()).kind).toBe('BLOCK')
     }
   })
 
   it('모든 BLOCK은 사유와 해결법을 갖는다(무반응 금지)', () => {
-    for (const step of ['detect', 'place', 'combine', 'outdoor', 'output'] as const) {
+    for (const step of ['place', 'combine', 'outdoor', 'output'] as const) {
       const v = guardAdvance(step, emptyGuardContext())
       if (v.kind === 'BLOCK') {
         expect(v.title.length).toBeGreaterThan(0)

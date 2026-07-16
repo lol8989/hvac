@@ -1,5 +1,6 @@
-﻿/** @vitest-environment jsdom */
-// App 스모크: 5단계 파이프라인 진행 + 장비선정표 '새 창' 열기·동기화 회귀 확인.
+/** @vitest-environment jsdom */
+// App 스모크: 4단계 파이프라인 진행 + 장비선정표 '새 창' 열기·동기화 회귀 확인.
+// (실 검출은 스텝이 아니라 초기 상태 — 도면을 열면 실이 이미 검출돼 있다.)
 // (선정표는 스텝이 아니라 새 창 — 도면을 가리지 않고 확인·조정, BroadcastChannel 연동)
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, within } from '@testing-library/react'
@@ -21,14 +22,9 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
-// 검출 → 실내기 배치 → 실외기 선정·조합 단계까지.
+// 실내기 배치(초기 스텝) → 실외기 선정·조합 단계까지.
 // 순서 근거: 실내기를 다 배치해야 정격이 확정되고, 그래야 실외기를 고를 수 있다.
-const progressToPlace = () => {
-  fireEvent.click(screen.getByRole('button', { name: '✦ 실 검출 실행' }))
-  fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
-}
 const progressToCombine = () => {
-  progressToPlace()
   fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
   fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
 }
@@ -40,39 +36,22 @@ const progressToOutput = () => {
   fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
 }
 
-describe('App — 실 검출 단계', () => {
-  // 검출은 그 자체로 결과를 확인하는 단계다. 실행하자마자 다음 단계로 넘어가 버리면
-  // 검출 결과 패널(DetectPanel)이 언마운트돼 사용자는 무엇이 잡혔는지 한 번도 못 본다.
-  it('검출 실행 후에도 검출 단계에 머물러 검출된 실을 보여준다', () => {
+describe('App — 초기 상태 (실 검출 완료)', () => {
+  // 실 검출을 스텝에서 뺐다 — 도면을 열면 실이 이미 잡혀 있고 첫 스텝은 실내기 배치다.
+  it('도면을 열면 실이 이미 검출돼 있고 실내기 배치 단계로 시작한다', () => {
     const { container } = render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: '✦ 실 검출 실행' }))
-
-    const panel = within(container.querySelector('.rpanel') as HTMLElement)
-    expect(panel.getByText('검출된 실')).toBeInTheDocument()
-    expect(panel.getByText(/6곳/)).toBeInTheDocument() // 목업 6실이 패널에 뜬다
-    expect(panel.getAllByText(/거실/).length).toBeGreaterThan(0)
-    // 다음 단계로는 사용자가 CTA로 넘어간다.
-    expect(screen.getByRole('button', { name: '다음 단계 →' })).toBeInTheDocument()
-  })
-
-  it('검출 전에는 빈 상태를 안내한다', () => {
-    render(<App />)
-    expect(screen.getByText(/아직 검출된 실이 없습니다/)).toBeInTheDocument()
-  })
-
-  it('검출하지 않고 실내기 배치로 가려 하면 차단한다', () => {
-    render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
-
-    const dialog = screen.getByRole('alertdialog', { name: '진행할 수 없습니다' })
-    expect(within(dialog).getByText(/검출된 실이 없습니다/)).toBeInTheDocument()
+    // 실이 이미 있다: 리포트에 6실, 도면에 실명이 뜬다.
+    expect(container.querySelector('.statusbar')!.textContent).toContain('실내기 배정 0/6')
+    expect(container.querySelector('.plansvg')!.textContent).toContain('거실')
+    // 첫 스텝은 실내기 배치 — AI 배치 버튼과 시설군 선택이 보인다.
+    expect(screen.getByRole('button', { name: '✦ AI 실내기 배치' })).toBeInTheDocument()
+    expect(screen.getByLabelText('시설군')).toBeInTheDocument()
   })
 })
 
 describe('App — 스텝 가드', () => {
   it('실내기를 배치하지 않고 실외기 선정으로 가려 하면 차단 팝업이 실명을 알려준다', () => {
     render(<App />)
-    progressToPlace()
     fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
 
     const dialog = screen.getByRole('alertdialog', { name: '실내기 배치를 마쳐야 합니다' })
@@ -118,18 +97,14 @@ describe('App — 스텝 가드', () => {
     expect(screen.getByText(/1대 중 0대/)).toBeInTheDocument()
   })
 
-  it('배치 결과가 있는데 재검출하면 무엇을 잃는지 확인을 받는다', () => {
+  it('배치 후 시설군을 바꾸면 무엇을 잃는지 확인을 받는다', () => {
     render(<App />)
-    progressToCombine()
-    // 뒤로 갈 때마다 하류(실외기 조합)가 흔들린다고 확인을 받는다.
-    fireEvent.click(screen.getByRole('button', { name: '← 이전' })) // combine → place
-    fireEvent.click(screen.getByRole('button', { name: '돌아가기' }))
-    fireEvent.click(screen.getByRole('button', { name: '← 이전' })) // place → detect
-    fireEvent.click(screen.getByRole('button', { name: '돌아가기' }))
-    fireEvent.click(screen.getByRole('button', { name: '✦ 실 검출 실행' }))
+    fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' })) // 배치가 생긴다
+    // 시설군을 바꾸면 실이 다시 시딩되고 배치·조합이 초기화된다 → 확인을 받는다.
+    fireEvent.change(screen.getByLabelText('시설군'), { target: { value: '주거시설' } })
 
-    expect(screen.getByRole('alertdialog', { name: '실을 다시 검출합니다' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '재검출' })).toBeInTheDocument()
+    expect(screen.getByRole('alertdialog', { name: '시설군을 바꿉니다' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '시설군 변경' })).toBeInTheDocument()
   })
 })
 

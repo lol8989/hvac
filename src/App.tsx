@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { ROOMS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, outdoorIdxByModel, DEFAULT_FACILITY } from './data'
 import { canManageEquipment } from './domain/auth/Permission'
 import type { ModelCard, Room } from './data'
-import Viewer, { type LayerFilter, type ViewerHandle } from './components/Viewer'
+import Viewer, { type LayerVisibility, ALL_LAYERS_ON, type ViewerHandle } from './components/Viewer'
 import type { UnitSym } from './components/viewer/geometry'
 import { buildScheduleSheets } from './presentation/generation/scheduleTable'
 import { downloadScheduleXlsx } from './presentation/generation/scheduleXlsx'
@@ -19,7 +19,6 @@ import WorkBar from './components/generation/WorkBar'
 import StatusBar from './components/generation/StatusBar'
 import OverflowMenu from './components/generation/OverflowMenu'
 import PanelShell from './components/generation/PanelShell'
-import DetectPanel from './components/generation/panels/DetectPanel'
 import OutdoorPanel from './components/generation/panels/OutdoorPanel'
 import OutputPanel from './components/generation/panels/OutputPanel'
 import type { FacilityType } from './domain/shared/unitLoadTable'
@@ -76,6 +75,21 @@ function loadPanelW(): number {
   return Number.isFinite(v) && v > 0 ? Math.max(260, Math.min(560, v)) : 322
 }
 
+// 목업 검출기(ROOMS)의 출력을 도메인 Room·형상으로 시딩한다.
+// 실 검출은 더 이상 별도 스텝이 아니다 — 도면을 열면 실이 이미 검출된 상태로 시작하고,
+// 시설군을 바꾸면 그 시설군의 단위부하로 실을 다시 시딩한다(둘 다 이 함수를 쓴다).
+function seedDetectedRooms(facility: FacilityType): { rooms: Record<string, DomainRoom>; geom: Record<string, Polygon> } {
+  const rooms = Object.fromEntries(
+    Object.entries(ROOMS).map(([id, r]) => [
+      id,
+      DomainRoom.create({ id, floor: r.floor, name: r.name, areaM2: r.area, usage: r.usage, facility, shortSideM: r.shortSideM, longSideM: r.longSideM }),
+    ]),
+  )
+  // 형상(SSOT)도 함께 시딩한다 — 이후 편집(자르기·리사이즈)이 이 값을 고친다.
+  const geom = Object.fromEntries(Object.entries(ROOMS).map(([id, r]) => [id, Polygon.of(r.points)]))
+  return { rooms, geom }
+}
+
 export default function App({
   master = defaultEquipmentMaster,
   // 롱테일 스펙(일람표 컬럼). SQLite가 없으면 빈 저장소 → 일람표 셀이 '-'로 남는다.
@@ -101,8 +115,9 @@ export default function App({
   //  · outdoorPositions : 실외기 심볼 좌표(그룹 key → 좌표)
   //  · plan   : 실외기 조합·배정(AssignmentPlan)
   //  · facility : 시설군(단위부하의 전제)
+  // 초기 화면부터 실이 검출돼 있다 — 검출 스텝을 없앴으므로 로드 시점에 실·형상을 시딩한다.
   const undoable = useUndoable<World>(
-    () => ({ plan: repo.load(), rooms: {}, geom: {}, placements: {}, outdoorPositions: {}, facility: DEFAULT_FACILITY }),
+    () => ({ plan: repo.load(), ...seedDetectedRooms(DEFAULT_FACILITY), placements: {}, outdoorPositions: {}, facility: DEFAULT_FACILITY }),
     '',
   )
   const world = undoable.present
@@ -233,13 +248,13 @@ export default function App({
   const [guard, setGuard] = useState<{ verdict: Extract<GuardVerdict, { kind: 'BLOCK' } | { kind: 'CONFIRM' }>; proceed: () => void; confirmLabel?: string } | null>(null)
   const [mapOpen, setMapOpen] = useState(false)
   const [dockH, setDockH] = useState(300) // 조합 매핑 도크 높이(드래그로 조절)
-  const [layerFilter, setLayerFilter] = useState<LayerFilter>('all') // 툴바 레이어 셀렉트 → 뷰어 표시 필터
+  const [layers, setLayers] = useState<LayerVisibility>(ALL_LAYERS_ON) // 레이어별 표시 토글 → 뷰어
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null) // 모델 적용 확인 팝업 메시지(null=닫힘)
   const [toast, setToast] = useState('')
   const viewerRef = useRef<ViewerHandle>(null) // 'AI 실내기 배치' 명령용
 
   // 생성 파이프라인 진행 단계(상태머신) + 목업 단계 플래그.
-  const [step, setStep] = useState<StepId>('detect') // 업로드는 목록의 '생성'에서 완료 가정
+  const [step, setStep] = useState<StepId>('place') // 실은 이미 검출됨 — 첫 스텝은 실내기 배치
   const [generated, setGenerated] = useState(false)
 
   // 실제 도면: Python(ezdxf)로 전처리한 딥줌 타일 피라미드. 좌표계 정합의 토대.
@@ -375,7 +390,7 @@ export default function App({
 
   // 대표 실(헤더/모델 파생 기준). 실내기 목록에서 새로 켠 실이 맨 앞으로 승격된다.
   //
-  // 사라진 실(자르기·재검출로 없어진 id)이 선택에 남아 있으면 domainRooms[primary]가 undefined가 되고
+  // 사라진 실(자르기·시설군 재시딩으로 없어진 id)이 선택에 남아 있으면 domainRooms[primary]가 undefined가 되고
   // aiSelectionFor(undefined)가 렌더 중 터져 화면이 통째로 죽는다(적대적 QA) → 존재하는 실만 본다.
   const liveSelRooms = useMemo(() => selRooms.filter((id) => domainRooms[id]), [selRooms, domainRooms])
   const primary = liveSelRooms[0]
@@ -658,7 +673,7 @@ export default function App({
   }
 
   // ── 선정표 그리드 편집 핸들러: 상류 수정 → 하류(AI 선정·조합비) 재계산 ──
-  // 편집 커맨드는 새 창(BroadcastChannel)에서도 온다 → 사라진 실(자르기·재검출)을 가리킬 수 있다.
+  // 편집 커맨드는 새 창(BroadcastChannel)에서도 온다 → 사라진 실(자르기·시설군 재시딩)을 가리킬 수 있다.
   // 신뢰 경계를 넘어오는 id는 반드시 존재를 확인한다(적대적 QA).
   const updateRoom = (id: string, fn: (r: DomainRoom) => DomainRoom, label = '실 정보 수정') => {
     if (!domainRooms[id]) return
@@ -863,25 +878,6 @@ export default function App({
   // 단계 전환 핸들러(파이프라인 진행).
   const placed = Object.keys(placements).length > 0
 
-  // 검출: 도면에서 실을 찾아 도메인 Room으로 채운다. 이미 배치가 있으면 초기화 확인을 받는다.
-  // 검출 단계에 머문다 — 검출 결과(실 목록·부하)를 확인하는 것이 이 단계의 일이다.
-  // 다음 단계로는 '다음 단계 →' CTA로 넘어간다(가드가 전제를 검사한다).
-  const detectRooms = () => {
-    const detected = Object.fromEntries(
-      Object.entries(ROOMS).map(([id, r]) => [
-        id,
-        DomainRoom.create({ id, floor: r.floor, name: r.name, areaM2: r.area, usage: r.usage, facility, shortSideM: r.shortSideM, longSideM: r.longSideM }),
-      ]),
-    )
-    // 형상도 함께 시딩한다 — 검출기(ROOMS)는 출력일 뿐이고, 이후 편집(자르기·리사이즈)의 SSOT는 roomGeom이다.
-    const geom = Object.fromEntries(Object.entries(ROOMS).map(([id, r]) => [id, Polygon.of(r.points)]))
-    // 검출은 하나의 편집이다 — 실·형상·배치·실외기 좌표가 함께 바뀌고, Ctrl+Z 한 번에 함께 돌아온다.
-    edit((w) => ({ ...w, rooms: detected, geom, placements: {}, outdoorPositions: {} }), '실 검출')
-    setSelRooms([]) // 자르기로 생겼던 실 id가 선택에 남으면 파생값이 터진다(적대적 QA)
-    flash(`AI가 도면에서 실 ${Object.keys(detected).length}곳을 검출했습니다`)
-  }
-  const doDetect = () => runGuarded(guardDestructive('REDETECT', guardContext()), detectRooms, '재검출')
-
   // ── 실 자르기(V 도구) ──
   // 실 1곳 → 2곳. 도면에서 잘랐으니 도면 심볼(실내기)도 잘린 위치대로 나뉜다
   // (도면이 진실 — 심볼 1개 = 실내기 1대 = 선정표 대수 1).
@@ -950,10 +946,10 @@ export default function App({
     flash(`${parent.name}을(를) ${a.room.name} · ${b.room.name}(으)로 나눴습니다`)
   }
 
-  // 자르기는 검출 단계의 도구다. 모드 진입만 막으면 부족하다 — 단계를 넘긴 뒤에도
-  // 모드가 남아 클릭이 실을 잘랐다(적대적 QA). 실행 직전에 단계를 다시 확인한다.
+  // 자르기는 실내기 배치 단계의 도구다(검출 결과를 다듬는다). 모드 진입만 막으면 부족하다 —
+  // 단계를 넘긴 뒤에도 모드가 남아 클릭이 실을 잘랐다(적대적 QA). 실행 직전에 단계를 다시 확인한다.
   const doSlice = (roomId: string, line: SliceLine) => {
-    if (step !== 'detect') { flash('실 자르기는 실 검출 단계에서만 가능합니다'); return }
+    if (step !== 'place') { flash('실 자르기는 실내기 배치 단계에서만 가능합니다'); return }
     runGuarded(guardDestructive('ROOM_SLICE', guardContext()), () => applySlice(roomId, line), '자르기')
   }
 
@@ -1027,7 +1023,7 @@ export default function App({
   }
 
   const doMerge = (aId: string, bId: string) => {
-    if (step !== 'detect') { flash('실 병합은 실 검출 단계에서만 가능합니다'); return }
+    if (step !== 'place') { flash('실 병합은 실내기 배치 단계에서만 가능합니다'); return }
     runGuarded(guardDestructive('ROOM_MERGE', guardContext()), () => applyMerge(aId, bId), '병합')
   }
 
@@ -1077,12 +1073,12 @@ export default function App({
       flash('장비선정표·장비일람표·도면 산출물을 생성했습니다')
     })
 
-  // 시설군 변경: 검출 후에는 부하가 통째로 다시 계산된다 → 확인을 받는다(예전엔 잠갔다).
+  // 시설군 변경: 단위부하의 전제가 바뀐다 → 그 시설군으로 실을 다시 시딩하고 배치·조합은 초기화한다.
+  // 배치가 있으면 무엇을 잃는지 확인을 받는다. (실내기 배치 단계에 그대로 머문다)
   const changeFacility = (f: FacilityType) =>
     runGuarded(guardDestructive('FACILITY_CHANGE', guardContext()), () => {
-      edit((w) => ({ ...w, facility: f, rooms: {}, geom: {}, placements: {}, outdoorPositions: {} }), '시설군 변경')
+      edit((w) => ({ ...w, facility: f, ...seedDetectedRooms(f), placements: {}, outdoorPositions: {} }), '시설군 변경')
       setSelRooms([])
-      setStep('detect')
     }, '시설군 변경')
 
   // ── 되돌리기 / 다시하기 ──
@@ -1162,9 +1158,9 @@ export default function App({
             <button className="btn sm" disabled={isFirstStep(step)} onClick={() => regress(prevStep(step))}>← 이전</button>
             {/* 되돌리기/다시하기(↶↷)는 캔버스 하단 도크에 있다 — 되돌리는 대상이 도면 편집이라 손이 거기 있다.
                 상단 바에는 스텝 진행 CTA만 남긴다(성격이 다른 버튼을 한 줄에 섞지 않는다). */}
-            {/* 시설군은 단위부하의 전제다. 검출 후 바꾸면 부하가 통째로 다시 계산된다 → 확인을 받는다. */}
-            {step === 'detect' && <ProjectSettings facility={facility} onChange={changeFacility} />}
-            {step === 'detect' && <button className="btn sm" onClick={doDetect}>✦ 실 검출 실행</button>}
+            {/* 시설군은 단위부하의 전제다. 배치 후 바꾸면 부하가 통째로 다시 계산된다 → 확인을 받는다.
+                실 검출을 스텝에서 뺐으므로 시설군 선택은 첫 스텝(실내기 배치)에 둔다. */}
+            {step === 'place' && <ProjectSettings facility={facility} onChange={changeFacility} />}
             {step === 'place' && <button className="btn sm primary" onClick={doPlace}>{placed ? '재배치' : '✦ AI 실내기 배치'}</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => runOutdoorSelection()}>✦ 실외기 재선정</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => setMapOpen(true)}>실외기 조합 매핑</button>}
@@ -1241,30 +1237,30 @@ export default function App({
             indoorInfo={indoorInfo}
             tiles={tiles}
             tileBase="/tiles"
-            layerFilter={layerFilter}
-            onLayerFilterChange={setLayerFilter}
+            layers={layers}
+            onLayersChange={setLayers}
             canAddUnit={step === 'place' && placed}
             canPlaceOutdoors={step === 'outdoor'}
             outdoorGroups={floorOutdoorGroups}
-            // 실 자르기(V)는 검출 단계 도구다 — 검출 결과를 다듬는다.
-            canSliceRooms={step === 'detect' && Object.keys(domainRooms).length > 0}
+            // 실 자르기(V)는 실내기 배치 단계 도구다 — 검출된 실을 다듬는다.
+            canSliceRooms={step === 'place' && Object.keys(domainRooms).length > 0}
             onRoomSlice={doSlice}
             onSliceUnavailable={() =>
               flash(
                 Object.keys(domainRooms).length === 0
-                  ? '실을 먼저 검출해야 자를 수 있습니다'
-                  : '실 자르기는 실 검출 단계에서만 가능합니다',
+                  ? '자를 실이 없습니다'
+                  : '실 자르기는 실내기 배치 단계에서만 가능합니다',
               )
             }
             onZoneResize={resizeZone}
-            canMergeRooms={step === 'detect' && Object.keys(domainRooms).length > 1}
+            canMergeRooms={step === 'place' && Object.keys(domainRooms).length > 1}
             onRoomsMerge={doMerge}
             isAdjacent={roomsAdjacent}
             onMergeUnavailable={() =>
               flash(
                 Object.keys(domainRooms).length < 2
                   ? '합칠 실이 두 곳 이상 있어야 합니다'
-                  : '실 병합은 실 검출 단계에서만 가능합니다',
+                  : '실 병합은 실내기 배치 단계에서만 가능합니다',
               )
             }
           />
@@ -1311,13 +1307,12 @@ export default function App({
           />
         ) : (
           <PanelShell
-            title={step === 'detect' ? '검출 결과' : step === 'outdoor' ? '실외기 배치' : '산출물'}
+            title={step === 'outdoor' ? '실외기 배치' : '산출물'}
             open={panelOpen}
             width={panelW}
             onToggle={() => setPanelOpen((v) => !v)}
             onWidthChange={setPanelW}
           >
-            {step === 'detect' && <DetectPanel rooms={viewRooms} facility={facility} />}
             {step === 'outdoor' && (
               <OutdoorPanel
                 groups={activeGroups}
