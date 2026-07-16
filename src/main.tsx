@@ -16,6 +16,7 @@ import './styles/admin.css'
 import { createSqliteEquipmentMaster, type SqliteEquipmentMasterHandle } from './infrastructure/equipment/sqlite/SqliteEquipmentMaster'
 import { SqliteEquipmentAdminRepository } from './infrastructure/equipment/sqlite/SqliteEquipmentAdminRepository'
 import { SqliteSpecRepository } from './infrastructure/equipment/sqlite/SqliteSpecRepository'
+import { readCompatMatrix } from './infrastructure/equipment/sqlite/readCompatMatrix'
 import { browserSqlInit } from './infrastructure/equipment/sqlite/browserSqlInit'
 import { createIdbBytesStore } from './infrastructure/equipment/sqlite/idbStore'
 import { SCHEMA_VERSION } from './infrastructure/equipment/sqlite/schema'
@@ -103,5 +104,12 @@ if (view === 'selection') {
   // 생성/검도는 PUBLISHED만 읽으므로 SQLite 실패 시 인메모리 기본으로 폴백(앱은 항상 렌더).
   // 일람표용 롱테일 스펙은 SQLite에만 있다 → 폴백 시 빈 저장소(셀이 '-'로 남는다).
   const handle = await resolveSqliteHandle()
-  render(<App master={handle ?? defaultEquipmentMaster} specRepository={handle ? new SqliteSpecRepository(handle.db) : undefined} />)
+  // 실외기 선정이 따르는 조합표: SQLite면 시드+관리자 override, 폴백이면 App 기본(시드)을 쓴다.
+  render(
+    <App
+      master={handle ?? defaultEquipmentMaster}
+      specRepository={handle ? new SqliteSpecRepository(handle.db) : undefined}
+      compatMatrix={handle ? readCompatMatrix(handle.db) : undefined}
+    />,
+  )
 }

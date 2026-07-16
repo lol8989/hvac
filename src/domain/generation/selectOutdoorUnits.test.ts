@@ -179,6 +179,51 @@ describe('selectOutdoorUnits — 분할', () => {
   })
 })
 
+describe('selectOutdoorUnits — 조합표(isCompatible) 주입', () => {
+  // 계열(byEnergySource) 대신 시리즈×유형 호환을 주입하면 조합표를 따른다.
+  it('계열이 달라도 조합표가 허용하면 한 실외기에 묶는다 (GHP↔대공간덕트)', () => {
+    const ghp = cand('G-30', 30, { energySource: 'GHP', subcategory: 'GHP', series: 'GHP Super III' })
+    // 대공간덕트 실내기는 계열이 EHP지만 조합표상 GHP Super III에 연결된다.
+    const units = room('R1', 20, 1, { energySource: 'EHP', subcategory: '덕트(대공간)', series: '대공간덕트' })
+    const isCompatible = (o: { series?: string }, i: { subcategory?: string }) => o.series === 'GHP Super III' && i.subcategory === '덕트(대공간)'
+    const [g] = selectOutdoorUnits(units, [ghp, ...EHP], { isCompatible })
+    expect(g.model).toBe('G-30') // EHP 후보는 대공간덕트와 X → 계열이 교차해도 GHP로 묶인다
+    expect(g.energySource).toBe('GHP')
+    expect(g.roomIds).toEqual(['R1'])
+  })
+
+  it('조합표가 X면 계열이 같아도 더 작은 그 실외기를 배제한다', () => {
+    const a = cand('A-30', 30, { series: 'Series-A' }) // 더 작지만 이 실내기와 X
+    const b = cand('B-40', 40, { series: 'Series-B' })
+    const units = room('R1', 20, 1, { subcategory: '4WAY 카세트', series: '민수' })
+    const isCompatible = (o: { series?: string }) => o.series === 'Series-B'
+    const [g] = selectOutdoorUnits(units, [a, b], { isCompatible })
+    expect(g.model).toBe('B-40')
+  })
+
+  it('한 실외기는 담긴 모든 실내기 유형과 호환돼야 한다', () => {
+    // R1 대공간덕트 · R2 4WAY. GHP는 대공간덕트만 가능 → 둘의 공통 후보는 Multi V뿐.
+    const ghp = cand('G-50', 50, { energySource: 'GHP', series: 'GHP Super III' })
+    const ehp = cand('M-50', 50, { energySource: 'EHP', series: 'Multi V' })
+    const units = [
+      ...room('R1', 15, 1, { energySource: 'EHP', subcategory: '덕트(대공간)', series: '대공간덕트' }),
+      ...room('R2', 15, 1, { energySource: 'EHP', subcategory: '4WAY 카세트', series: '민수' }),
+    ]
+    const isCompatible = (o: { series?: string }, i: { subcategory?: string }) =>
+      o.series === 'Multi V' ? true : o.series === 'GHP Super III' ? i.subcategory === '덕트(대공간)' : false
+    const gs = selectOutdoorUnits(units, [ghp, ehp], { isCompatible })
+    expect(gs).toHaveLength(1)
+    expect(gs[0].model).toBe('M-50')
+    expect(gs[0].roomIds.sort()).toEqual(['R1', 'R2'])
+  })
+
+  it('[적대] 조합표상 어떤 실외기와도 호환 안 되면 NoCompatibleOutdoorError', () => {
+    const units = room('R1', 20, 1, { subcategory: '없는유형', series: '없음' })
+    const never = () => false
+    expect(() => selectOutdoorUnits(units, EHP, { isCompatible: never })).toThrow(NoCompatibleOutdoorError)
+  })
+})
+
 describe('selectOutdoorUnits — 경계·빈 입력', () => {
   it('실내기가 없으면 그룹도 없다', () => {
     expect(selectOutdoorUnits([], EHP)).toEqual([])

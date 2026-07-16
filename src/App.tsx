@@ -32,6 +32,9 @@ import { makeReassignRoom } from './application/generation/ReassignRoom'
 import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoorModel'
 import { makeAddGroup, makeRemoveGroup, makeSplitGroup } from './application/generation/GroupCommands'
 import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, syncPlanUnits, selectOutdoorPlan, indoorUnitsFor } from './presentation/generation/planAdapter'
+import { compatPredicateFromMatrix } from './presentation/generation/compatPredicate'
+import { compatMatrixFromSeed } from './infrastructure/equipment/seed/compatMatrixFromSeed'
+import type { CompatMatrix } from './domain/equipment/CompatMatrix'
 import { floorsOf } from './presentation/generation/floors'
 import { DomainError, NotFoundError, NoCompatibleOutdoorError, UnpackableLoadError } from './domain/generation/errors'
 import { Room as DomainRoom } from './domain/generation/Room'
@@ -94,13 +97,18 @@ export default function App({
   master = defaultEquipmentMaster,
   // 롱테일 스펙(일람표 컬럼). SQLite가 없으면 빈 저장소 → 일람표 셀이 '-'로 남는다.
   specRepository = EMPTY_SPEC_REPOSITORY,
-}: { master?: EquipmentMaster; specRepository?: EquipmentSpecRepository } = {}) {
+  // 실내기↔실외기 호환 기준표. 실외기 선정이 이 표를 따른다(없으면 계열로 폴백).
+  // 기본은 현업 확정 시드. 프로덕션은 main.tsx가 시드+관리자 override를 주입한다.
+  compatMatrix = compatMatrixFromSeed(),
+}: { master?: EquipmentMaster; specRepository?: EquipmentSpecRepository; compatMatrix?: CompatMatrix } = {}) {
   // 컴포지션 루트: 장비마스터(SSOT)를 주입받고, 실내기·실외기 카탈로그가 이를 참조(PUBLISHED만)한다.
   // 프로덕션은 main.tsx가 SQLite 백엔드 마스터를 주입, 미주입 시 인메모리 기본(테스트·폴백).
   // 배정 상태는 도메인 AssignmentPlan이 소유하고, 리포지토리 포트로 유즈케이스가 로드/저장한다.
   // 모두 세션 1개로 고정(useState lazy).
   const [catalog] = useState(() => new InMemoryOutdoorModelCatalog(master))
   const [repo] = useState(() => new InMemoryPlanRepository(bootstrapPlan()))
+  // 실외기 선정 호환 판정 — 조합표(시리즈×유형) 기반, 없는 축은 계열로 폴백.
+  const [isOutdoorCompatible] = useState(() => compatPredicateFromMatrix(compatMatrix))
   // 실내기 모델 카탈로그(장비마스터 PUBLISHED 참조, 장비번호 코드 기반).
   const [indoorCatalog] = useState(() => new InMemoryIndoorModelCatalog(master))
   const indoorModels = useMemo(() => indoorCatalog.list(), [indoorCatalog])
@@ -364,7 +372,7 @@ export default function App({
     const units = unitsFrom(placements)
     if (!units.length) { flash('실내기를 먼저 배치해야 실외기를 선정할 수 있습니다'); return false }
     try {
-      const next = selectOutdoorPlan(units, (roomId) => domainRooms[roomId]?.floor ?? '', catalog)
+      const next = selectOutdoorPlan(units, (roomId) => domainRooms[roomId]?.floor ?? '', catalog, isOutdoorCompatible)
       repo.save(next)
       edit((w) => ({ ...w, plan: next }), '실외기 선정')
       const odus = next.groups.length

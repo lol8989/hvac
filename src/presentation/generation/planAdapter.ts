@@ -9,7 +9,7 @@ import type { GroupMeta } from '../../domain/generation/OutdoorGroup'
 import { OutdoorUnit } from '../../domain/generation/OutdoorUnit'
 import { IndoorUnit, indoorUnitId, roomIdsOf } from '../../domain/generation/IndoorUnit'
 import { selectOutdoorUnits } from '../../domain/generation/selectOutdoorUnits'
-import type { OutdoorCandidate } from '../../domain/generation/selectOutdoorUnits'
+import type { OutdoorCandidate, CompatPredicate } from '../../domain/generation/selectOutdoorUnits'
 import type { EnergySourceCode } from '../../domain/shared/EnergySource'
 import type { EnergyGrade } from '../../domain/shared/EnergyGrade'
 import type { OutdoorModelCatalog, OutdoorModelSpec } from '../../application/generation/ports'
@@ -38,10 +38,11 @@ export interface ViewModel {
 }
 
 // 실 + 선정 결과 → 실내기 유닛 목록(대수만큼). cool은 '설계부하'가 아니라 모델 '정격용량'이다.
+// 유형(type=중분류)·시리즈는 실외기 선정의 조합표 호환 판정에 쓰이므로 함께 실어 나른다.
 export const indoorUnitsFor = (
   room: { id: string; name: string },
   quantity: number,
-  model: { coolW: number; energySource: EnergySourceCode },
+  model: { coolW: number; energySource: EnergySourceCode; type?: string; series?: string },
 ): IndoorUnit[] =>
   Array.from({ length: quantity }, (_, i) => new IndoorUnit({
     id: indoorUnitId(room.id, i + 1),
@@ -49,6 +50,8 @@ export const indoorUnitsFor = (
     roomName: room.name,
     coolKw: model.coolW / 1000,
     sys: model.energySource,
+    subcategory: model.type,
+    series: model.series,
   }))
 
 // 장비마스터 스펙(OutdoorModelSpec) → OutdoorUnit VO. 등급·효율을 주입한다.
@@ -117,10 +120,12 @@ export const syncPlanUnits = (plan: AssignmentPlan, desired: readonly IndoorUnit
   return new AssignmentPlan({ groups, pool })
 }
 
-// 스펙(장비마스터) → 선정 알고리즘이 쓰는 후보 형태.
+// 스펙(장비마스터) → 선정 알고리즘이 쓰는 후보 형태. 중분류·시리즈는 조합표 호환 판정에 쓰인다.
 const candidateFromSpec = (s: OutdoorModelSpec): OutdoorCandidate => ({
   model: s.model,
   energySource: s.energySource,
+  subcategory: s.category,
+  series: s.series,
   capacityKw: s.capacityKw,
   heatKw: s.heatKw,
   hp: s.hp,
@@ -130,16 +135,27 @@ const candidateFromSpec = (s: OutdoorModelSpec): OutdoorCandidate => ({
 
 // 실외기 선정·조합: 배치된 실내기(정격·계열·층)로 실외기를 고르고 그룹을 만든다.
 // 도메인(selectOutdoorUnits)이 규칙을 갖고, 여기서는 결과를 AssignmentPlan으로 옮긴다.
+// isCompatible을 주입하면 조합표(시리즈×유형)를 따르고, 없으면 계열(EnergySource)로 판단한다.
 // 실내기가 없으면 빈 플랜. 도메인 에러(NoCompatibleOutdoor/UnpackableLoad)는 그대로 전파한다.
 export const selectOutdoorPlan = (
   units: readonly IndoorUnit[],
   floorOf: (roomId: string) => string,
   catalog: OutdoorModelCatalog,
+  isCompatible?: CompatPredicate,
 ): AssignmentPlan => {
   const specByModel = new Map(catalog.list().map((s) => [s.model, s]))
   const plans = selectOutdoorUnits(
-    units.map((u) => ({ id: u.id, roomId: u.roomId, floor: floorOf(u.roomId), energySource: u.energySource.code, coolKw: u.cool.kw })),
+    units.map((u) => ({
+      id: u.id,
+      roomId: u.roomId,
+      floor: floorOf(u.roomId),
+      energySource: u.energySource.code,
+      subcategory: u.subcategory,
+      series: u.series,
+      coolKw: u.cool.kw,
+    })),
     catalog.list().map(candidateFromSpec),
+    { isCompatible },
   )
   const unitById = new Map(units.map((u) => [u.id, u]))
   const groups = plans.map((p, i) => {

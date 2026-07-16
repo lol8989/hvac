@@ -19,6 +19,8 @@ export interface IndoorUnitProps {
   roomName?: string
   coolKw: number | Capacity // 실내기 1대의 정격 냉방용량
   sys: string | EnergySource
+  subcategory?: string // 실내기 유형(중분류) — 조합표 열 라벨(예: '4WAY 카세트'). 실외기 선정 호환 판정용.
+  series?: string // 실내기 시리즈 — 조합표 열 라벨(예: 'Multi V 실내기(큐레이션)').
 }
 
 export class IndoorUnit {
@@ -27,8 +29,10 @@ export class IndoorUnit {
   readonly roomName: string
   readonly cool: Capacity
   readonly energySource: EnergySource
+  readonly subcategory: string
+  readonly series: string
 
-  constructor({ id, roomId, roomName, coolKw, sys }: IndoorUnitProps) {
+  constructor({ id, roomId, roomName, coolKw, sys, subcategory, series }: IndoorUnitProps) {
     if (typeof id !== 'string' || id.trim().length === 0) {
       throw new Error('IndoorUnit.id는 비어 있을 수 없습니다')
     }
@@ -40,6 +44,8 @@ export class IndoorUnit {
     this.roomName = roomName ?? ''
     this.cool = coolKw instanceof Capacity ? coolKw : new Capacity(coolKw)
     this.energySource = sys instanceof EnergySource ? sys : new EnergySource(sys)
+    this.subcategory = subcategory ?? ''
+    this.series = series ?? ''
     Object.freeze(this)
   }
 

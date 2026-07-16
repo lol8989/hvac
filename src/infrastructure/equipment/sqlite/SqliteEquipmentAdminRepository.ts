@@ -9,7 +9,8 @@ import type { PublishStatus } from '../../../domain/equipment/PublishStatus'
 import { assertTransition, assertSpecEditable, canTransition, PUBLISH_STATUS } from '../../../domain/equipment/PublishStatus'
 import { ComboPolicy } from '../../../domain/equipment/ComboPolicy'
 import { isCompatValue, type CompatMatrix, type CompatValue, type CompatAxis } from '../../../domain/equipment/CompatMatrix'
-import { compatMatrixFromSeed, buildOverrideKey, seedValueAt } from '../seed/compatMatrixFromSeed'
+import { seedValueAt } from '../seed/compatMatrixFromSeed'
+import { readCompatMatrix } from './readCompatMatrix'
 import { ComboRange } from '../../../domain/shared/ComboRange'
 import { isHpSource } from '../../../domain/equipment/HpSource'
 import { COMBO_MAX_KEY, COMBO_MIN_KEY } from './settingsKeys'
@@ -319,16 +320,7 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
   // ── 실내기↔실외기 호환 기준표 ──
 
   getCompatMatrix(): CompatMatrix {
-    const rows = queryRows(this.db, `SELECT outdoor_subcategory, outdoor_series, indoor_subcategory, indoor_series, value FROM series_compat`)
-    const overrides = new Map<string, CompatValue>()
-    for (const r of rows) {
-      const key = buildOverrideKey(
-        { subcategory: String(r.outdoor_subcategory), series: String(r.outdoor_series) },
-        { subcategory: String(r.indoor_subcategory), series: String(r.indoor_series) },
-      )
-      overrides.set(key, String(r.value) as CompatValue)
-    }
-    return compatMatrixFromSeed(overrides)
+    return readCompatMatrix(this.db)
   }
 
   setCompatCell(

@@ -13,7 +13,8 @@
 - [x] **B3 관리자 조합관리 페이지** — 스키마 v6 `series_compat`(override 전용, 기본=시드) + admin 포트 `getCompatMatrix`/`setCompatCell`/`clearCompatForOutdoor` + AdminShell 메뉴 `?view=compat` + main 라우팅. 전체 1130 그린·tsc·build 클린.
   - **화면은 마스터·디테일**(주인님 지시 2026-07-16): 격자(엑셀 시트 복사)가 아니라 좌: 실외기 시리즈 목록(계열 그룹·검색) / 우: 그 시리즈의 연결 가능 실내기 유형 체크리스트(중분류 묶음)·확정 기본값 복원. 브라우저 실검증(선택·검색·토글→저장→리로드 유지·복원). `CompatMatrixPage.tsx`.
   - **적대적 코드리뷰(38에이전트) 21건 반영**: 구분자 AXIS_SEP 통일, setCompatCell 시드=값이면 삭제, 중복축 거부, 경량 검증, 접근성·14px, 토스트 타이머 등. 격자 특화 지적은 마스터·디테일 재설계로 자연 해소.
-- [ ] **B4 (후속) — 생성단 소비 연결** — `selectOutdoorUnits`가 계열 축만 본다. CompatMatrix를 참조해 시리즈-특정 예외(GHP↔대공간덕트만, 냉방전용 전용실내기)를 반영하려면: 실외기 후보/실내기 유닛에 (중분류·시리즈) 라벨을 실어 매트릭스로 조인. 생성 동작 변경이라 별도 TDD 사이클. 라벨 정규화(시드의 "(4way->1way수정)" 등 주석) 주의.
+- [x] **B4 — 생성단 조합표 소비 + 버킷 재설계** (2026-07-16, 미커밋) — `selectOutdoorUnits`를 `층×계열` 버킷에서 **`층`-only + 호환 predicate**로 재설계. 기본 predicate=계열(`byEnergySource`)이라 기존 21테스트 그대로 통과. 조합표(CompatMatrix) 주입 시 시리즈×유형 호환을 따르고 계열 교차(GHP↔대공간덕트)도 성립. 라벨을 4개 레이어에 threading(`OutdoorCandidate`/`IndoorForSelection`/`IndoorUnit`/`planAdapter`), `compatPredicateFromMatrix`(하이브리드: 조합표 없는 축은 계열 폴백), App/main.tsx 주입(SQLite면 시드+override, 폴백이면 시드). 브라우저 실검증(6실 배치→실외기 1대·배정 6/6·조합비 0.81, 무회귀). 전체 1138 그린·tsc·build 클린. 신규 단위테스트: 계열 교차 enable·X-block·serves-all·no-compat.
+  - [ ] **SelectionTable 계열 교차 대응** — 장비선정표/일람표가 `층×계열`로 소섹션을 나눈다(`SelectionTable.ts`). 계열 교차 그룹(GHP 실외기 + EHP 실내기)이 실제로 생기면(현 목업엔 없음, 실도면 DXF에서) 그 소섹션 귀속을 재검토해야 한다. 지금은 미발현이라 무회귀.
 - [ ] **B4 후속 — SINGLE(단품) 1:1 + product_combinations** (질문 3·5) — 단품은 1:1, 능력은 세트 단위. `product_combinations` 적재 + T/P/V/B 앞글자 유형 분류(T=카세트·P=스탠드·V=상업용 천장형·B=덕트형). 현재 단품 실외기는 is_vrf=0로 조합 후보에서 제외돼 있음(오작동 아님).
 - [ ] 민수/조달 실내기 중복 라인 dedup(질문 4: 스펙 동일·거의 안 섞음) — 경미.
 

@@ -65,9 +65,14 @@ export class CompatMatrix {
   }
 
   valueAt(outdoor: AxisLabel, indoor: AxisLabel): CompatValue {
-    const v = this.cells.get(this.cellKey(outdoor, indoor))
-    if (v === undefined) throw new Error(`알 수 없는 축: 실외기 '${outdoor.series}' × 실내기 '${indoor.series}'`)
+    const v = this.tryValueAt(outdoor, indoor)
+    if (v === null) throw new Error(`알 수 없는 축: 실외기 '${outdoor.series}' × 실내기 '${indoor.series}'`)
     return v
+  }
+
+  // 축이 없으면 throw 대신 null. (생성단 호환 판정처럼 '조합표에 없으면 계열로 폴백'할 때 쓴다.)
+  tryValueAt(outdoor: AxisLabel, indoor: AxisLabel): CompatValue | null {
+    return this.cells.get(this.cellKey(outdoor, indoor)) ?? null
   }
 
   // 연결 가능 여부. O(가능)·D(전용 제품도 연결됨)는 true, X(불가)·-(멀티 대상 아님)는 false.
