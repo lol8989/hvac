@@ -100,7 +100,7 @@ interface ViewerProps {
   fitBounds?: ViewBox // 층 전환: 활성 층 실들을 감싸는 bbox. 있으면 여기에 맞춘다(없으면 전체 도면)
   layers?: LayerVisibility // 레이어별 표시 여부(기본 전부 ON)
   onLayersChange?: (v: LayerVisibility) => void // 레이어 토글은 뷰어 도구다(상단 툴바 밴드 제거)
-  canAddUnit?: boolean // ＋실내기 수동 추가 허용 — 실검출·AI 배치 완료 전에는 비활성
+  canAddUnit?: boolean // ＋실내기 수동 추가 허용 — AI 실내기 배치 완료 전에는 비활성
   canPlaceOutdoors?: boolean // ＋실외기 배치 허용 — '실외기 배치' 단계에서만 활성
   // 실 자르기(V): 실내기 배치 단계에서만 허용한다(실_슬라이싱_설계_v1 §D2).
   canSliceRooms?: boolean

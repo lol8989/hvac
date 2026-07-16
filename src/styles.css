@@ -257,7 +257,7 @@ button{font-family:inherit;cursor:pointer;}
 .out-list{display:flex;flex-direction:column;gap:8px;}
 .out-list .btn{width:100%;text-align:left;}
 
-/* 프로젝트 설정(시설군) — 실 검출 전에만 활성 */
+/* 프로젝트 설정(시설군) — 실내기 배치 단계에 노출 */
 .proj-set{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#666;}
 .proj-set .field{padding:4px 8px;font-size:13px;}
 .proj-set .field:disabled{background:#F2F2F2;color:#999;cursor:not-allowed;}
