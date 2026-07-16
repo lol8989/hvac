@@ -6,10 +6,10 @@ import type { GuardVerdict } from '../../domain/generation/StepGuard'
 
 const BLOCK: Extract<GuardVerdict, { kind: 'BLOCK' }> = {
   kind: 'BLOCK',
-  code: 'ROOMS_WITHOUT_INDOOR',
-  title: '실내기 배치를 마쳐야 합니다',
-  reason: '실 2곳(로비 · 탕비실)에 실내기가 없습니다.',
-  remedy: "'AI 실내기 배치'를 실행하세요.",
+  code: 'OUTDOOR_NOT_PLACED',
+  title: '실외기를 도면에 배치해야 합니다',
+  reason: '실외기 1대 중 0대만 도면에 배치됐습니다.',
+  remedy: "도면에서 '＋ 실외기 배치'를 누르세요.",
 }
 
 const CONFIRM: Extract<GuardVerdict, { kind: 'CONFIRM' }> = {
@@ -25,7 +25,7 @@ describe('GuardModal — BLOCK', () => {
     render(<GuardModal verdict={BLOCK} onProceed={vi.fn()} onClose={vi.fn()} />)
     expect(screen.getByText(BLOCK.title)).toBeInTheDocument()
     expect(screen.getByText(BLOCK.reason)).toBeInTheDocument()
-    expect(screen.getByText(/AI 실내기 배치/)).toBeInTheDocument()
+    expect(screen.getByText(/누르세요/)).toBeInTheDocument() // 해결법(remedy)을 함께 보여준다
   })
 
   it('진행 버튼이 없다 — 확인 하나뿐', () => {

@@ -32,20 +32,22 @@ describe('guardAdvance — place(실내기 배치)', () => {
     if (v.kind === 'BLOCK') expect(v.code).toBe('NO_ROOMS')
   })
 
-  it('실내기 없는 실이 있으면 막고, 실명을 사유에 담는다', () => {
+  // 주인님 지시 2026-07-16: 막지 말고 주의만 하고 넘어갈 수 있게 한다.
+  it('실내기 없는 실이 있으면 막지 않고 주의(CONFIRM)만 하며, 실명을 사유에 담는다', () => {
     const v = guardAdvance('place', healthy({ roomsWithoutIndoor: ['로비', '탕비실'] }))
-    expect(v.kind).toBe('BLOCK')
-    if (v.kind === 'BLOCK') {
+    expect(v.kind).toBe('CONFIRM')
+    if (v.kind === 'CONFIRM') {
       expect(v.code).toBe('ROOMS_WITHOUT_INDOOR')
       expect(v.reason).toContain('로비')
       expect(v.reason).toContain('탕비실')
-      expect(v.remedy).not.toBe('') // 어떻게 풀지 알려준다
+      expect(v.detail).not.toBe('') // 진행하면 무엇을 잃는지 알려준다
     }
   })
 
-  it('부하를 확정해야 실외기를 고를 수 있다는 것이 막는 이유다', () => {
+  it('그 실이 산출물에서 제외된다는 것이 주의 사유다', () => {
     const v = guardAdvance('place', healthy({ roomsWithoutIndoor: ['로비'] }))
-    if (v.kind === 'BLOCK') expect(v.reason).toContain('부하')
+    expect(v.kind).toBe('CONFIRM')
+    if (v.kind === 'CONFIRM') expect(v.detail).toContain('제외')
   })
 
   it('전 실에 실내기가 있으면 통과', () => {

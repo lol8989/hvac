@@ -50,16 +50,18 @@ describe('App — 초기 상태 (실 검출 완료)', () => {
 })
 
 describe('App — 스텝 가드', () => {
-  it('실내기를 배치하지 않고 실외기 선정으로 가려 하면 차단 팝업이 실명을 알려준다', () => {
+  // 주인님 지시 2026-07-16: 실내기 없는 실은 막지 말고 주의만 하고 넘어갈 수 있게 한다.
+  it('실내기를 배치하지 않고 실외기 선정으로 가려 하면 주의 팝업이 뜨지만 계속 진행할 수 있다', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
 
-    const dialog = screen.getByRole('alertdialog', { name: '실내기 배치를 마쳐야 합니다' })
+    const dialog = screen.getByRole('alertdialog', { name: '실내기가 없는 실이 있습니다' })
     expect(within(dialog).getByText(/거실/)).toBeInTheDocument() // 어느 실이 비었는지
-    expect(within(dialog).getByText(/부하/)).toBeInTheDocument() // 왜 막는지
-    expect(within(dialog).getByText(/AI 실내기 배치/)).toBeInTheDocument() // 어떻게 푸는지
-    // 차단은 넘길 수 없다 — '계속 진행'이 없다.
-    expect(screen.queryByRole('button', { name: '계속 진행' })).not.toBeInTheDocument()
+    expect(within(dialog).getByText(/제외/)).toBeInTheDocument() // 진행하면 무엇을 잃는지
+    // 차단이 아니라 주의 — '계속 진행'으로 넘어갈 수 있다.
+    fireEvent.click(screen.getByRole('button', { name: '계속 진행' }))
+    // 실외기 선정·조합 단계로 넘어갔다(조합 매핑 버튼이 보인다).
+    expect(screen.getByRole('button', { name: '실외기 조합 매핑' })).toBeInTheDocument()
   })
 
   it('미배정이 남은 채 다음 단계로 가려 하면 차단하고 이동하지 않는다', () => {

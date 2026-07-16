@@ -88,12 +88,14 @@ export const guardAdvance = (from: StepId, c: GuardContext): GuardVerdict => {
     case 'place': {
       if (c.roomCount === 0) return NO_ROOMS
       if (c.roomsWithoutIndoor.length > 0) {
-        return block(
+        // 주의만 하고 넘어갈 수 있다(주인님 지시 2026-07-16): 실내기 없는 실은 부하가 없어
+        // 실외기 선정·조합에 기여하지 않을 뿐, 나머지 실로 산출물은 정상적으로 나온다.
+        return confirm(
           'ROOMS_WITHOUT_INDOOR',
-          '실내기 배치를 마쳐야 합니다',
-          `실 ${c.roomsWithoutIndoor.length}곳(${c.roomsWithoutIndoor.join(' · ')})에 실내기가 없습니다. ` +
-            '실내기 정격용량이 확정돼야 그 부하를 감당할 실외기를 선정할 수 있습니다.',
-          "'AI 실내기 배치'를 실행하거나, 실을 선택해 '＋ 실내기'로 직접 추가하세요.",
+          '실내기가 없는 실이 있습니다',
+          `실 ${c.roomsWithoutIndoor.length}곳(${c.roomsWithoutIndoor.join(' · ')})에 실내기가 없습니다.`,
+          '이대로 진행하면 그 실은 실외기 선정·조합과 산출물(장비선정표·장비일람표)에서 제외됩니다. ' +
+            "나중에 실내기 배치로 돌아와 '＋ 실내기'로 추가할 수 있습니다.",
         )
       }
       return ALLOW
