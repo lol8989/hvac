@@ -90,20 +90,28 @@ describe('현업 시드 커버리지 (래칫)', () => {
     expect(orphanCols(repo.getCompatMatrix())).toEqual([])
   })
 
-  // 남은 미근거 칸은 전부 한 행에 몰려 있다.
-  // 카탈로그는 'Multi V 실외기(큐레이션)'을 절환형·냉방전용·GHP 세 중분류에 두는데 현업 시드엔
-  // 절환형·GHP 둘뿐이다. 두 후보의 값이 갈리는 열에서는 만장일치가 아니라 자동 채택할 수 없다 —
-  // 임의로 고르면 현업 판정을 날조하는 것이다. 현업 확인 대기(문서 §6).
-  it('근거 못 받는 칸은 큐레이션 냉방전용 행에만 남는다', async () => {
+  // 마지막까지 남았던 '냉방전용 | Multi V 실외기(큐레이션)'은 현업 문의 대상이 아니라
+  // **모델이 0개인 빈 시리즈**였다(고를 모델이 없으니 조합을 물을 대상도 아니다).
+  // 시드 생성기가 빈 시리즈를 싣지 않게 고쳐(buildSpecSeed) 유령 축 3개가 사라졌고,
+  // 그 결과 카탈로그 전 칸이 현업 확정값을 받는다.
+  it('모든 칸이 현업 확정값을 받는다 (미근거 칸 0)', async () => {
     const { repo } = await makeRepo()
     const m = repo.getCompatMatrix()
-    const ungroundedRows = new Set<string>()
+    const ungrounded: string[] = []
     for (const row of m.outdoorRows) {
       for (const col of m.indoorColumns) {
-        if (seedValueAt(row, col) == null) ungroundedRows.add(`${row.subcategory} | ${row.series}`)
+        if (seedValueAt(row, col) == null) ungrounded.push(`${row.subcategory}|${row.series} × ${col.subcategory}|${col.series}`)
       }
     }
-    expect([...ungroundedRows]).toEqual(['냉방전용 | Multi V 실외기(큐레이션)'])
+    expect(ungrounded).toEqual([])
+  })
+
+  // FCU는 물(냉·온수 코일) 기반이라 냉매식 실외기에 붙지 않는다. 현업 확인(회신 질문 2)에 따라
+  // 장비마스터 적재 자체에서 제외했으므로 조합관리 축에도 나타나지 않는다.
+  it('FCU는 축에 없다 (장비마스터 적재 제외)', async () => {
+    const { repo } = await makeRepo()
+    const m = repo.getCompatMatrix()
+    expect(m.indoorColumns.some((c) => /FCU|팬코일/.test(c.subcategory) || /FCU/.test(c.series))).toBe(false)
   })
 
   it('중분류 이름이 달라도 시리즈가 같으면 현업 판정을 받는다', async () => {

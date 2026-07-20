@@ -66,6 +66,16 @@ function collectSpecFiles(): { files: SpecFile[]; unconverted: string[] } {
   return { files: [...xlsx.values()], unconverted }
 }
 
+// 장비마스터에 적재하지 않는 중분류.
+//
+// FCU(팬코일 유닛)는 냉·온수 코일 방식이라 냉매배관으로 Multi V 실외기에 붙지 않는다. 열원(칠러·보일러)에
+// 물로 연결되는 별개 계통이다. 현업 확인(2026-07-16 회신 질문 2): "FCU는 물 기반이여서 멀티V 실외기
+// 시리즈와 연결할 수 없습니다. 현재 우리가 개발하는 에이전트에서 FCU는 제외해도 됩니다."
+// → 주인님 결정(2026-07-20): 생성 풀뿐 아니라 **장비마스터 적재 자체에서 제외**한다.
+//   (생성단 방어 규칙 domain/generation/indoorCombinability.ts는 그대로 둔다 — 데이터가 없어도
+//    규칙이 남아 있어야 나중에 수냉·칠러 계통을 다룰 때 같은 실수를 반복하지 않는다.)
+const EXCLUDED_SUBCATEGORIES = new Set(['IN_FCU'])
+
 // 큐레이션 게시본이 속할 중분류. 라벨은 InMemory 시드(seedData.ts)의 type과 정확히 일치해야 한다
 // — 생성/검도가 그 문자열을 실내기 유형으로 표시하고, 동치 테스트가 이를 고정한다.
 // 큐레이션 실내기의 중분류는 유형 라벨에서 나온다(1WAY=C · 2WAY=G · 4WAY=T 계열).
@@ -98,6 +108,7 @@ async function main() {
   const products = new Map<string, SeedProduct>() // modelCode → product (첫 등장 우선)
 
   const skipped: string[] = []
+  const excluded: string[] = [] // 의도된 제외(EXCLUDED_SUBCATEGORIES) — 커버리지 결함이 아니다
   const emptyFiles: string[] = [] // 읽었는데 모델이 0건인 파일 — 파싱 실패 신호다
   const combinations: SeedCombination[] = [] // 단품 세트 — 제품이 아니라 조합
   let sheetCount = 0
@@ -116,6 +127,12 @@ async function main() {
       const taxon = classifySheet(file, sheet.sheetName)
       if (!taxon) {
         skipped.push(`${file} | ${sheet.sheetName} (분류 불가 · 모델 ${sheet.products.length}건 버려짐)`)
+        continue
+      }
+      // 장비마스터에서 제외하는 중분류. 적재 자체를 하지 않는다.
+      // '분류 불가'(skipped)와 섞지 않는다 — 이건 결함이 아니라 의도된 제외라 커버리지 검사를 깨면 안 된다.
+      if (EXCLUDED_SUBCATEGORIES.has(taxon.subcategoryCode)) {
+        excluded.push(`${file} | ${sheet.sheetName} (${taxon.subcategoryName} · 모델 ${sheet.products.length}건)`)
         continue
       }
       sheetCount++
@@ -265,12 +282,26 @@ async function main() {
     ...[...products.values()].filter((p) => !curatedSet.has(p.modelCode)).sort((a, b) => a.modelCode.localeCompare(b.modelCode)),
   ]
 
+  // 모델이 하나도 없는 시리즈는 싣지 않는다.
+  //
+  // upsertCurated가 `S_CURATED_*` 시리즈를 먼저 만들고 나서, 그 모델이 스펙시트에도 있으면
+  // 실외기는 시트 시리즈에 남긴다(keepSheetSeries) — 그러면 방금 만든 큐레이션 시리즈가 빈 채로 남는다.
+  // 반대로 큐레이션 실내기는 항상 큐레이션 시리즈로 가므로 시트 쪽 시리즈가 빈다.
+  // 빈 시리즈는 조합관리 축에 '고를 모델이 없는 행/열'로 나타나 현업 확정값을 못 받는 유령이 된다
+  // (2026-07-20 실측 3건: 냉방전용|큐레이션 · 2WAY 카세트|민수전용 · 벽걸이형|Multi V S(주거)).
+  //
+  // 런타임에서 관리자가 새로 만든 빈 시리즈는 그대로 조합관리에 등장한다(자동 등장 기능은 유지).
+  // 여기서 거르는 것은 '시드가 빈 시리즈를 실어 보내는 것'뿐이다.
+  const seriesWithProducts = new Set(ordered.map((p) => p.seriesCode))
+  const nonEmptySeries = [...series.values()].filter((s) => seriesWithProducts.has(s.code))
+  const droppedSeries = [...series.values()].filter((s) => !seriesWithProducts.has(s.code))
+
   const seed: SeedData = {
     hash: '',
     generatedFrom: `03_참고자료/LG전자 스펙시트 모음 (${files.length}개 파일, ${sheetCount}개 시트)`,
     categories: CATEGORIES,
     subcategories: [...subcategories.values()].sort((a, b) => a.code.localeCompare(b.code)),
-    series: [...series.values()].sort((a, b) => a.code.localeCompare(b.code)),
+    series: nonEmptySeries.sort((a, b) => a.code.localeCompare(b.code)),
     products: ordered,
     prices,
     combinations,
@@ -302,6 +333,10 @@ async function main() {
   console.log(`  HP 출처: 모델명 ${bySource('MODEL_CODE')} · 환산백필 ${bySource('DERIVED')} · 큐레이션 ${bySource('CURATED')}`)
   console.log(`  용량 미상 ${noCapacity} · HP 미상(실외기, 용량 없어 백필 불가) ${outdoorNoHp}`)
   console.log(`  hash ${seed.hash} · ${(readFileSync(OUT_JSON).length / 1024 / 1024).toFixed(2)} MB`)
+  if (droppedSeries.length) {
+    console.log(`  빈 시리즈 ${droppedSeries.length}건 제외(모델 0개 — 조합관리 유령 축 방지):`)
+    for (const s of droppedSeries) console.log(`    - ${s.subcategoryCode} | ${s.nameKo}`)
+  }
   if (combinations.length) {
     console.log(`  단품 세트(제품 아님, 조합) ${combinations.length}건 — 예: ${combinations[0].setCode}`)
   }
