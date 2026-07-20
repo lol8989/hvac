@@ -13,10 +13,10 @@ import { IndoorModel } from '../../domain/generation/IndoorModel'
 
 // ── 공통 픽스처 (SelectionTable.test와 동일 시나리오) ─────────
 const IDU_40C = new IndoorModel({
-  code: '40C', model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP',
+  model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP',
 })
 const IDU_20C = new IndoorModel({
-  code: '20C', model: 'RNW0201C2S', coolW: 2000, heatW: 2200, type: '4WAY 카세트', energySource: 'EHP',
+  model: 'RNW0201C2S', coolW: 2000, heatW: 2200, type: '4WAY 카세트', energySource: 'EHP',
 })
 const ODU_8HP = { model: 'ARUM080LTE5', coolKw: 23.3, heatKw: 26.3, hp: 8 }
 
@@ -26,8 +26,8 @@ const roomPrep = Room.create({ id: 'r2', floor: '지하1층', name: '준비실',
 const excelInput = (): SelectionTableInput => ({
   rooms: [roomAv, roomPrep],
   placements: {
-    r1: Placement.ai('r1', { modelCode: '40C', quantity: 3 }, POS(3)),
-    r2: Placement.ai('r2', { modelCode: '20C', quantity: 3 }, POS(3)),
+    r1: Placement.ai('r1', { modelCode: 'RNW0401C2S', quantity: 3 }, POS(3)),
+    r2: Placement.ai('r2', { modelCode: 'RNW0201C2S', quantity: 3 }, POS(3)),
   },
   groups: [{ key: 'g1', label: '실외기 1', model: 'ARUM080LTE5', items: ['r1', 'r2'] }],
   indoorModels: [IDU_40C, IDU_20C],
@@ -48,7 +48,7 @@ describe('buildSelectionCsv — 엑셀 지하1층 시나리오 직렬화', () =>
     expect(lines[0]).toBe(HEADER)
     expect(lines[1]).toBe(
       '지하1층,시청각실,20,140,140,162.8,162.8,3256.4,3256.4,' +
-        '40C,RNW0401C2S,4000,4500,3,12000,13500,' +
+        '40T,RNW0401C2S,4000,4500,3,12000,13500,' +
         '8,ARUM080LTE5,23300,26300,1,0.7725,',
     )
   })
@@ -56,7 +56,7 @@ describe('buildSelectionCsv — 엑셀 지하1층 시나리오 직렬화', () =>
   it('두 번째 실 행은 층별·실외기 칸이 공란이고 실내기 정보만 채워진다', () => {
     const lines = csvLines(excelInput())
     expect(lines[2]).toBe(
-      ',준비실,5.4,150,150,174.5,174.5,942,942,20C,RNW0201C2S,2000,2200,3,6000,6600,,,,,,,',
+      ',준비실,5.4,150,150,174.5,174.5,942,942,20T,RNW0201C2S,2000,2200,3,6000,6600,,,,,,,',
     )
   })
 
@@ -70,8 +70,8 @@ describe('buildSelectionCsv — 엑셀 지하1층 시나리오 직렬화', () =>
     expect(lines.slice(4)).toEqual([
       '',
       '— 집계 —',
-      '실내기,40C,RNW0401C2S,3',
-      '실내기,20C,RNW0201C2S,3',
+      '실내기,40T,RNW0401C2S,3',
+      '실내기,20T,RNW0201C2S,3',
       '실외기,8HP,ARUM080LTE5,1',
       'HP 합계,8',
     ])

@@ -33,7 +33,6 @@ async function makeRepo(onChange?: () => void) {
 const draft = (over: Partial<ProductDraft> = {}): ProductDraft => ({
   seriesCode: IN_SERIES,
   modelCode: 'RNW-NEW-001',
-  equipmentCode: '99C',
   horsepower: null,
   coolingW: 5000,
   heatingW: 5600,
@@ -75,7 +74,7 @@ describe('createProduct (등록)', () => {
     const id = repo.createProduct(draft())
     expect(id).toBeGreaterThan(0)
     const row = byModel(repo, 'RNW-NEW-001')!
-    expect(row).toMatchObject({ id, status: 'DRAFT', coolingW: 5000, heatingW: 5600, equipmentCode: '99C', categoryCode: 'INDOOR' })
+    expect(row).toMatchObject({ id, status: 'DRAFT', coolingW: 5000, heatingW: 5600, categoryCode: 'INDOOR' })
     expect(repo.listProducts()).toHaveLength(before + 1)
   })
 
@@ -88,7 +87,7 @@ describe('createProduct (등록)', () => {
 
   it('실외기 시리즈로 등록하면 마력·최대연결수가 저장된다', async () => {
     const { repo } = await makeRepo()
-    repo.createProduct(draft({ seriesCode: GHP_SERIES, modelCode: 'GPUW-NEW', equipmentCode: null, horsepower: 20, coolingW: 56000, heatingW: 63000, maxConnections: 24 }))
+    repo.createProduct(draft({ seriesCode: GHP_SERIES, modelCode: 'GPUW-NEW', horsepower: 20, coolingW: 56000, heatingW: 63000, maxConnections: 24 }))
     expect(byModel(repo, 'GPUW-NEW')).toMatchObject({ categoryCode: 'OUTDOOR', energySource: 'GHP', horsepower: 20, maxConnections: 24 })
   })
 
@@ -148,7 +147,7 @@ describe('updateProduct (수정 — 게시본 잠금)', () => {
     const { repo } = await makeRepo()
     const id = idOf(repo, 'RNW9999DRAFT')
     repo.updateProduct(id, { modelCode: 'RNW9999RENAMED' })
-    expect(byModel(repo, 'RNW9999RENAMED')).toMatchObject({ coolingW: 9000, heatingW: 10000, equipmentCode: 'DRAFT99' })
+    expect(byModel(repo, 'RNW9999RENAMED')).toMatchObject({ coolingW: 9000, heatingW: 10000})
   })
 
   it('PUBLISHED 제품의 스펙 수정은 SPEC_LOCKED로 거부한다', async () => {

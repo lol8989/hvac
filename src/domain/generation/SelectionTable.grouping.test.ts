@@ -12,7 +12,7 @@ import { POS } from '../../test/positions'
 import { IndoorModel } from './IndoorModel'
 import { UnitLoad } from '../shared/UnitLoad'
 
-const IDU = new IndoorModel({ code: '40C', model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP' })
+const IDU = new IndoorModel({ model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP' })
 const ODU_A = { model: 'ODU-A', coolKw: 23.3, heatKw: 26.3, hp: 8 }
 const ODU_B = { model: 'ODU-B', coolKw: 29.0, heatKw: 32.0, hp: 10 }
 
@@ -24,10 +24,10 @@ const room = (id: string, floor: string) =>
 const input = (): SelectionTableInput => ({
   rooms: [room('r1', '1층'), room('r2', '1층'), room('r3', '1층'), room('r4', '2층')],
   placements: {
-    r1: Placement.ai('r1', { modelCode: '40C', quantity: 2 }, POS(2)),
-    r2: Placement.ai('r2', { modelCode: '40C', quantity: 1 }, POS(1)),
-    r3: Placement.ai('r3', { modelCode: '40C', quantity: 3 }, POS(3)),
-    r4: Placement.ai('r4', { modelCode: '40C', quantity: 1 }, POS(1)),
+    r1: Placement.ai('r1', { modelCode: 'RNW0401C2S', quantity: 2 }, POS(2)),
+    r2: Placement.ai('r2', { modelCode: 'RNW0401C2S', quantity: 1 }, POS(1)),
+    r3: Placement.ai('r3', { modelCode: 'RNW0401C2S', quantity: 3 }, POS(3)),
+    r4: Placement.ai('r4', { modelCode: 'RNW0401C2S', quantity: 1 }, POS(1)),
   },
   groups: [
     { key: 'g1', label: '실외기-1', model: 'ODU-A', items: ['r1', 'r2'] },

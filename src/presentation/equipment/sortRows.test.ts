@@ -5,7 +5,7 @@ import { sortRows, nextSortDirection, type SortState } from './sortRows'
 
 const mk = (over: Partial<ProductRow>): ProductRow => ({
   id: 0, categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP',
-  seriesCode: 'S', seriesName: 'S', modelCode: 'M', equipmentCode: null, horsepower: null, hpSource: null,
+  seriesCode: 'S', seriesName: 'S', modelCode: 'M', horsepower: null, hpSource: null,
   coolingW: null, heatingW: null, maxConnections: null, status: 'DRAFT',
   createdAt: null, updatedAt: null, publishedAt: null, ...over,
 })

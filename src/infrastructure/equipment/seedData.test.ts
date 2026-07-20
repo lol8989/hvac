@@ -15,7 +15,7 @@ describe('SEED_HASH (시드 내용 해시 → 캐시 무효화)', () => {
   })
 
   it('모델이 추가되어도 해시가 달라진다', () => {
-    const added = [...INDOOR_RECORDS, { ...INDOOR_RECORDS[0], code: 'NEW1', model: 'RNW-NEW1' }]
+    const added = [...INDOOR_RECORDS, { ...INDOOR_RECORDS[0], model: 'RNW-NEW1' }]
     expect(fnv1a(JSON.stringify([added, OUTDOOR_RECORDS]))).not.toBe(SEED_HASH)
   })
 

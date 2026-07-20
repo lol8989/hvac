@@ -46,7 +46,7 @@ describe('SqliteEquipmentMaster (SQLite 백엔드)', () => {
     expect(sq.publishedIndoor()).toHaveLength(234)
     expect(sq.publishedOutdoor()).toHaveLength(697)
 
-    expect(sq.publishedIndoor().some((m) => m.code === 'DRAFT99')).toBe(false)
+    expect(sq.publishedIndoor().some((m) => m.model === 'DRAFT99')).toBe(false)
     expect(sq.publishedOutdoor().some((m) => m.model === 'RPUW-ARCHIVED')).toBe(false)
     // 비-VRF(칠러·CDU·단품)는 게시돼도 조합 후보로 새지 않는다 — SqliteEquipmentMaster.vrf.test.ts
     expect(sq.publishedOutdoor().some((m) => m.model === 'ACAH020LET2')).toBe(false)

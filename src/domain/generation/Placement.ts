@@ -136,9 +136,9 @@ export class Placement {
   // 유효 선정 기준 총 냉/난방용량(W). 모델 코드 불일치 시 throw(정합 보호).
   totals(model: IndoorModel): { coolW: number; heatW: number } {
     const sel = this.effectiveSelection
-    if (model.code !== sel.modelCode) {
+    if (model.model !== sel.modelCode) {
       throw new Error(
-        `모델 코드 불일치: 선정 '${sel.modelCode}' ≠ 전달 모델 '${model.code}'`,
+        `모델 코드 불일치: 선정 '${sel.modelCode}' ≠ 전달 모델 '${model.model}'`,
       )
     }
     return {

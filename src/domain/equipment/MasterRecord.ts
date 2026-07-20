@@ -8,8 +8,9 @@ import type { PublishStatus } from './PublishStatus'
 
 // ── 실내기 ──
 export interface IndoorSpecFields {
-  code: string // 장비번호 코드 (예: '40C', '110T')
-  model: string // 모델명 (예: 'RNW0401C2S')
+  // 장비번호는 여기 없다 — 유형·냉방용량에서 파생되는 표시값이라 마스터가 들고 있으면
+  // 원본과 어긋날 수 있고, 값이 충돌해 식별자로도 못 쓴다(IndoorModel 주석 참조).
+  model: string // 모델명 = 식별자 (예: 'RNW0401C2S')
   coolW: number // 냉방용량(W)
   heatW: number // 난방용량(W)
   type: string // 실내기 유형 (예: '4WAY 카세트', '덕트')

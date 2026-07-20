@@ -5,7 +5,6 @@ import { describe, it, expect } from 'vitest'
 import { IndoorModel } from './IndoorModel'
 
 const validProps = {
-  code: '40C',
   model: 'RNW0401C2S',
   coolW: 4000,
   heatW: 4500,
@@ -17,7 +16,6 @@ describe('IndoorModel', () => {
   describe('생성 검증', () => {
     it('유효한 props로 생성하면 readonly 필드를 전부 노출한다', () => {
       const m = new IndoorModel(validProps)
-      expect(m.code).toBe('40C')
       expect(m.model).toBe('RNW0401C2S')
       expect(m.coolW).toBe(4000)
       expect(m.heatW).toBe(4500)
@@ -28,11 +26,6 @@ describe('IndoorModel', () => {
     it('생성된 인스턴스는 불변(frozen)이다', () => {
       const m = new IndoorModel(validProps)
       expect(Object.isFrozen(m)).toBe(true)
-    })
-
-    it('code가 빈값(공백 포함)이면 throw한다', () => {
-      expect(() => new IndoorModel({ ...validProps, code: '' })).toThrow()
-      expect(() => new IndoorModel({ ...validProps, code: '   ' })).toThrow()
     })
 
     it('model이 빈값이면 throw한다', () => {
@@ -90,16 +83,27 @@ describe('IndoorModel', () => {
     })
   })
 
+  // 장비번호는 마스터가 아니라 유형·냉방용량에서 파생한다(0708 회의록 규칙).
+  describe('equipmentCode (파생)', () => {
+    it('4WAY 4000W면 40T다', () => {
+      expect(new IndoorModel(validProps).equipmentCode).toBe('40T')
+    })
+
+    it('규칙이 없는 유형이면 null이다', () => {
+      expect(new IndoorModel({ ...validProps, type: '덕트(고정압)' }).equipmentCode).toBeNull()
+    })
+  })
+
   describe('equals', () => {
-    it('code가 같으면 동등하다', () => {
+    it('모델코드가 같으면 스펙이 달라도 동등하다', () => {
       const a = new IndoorModel(validProps)
-      const b = new IndoorModel({ ...validProps, model: 'DIFFERENT', coolW: 9999 })
+      const b = new IndoorModel({ ...validProps, coolW: 9999 })
       expect(a.equals(b)).toBe(true)
     })
 
-    it('code가 다르면 동등하지 않다', () => {
+    it('모델코드가 다르면 동등하지 않다', () => {
       const a = new IndoorModel(validProps)
-      const b = new IndoorModel({ ...validProps, code: '52C' })
+      const b = new IndoorModel({ ...validProps, model: 'RNW0521A2U' })
       expect(a.equals(b)).toBe(false)
     })
   })

@@ -6,7 +6,6 @@ import { EquipmentDomainError } from './errors'
 const draft = (over: Partial<ProductDraft> = {}): ProductDraft => ({
   seriesCode: 'S_IN_4WAY',
   modelCode: 'RNW0401C2S',
-  equipmentCode: '40C',
   horsepower: null,
   coolingW: 4000,
   heatingW: 4500,

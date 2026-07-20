@@ -31,7 +31,6 @@ export interface SeedSeries {
 export interface SeedProduct {
   seriesCode: string
   modelCode: string
-  equipmentCode: string | null // 장비번호(40C 등). 스펙시트에 없어 큐레이션된 게시본만 보유
   horsepower: number | null // VRF=모델명 유도 · 비-VRF=냉방용량 환산 백필 · 큐레이션=시드값
   hpSource: HpSource | null // 마력 출처(추정치 구분). HP가 없으면 null
   coolingW: number | null

@@ -10,7 +10,7 @@ import { compatMatrixFromSeed } from '../../infrastructure/equipment/seed/compat
 
 const mk = (over: Partial<ProductRow>): ProductRow => ({
   id: 0, categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP',
-  seriesCode: 'S_OUT_HR', seriesName: 'S', modelCode: 'M', equipmentCode: null, horsepower: 10, hpSource: 'MODEL_CODE',
+  seriesCode: 'S_OUT_HR', seriesName: 'S', modelCode: 'M', horsepower: 10, hpSource: 'MODEL_CODE',
   coolingW: 20000, heatingW: 22000, maxConnections: 16, status: 'PUBLISHED',
   createdAt: null, updatedAt: null, publishedAt: null, ...over,
 })
@@ -18,7 +18,7 @@ const mk = (over: Partial<ProductRow>): ProductRow => ({
 // 15개(게시 13 + 작성중 1 + 보관 1) → 페이지네이션(12/페이지) 2페이지.
 const rows: ProductRow[] = [
   ...Array.from({ length: 13 }, (_, i) => mk({ id: i + 1, modelCode: `PUB${i}`, status: 'PUBLISHED', publishedAt: '2026-07-01T12:00:00' })),
-  mk({ id: 100, categoryCode: 'INDOOR', categoryName: '실내기', subcategoryName: '4WAY 카세트', seriesCode: 'S_IN_4WAY', modelCode: 'DRAFTX', equipmentCode: '40C', status: 'DRAFT', horsepower: null, maxConnections: null, createdAt: '2026-07-08T09:05:03', updatedAt: '2026-07-09T10:11:12' }),
+  mk({ id: 100, categoryCode: 'INDOOR', categoryName: '실내기', subcategoryName: '4WAY 카세트', seriesCode: 'S_IN_4WAY', modelCode: 'DRAFTX', status: 'DRAFT', horsepower: null, maxConnections: null, createdAt: '2026-07-08T09:05:03', updatedAt: '2026-07-09T10:11:12' }),
   mk({ id: 101, modelCode: 'ARCHX', status: 'ARCHIVED' }),
 ]
 

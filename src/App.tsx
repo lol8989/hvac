@@ -417,9 +417,9 @@ export default function App({
   const derivedOutIdx = grpOfPrimary ? outdoorIdxByModel(grpOfPrimary.model, outdoorCards) : -1
   const appliedCode = primary ? placements[primary]?.effectiveSelection.modelCode : undefined
   const derivedInIdx = appliedCode
-    ? Math.max(0, indoorModels.findIndex((m) => m.code === appliedCode))
+    ? Math.max(0, indoorModels.findIndex((m) => m.model === appliedCode))
     : primary
-      ? indoorModels.findIndex((m) => m.code === aiSelectionFor(domainRooms[primary], indoorModels).modelCode)
+      ? indoorModels.findIndex((m) => m.model === aiSelectionFor(domainRooms[primary], indoorModels).modelCode)
       : -1 // 선택 실 없으면 아무 카드도 선택 안 함
   const effIn = pick.in ?? derivedInIdx
   const effOut = pick.out ?? derivedOutIdx
@@ -522,7 +522,7 @@ export default function App({
       editPlacements(`실내기 모델 적용(${m.mn})`, (prev) => {
         const next = { ...prev }
         liveSelRooms.forEach((id) => {
-          const sel = { modelCode: model.code, quantity: prev[id]?.effectiveSelection.quantity ?? 1 }
+          const sel = { modelCode: model.model, quantity: prev[id]?.effectiveSelection.quantity ?? 1 }
           // 모델만 바뀌고 대수는 그대로 → 심볼 좌표도 그대로.
           const positions = prev[id] ? [...prev[id].positions] : layoutFor(id, sel.quantity)
           next[id] = (prev[id] ?? Placement.ai(id, sel, positions)).overrideSelection(sel, positions)
@@ -765,7 +765,7 @@ export default function App({
       type: 'table',
       table: selectionTable,
       groupOptions: groups.map((g) => ({ key: g.key, label: g.label })),
-      indoorModelOptions: indoorModels.map((m) => ({ code: m.code })),
+      indoorModelOptions: indoorModels.map((m) => ({ code: m.model })),
     },
     { renameRoom, overrideUnitLoad, resetUnitLoad, overrideIndoor, resetIndoor, moveRoomFromGrid },
     [domainRooms, placements, plan],

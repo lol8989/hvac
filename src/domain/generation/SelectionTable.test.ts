@@ -13,10 +13,10 @@ import { UnitLoad } from '../shared/UnitLoad'
 
 // ── 공통 픽스처 ──────────────────────────────────────────────
 const IDU_40C = new IndoorModel({
-  code: '40C', model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP',
+  model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP',
 })
 const IDU_20C = new IndoorModel({
-  code: '20C', model: 'RNW0201C2S', coolW: 2000, heatW: 2200, type: '4WAY 카세트', energySource: 'EHP',
+  model: 'RNW0201C2S', coolW: 2000, heatW: 2200, type: '4WAY 카세트', energySource: 'EHP',
 })
 const ODU_8HP = { model: 'ARUM080LTE5', coolKw: 23.3, heatKw: 26.3, hp: 8 }
 const ODU_10HP = { model: 'ARUM100LTE5', coolKw: 29.0, heatKw: 32.0, hp: 10 }
@@ -30,8 +30,8 @@ const roomPrep = Room.create({ id: 'r2', floor: '지하1층', name: '준비실',
 const excelInput = (): SelectionTableInput => ({
   rooms: [roomAv, roomPrep],
   placements: {
-    r1: Placement.ai('r1', { modelCode: '40C', quantity: 3 }, POS(3)),
-    r2: Placement.ai('r2', { modelCode: '20C', quantity: 3 }, POS(3)),
+    r1: Placement.ai('r1', { modelCode: 'RNW0401C2S', quantity: 3 }, POS(3)),
+    r2: Placement.ai('r2', { modelCode: 'RNW0201C2S', quantity: 3 }, POS(3)),
   },
   groups: [{ key: 'g1', label: '실외기 1', model: 'ARUM080LTE5', items: ['r1', 'r2'] }],
   indoorModels: [IDU_40C, IDU_20C],
@@ -41,9 +41,9 @@ const excelInput = (): SelectionTableInput => ({
 // 조합비 판정 시나리오: 실내기 coolW×qty ÷ 10kW 실외기
 const ratioInput = (coolW: number, comboRange?: ComboRange): SelectionTableInput => ({
   rooms: [Room.create({ id: 'rx', floor: '1층', name: '실X', areaM2: 10, usage: '사무실', facility: 'OFFICE', shortSideM: 2.5, longSideM: 4 })],
-  placements: { rx: Placement.ai('rx', { modelCode: 'X', quantity: 1 }, POS(1)) },
+  placements: { rx: Placement.ai('rx', { modelCode: 'X-M', quantity: 1 }, POS(1)) },
   groups: [{ key: 'gx', label: '실외기 X', model: 'ODU-10', items: ['rx'] }],
-  indoorModels: [new IndoorModel({ code: 'X', model: 'X-M', coolW, heatW: coolW, type: '덕트', energySource: 'EHP' })],
+  indoorModels: [new IndoorModel({ model: 'X-M', coolW, heatW: coolW, type: '덕트', energySource: 'EHP' })],
   outdoorSpecs: [{ model: 'ODU-10', coolKw: 10, heatKw: null, hp: 10, comboRange }],
 })
 const firstOutdoor = (t: SelectionTable) => t.floors[0].rows[0].outdoor!
@@ -70,7 +70,7 @@ describe('buildSelectionTable — 엑셀 지하1층 재현', () => {
   it('배치가 있으면 실내기 정보가 유효 선정으로 해석된다', () => {
     const rows = buildSelectionTable(excelInput()).floors[0].rows
     expect(rows[0].indoor).toEqual({
-      code: '40C', model: 'RNW0401C2S', type: '4WAY 카세트', coolW: 4000, heatW: 4500,
+      code: '40T', model: 'RNW0401C2S', type: '4WAY 카세트', coolW: 4000, heatW: 4500,
       quantity: 3, totalCoolW: 12000, totalHeatW: 13500, overridden: false,
     })
     expect(rows[1].indoor?.totalCoolW).toBe(6000)
@@ -99,9 +99,9 @@ describe('buildSelectionTable — 층 섹션', () => {
   const input = (): SelectionTableInput => ({
     rooms: [roomB1a, room1Fb, roomB1c],
     placements: {
-      r1: Placement.ai('r1', { modelCode: '40C', quantity: 3 }, POS(3)),
-      b: Placement.ai('b', { modelCode: '20C', quantity: 3 }, POS(3)),
-      c: Placement.ai('c', { modelCode: '20C', quantity: 3 }, POS(3)),
+      r1: Placement.ai('r1', { modelCode: 'RNW0401C2S', quantity: 3 }, POS(3)),
+      b: Placement.ai('b', { modelCode: 'RNW0201C2S', quantity: 3 }, POS(3)),
+      c: Placement.ai('c', { modelCode: 'RNW0201C2S', quantity: 3 }, POS(3)),
     },
     groups: [{ key: 'g1', label: '실외기 1', model: 'ARUM080LTE5', items: ['r1', 'b'] }],
     indoorModels: [IDU_40C, IDU_20C],
@@ -159,10 +159,10 @@ describe('buildSelectionTable — 오버라이드 플래그 전파', () => {
     const input = excelInput()
     input.placements = {
       ...input.placements,
-      r1: input.placements['r1'].overrideSelection({ modelCode: '20C', quantity: 5 }, POS(5)),
+      r1: input.placements['r1'].overrideSelection({ modelCode: 'RNW0201C2S', quantity: 5 }, POS(5)),
     }
     const row = buildSelectionTable(input).floors[0].rows[0]
-    expect(row.indoor).toMatchObject({ code: '20C', quantity: 5, totalCoolW: 10000, overridden: true })
+    expect(row.indoor).toMatchObject({ code: '20T', quantity: 5, totalCoolW: 10000, overridden: true })
   })
 })
 
@@ -171,7 +171,7 @@ describe('buildSelectionTable — BOM', () => {
     const roomC = Room.create({ id: 'r3', floor: '1층', name: '교장실', areaM2: 15, usage: '교장실', facility: 'OFFICE', shortSideM: 3, longSideM: 5 })
     const input = excelInput()
     input.rooms = [...input.rooms, roomC]
-    input.placements = { ...input.placements, r3: Placement.ai('r3', { modelCode: '40C', quantity: 2 }, POS(2)) }
+    input.placements = { ...input.placements, r3: Placement.ai('r3', { modelCode: 'RNW0401C2S', quantity: 2 }, POS(2)) }
     input.groups = [
       { key: 'g1', label: '실외기 1', model: 'ARUM080LTE5', items: ['r1'] },
       { key: 'g2', label: '실외기 2', model: 'ARUM080LTE5', items: ['r2'] },
@@ -180,8 +180,8 @@ describe('buildSelectionTable — BOM', () => {
     input.outdoorSpecs = [ODU_8HP, ODU_10HP]
     const { bom } = buildSelectionTable(input)
     expect(bom.indoor).toEqual([
-      { code: '40C', model: 'RNW0401C2S', quantity: 5 },
-      { code: '20C', model: 'RNW0201C2S', quantity: 3 },
+      { code: '40T', model: 'RNW0401C2S', quantity: 5 },
+      { code: '20T', model: 'RNW0201C2S', quantity: 3 },
     ])
     expect(bom.outdoor).toEqual([
       { hp: 8, model: 'ARUM080LTE5', quantity: 2 },

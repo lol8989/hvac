@@ -12,16 +12,16 @@ import { UnitLoad } from '../../domain/shared/UnitLoad'
 
 // 픽스처: 엑셀 지하1층 축약(시청각실 40C×3 → 8HP, 조합비 0.7725 근처 시나리오)
 const models = [
-  new IndoorModel({ code: '20C', model: 'RNW0201C2S', coolW: 2000, heatW: 2200, type: '4WAY 카세트', energySource: 'EHP' }),
-  new IndoorModel({ code: '40C', model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP' }),
+  new IndoorModel({ model: 'RNW0201C2S', coolW: 2000, heatW: 2200, type: '4WAY 카세트', energySource: 'EHP' }),
+  new IndoorModel({ model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP' }),
 ]
 const rooms = [
   Room.create({ id: 'R1', floor: '지하1층', name: '시청각실', areaM2: 20, usage: '시청각실', facility: 'OFFICE', shortSideM: 4, longSideM: 5 }),
   Room.create({ id: 'R2', floor: '지하1층', name: '준비실', areaM2: 5.4, usage: '준비실', facility: 'OFFICE', shortSideM: 2, longSideM: 2.7 }),
 ]
 const placements = {
-  R1: Placement.ai('R1', { modelCode: '40C', quantity: 3 }, POS(3)),
-  R2: Placement.ai('R2', { modelCode: '20C', quantity: 3 }, POS(3)).overrideSelection({ modelCode: '20C', quantity: 2 }, POS(2)),
+  R1: Placement.ai('R1', { modelCode: 'RNW0401C2S', quantity: 3 }, POS(3)),
+  R2: Placement.ai('R2', { modelCode: 'RNW0201C2S', quantity: 3 }, POS(3)).overrideSelection({ modelCode: 'RNW0201C2S', quantity: 2 }, POS(2)),
 }
 const table = buildSelectionTable({
   rooms,
@@ -44,7 +44,7 @@ const renderGrid = (over: Partial<typeof noop> = {}) =>
     <SelectionGrid
       table={table}
       groupOptions={[{ key: 'ODU1', label: '실외기-1' }]}
-      indoorModels={models}
+      indoorModels={models.map((m) => ({ code: m.model }))}
       {...noop}
       {...over}
     />,
@@ -88,7 +88,7 @@ describe('SelectionGrid', () => {
     const qty = screen.getByDisplayValue('3') // R1 대수
     fireEvent.change(qty, { target: { value: '4' } })
     fireEvent.blur(qty)
-    expect(onOverrideIndoor).toHaveBeenCalledWith('R1', '40C', 4)
+    expect(onOverrideIndoor).toHaveBeenCalledWith('R1', 'RNW0401C2S', 4)
   })
 
   it('대수에 0·소수 같은 잘못된 값을 넣으면 커밋하지 않는다', () => {
@@ -131,7 +131,7 @@ describe('SelectionGrid', () => {
       return buildSelectionTable({ rooms: [room], placements: {}, groups: [], indoorModels: models, outdoorSpecs: [] })
     }
     const renderOffice = (coolKcal: number | null) =>
-      render(<SelectionGrid table={officeTable(coolKcal)} groupOptions={[]} indoorModels={models} {...noop} />)
+      render(<SelectionGrid table={officeTable(coolKcal)} groupOptions={[]} indoorModels={models.map((m) => ({ code: m.model }))} {...noop} />)
 
     it('오버라이드 값이 적정 범위를 벗어나면 범위를 함께 알린다', () => {
       renderOffice(300)

@@ -20,7 +20,6 @@ export interface ProductRow {
   seriesCode: string // 등록·수정 폼의 시리즈 선택값과 대응
   seriesName: string
   modelCode: string
-  equipmentCode: string | null
   horsepower: number | null
   hpSource: HpSource | null // DERIVED = 냉방용량 환산 추정치(실측 아님)
   coolingW: number | null

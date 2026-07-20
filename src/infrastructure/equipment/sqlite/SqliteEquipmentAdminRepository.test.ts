@@ -54,7 +54,6 @@ describe('SqliteEquipmentAdminRepository (관리 조회 — 전 상태)', () => 
   it('큐레이션 게시본 실내기는 장비번호(equipmentCode)를 갖고, 스펙시트 모델은 갖지 않는다', async () => {
     const rows = (await makeAdmin()).listProducts()
     const idu = rows.find((r) => r.modelCode === 'RNW0401C2S')!
-    expect(idu).toMatchObject({ categoryCode: 'INDOOR', subcategoryName: '1WAY 카세트', equipmentCode: '40C' })
-    expect(rows.find((r) => r.modelCode === 'RPUW281X9P')!.equipmentCode).toBeNull()
+    expect(idu).toMatchObject({ categoryCode: 'INDOOR', subcategoryName: '1WAY 카세트'})
   })
 })

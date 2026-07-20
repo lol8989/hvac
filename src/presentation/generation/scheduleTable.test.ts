@@ -9,7 +9,7 @@ import type { SpecCell } from '../../domain/equipment/SpecImport'
 
 const cell = (value: string, unit: string | null = null): SpecCell => ({ value, unit })
 
-const IDU = new IndoorModel({ code: '20C', model: 'RNW0201C2S', coolW: 2000, heatW: 2200, type: '1WAY 카세트', energySource: 'EHP' })
+const IDU = new IndoorModel({ model: 'RNW0201C2S', coolW: 2000, heatW: 2200, type: '1WAY 카세트', energySource: 'EHP' })
 
 const IDU_SPEC: SpecData = {
   '전원 > Case 1': cell('220, 1상(2선), 60'),
@@ -38,7 +38,7 @@ const GHP_SPEC: SpecData = {
 }
 
 const input = (over: Partial<ScheduleInput> = {}): ScheduleInput => ({
-  indoorBom: [{ code: '20C', model: 'RNW0201C2S', quantity: 3 }],
+  indoorBom: [{ code: 'RNW0201C2S', model: 'RNW0201C2S', quantity: 3 }],
   outdoorBom: [{ hp: 12, model: 'RPUW12BX9M', quantity: 1 }],
   indoorModels: [IDU],
   outdoorSpecs: [ODU_EHP],
@@ -75,7 +75,7 @@ describe('buildScheduleSheets — 실내기 24컬럼', () => {
   it('hot 필드와 롱테일 스펙을 한 행에 채운다', () => {
     const r = rowOf(buildScheduleSheets(input()), '실내기')
     const at = (label: string) => r[colIndex(INDOOR_COLUMNS, label)]
-    expect(at('장비번호')).toBe('20C')
+    expect(at('장비번호')).toBe('RNW0201C2S')
     expect(at('분류')).toBe('1WAY 카세트')
     expect(at('모델명')).toBe('RNW0201C2S')
     expect(at('수량(대)')).toBe('3')

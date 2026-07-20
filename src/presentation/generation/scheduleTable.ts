@@ -211,7 +211,7 @@ export function buildScheduleSheets(input: ScheduleInput): ScheduleSheet[] {
 
   const indoorRows = input.indoorBom
     .map((b) => {
-      const m = input.indoorModels.find((x) => x.model === b.model || x.code === b.code)
+      const m = input.indoorModels.find((x) => x.model === b.model)
       return m ? indoorRow(b, m, input.specs.get(m.model)) : null
     })
     .filter((r): r is string[] => r !== null)

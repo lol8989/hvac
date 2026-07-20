@@ -187,7 +187,6 @@ async function main() {
         products.set(p.modelCode, {
           seriesCode: t.seriesCode,
           modelCode: p.modelCode,
-          equipmentCode: null,
           horsepower: hp,
           hpSource: src,
           coolingW: p.coolingW,
@@ -255,7 +254,6 @@ async function main() {
     products.set(modelCode, {
       seriesCode: keepSheetSeries ? existing.seriesCode : seriesCode,
       modelCode,
-      equipmentCode: fields.equipmentCode,
       horsepower: existing ? existing.horsepower : fields.horsepower,
       hpSource: existing ? existing.hpSource : fields.horsepower === null ? null : 'CURATED',
       coolingW: existing ? existing.coolingW : fields.coolingW,

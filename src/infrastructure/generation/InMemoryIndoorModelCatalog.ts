@@ -18,7 +18,7 @@ export class InMemoryIndoorModelCatalog implements IndoorModelCatalog {
         // 물 기반(FCU 등)은 냉매식 실외기 조합 후보가 아니다 → 생성 실내기 풀에서 뺀다(현업 확인 2026-07-16).
         .filter((m) => isRefrigerantCombinableIndoor(m.type))
         .map(
-          (m) => new IndoorModel({ code: m.code, model: m.model, coolW: m.coolW, heatW: m.heatW, type: m.type, series: m.series, energySource: m.energySource }),
+          (m) => new IndoorModel({ model: m.model, coolW: m.coolW, heatW: m.heatW, type: m.type, series: m.series, energySource: m.energySource }),
         ),
     )
   }
@@ -27,8 +27,9 @@ export class InMemoryIndoorModelCatalog implements IndoorModelCatalog {
     return this.models
   }
 
+  // 카탈로그 조회 키는 모델코드다(장비번호는 파생·충돌 가능).
   byCode(code: string): IndoorModel | null {
-    return this.models.find((m) => m.code === code) ?? null
+    return this.byModel(code)
   }
 
   byModel(model: string): IndoorModel | null {

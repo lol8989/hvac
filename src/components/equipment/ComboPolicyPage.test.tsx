@@ -10,7 +10,7 @@ import { compatMatrixFromSeed } from '../../infrastructure/equipment/seed/compat
 
 const mk = (over: Partial<ProductRow>): ProductRow => ({
   id: 0, categoryCode: 'OUTDOOR', categoryName: '실외기', subcategoryName: '냉난방 절환형', energySource: 'EHP',
-  seriesCode: 'S_EHP', seriesName: 'Multi V Super 5', modelCode: 'M', equipmentCode: null, horsepower: 10, hpSource: 'MODEL_CODE',
+  seriesCode: 'S_EHP', seriesName: 'Multi V Super 5', modelCode: 'M', horsepower: 10, hpSource: 'MODEL_CODE',
   coolingW: 20000, heatingW: 22000, maxConnections: 16, status: 'PUBLISHED',
   createdAt: null, updatedAt: null, publishedAt: null, ...over,
 })

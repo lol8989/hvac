@@ -35,24 +35,24 @@ describe('InMemoryIndoorModelCatalog', () => {
     // 현업 확인 2026-07-16: FCU는 물 기반이라 냉매식 실외기와 조합 불가 → 생성 실내기 풀에서 제외.
     it('FCU 실내기가 게시돼 있어도 생성 풀에서 뺀다', () => {
       const indoor = (over: Partial<IndoorSpecFields>): IndoorSpecFields => ({
-        code: 'X', model: 'X', coolW: 5200, heatW: 6000, type: '4WAY 카세트', series: 'S', energySource: 'EHP', ...over,
+        model: 'X', coolW: 5200, heatW: 6000, type: '4WAY 카세트', series: 'S', energySource: 'EHP', ...over,
       })
       const stubMaster: EquipmentMaster = {
         publishedIndoor: () => [
-          indoor({ code: '52T', model: 'RNW0521M2S', type: '4WAY 카세트' }),
-          indoor({ code: 'FCU08', model: 'WF1A008L2T4', type: 'FCU(팬코일 유닛)', series: 'FCU' }),
+          indoor({ model: 'RNW0521M2S', type: '4WAY 카세트' }),
+          indoor({ model: 'WF1A008L2T4', type: 'FCU(팬코일 유닛)', series: 'FCU' }),
         ],
         publishedOutdoor: (): readonly OutdoorSpecFields[] => [],
       }
       const list = new InMemoryIndoorModelCatalog(stubMaster).list()
-      expect(list.map((m) => m.code)).toEqual(['52T'])
+      expect(list.map((m) => m.model)).toEqual(['RNW0521M2S'])
       expect(list.some((m) => m.type.includes('FCU'))).toBe(false)
     })
   })
 
   describe('byCode', () => {
     it('40C를 조회하면 RNW0401C2S 냉방 4000W/난방 4500W를 반환한다', () => {
-      const m = catalog.byCode('40C')
+      const m = catalog.byCode('RNW0401C2S')
       expect(m).not.toBeNull()
       expect(m!.model).toBe('RNW0401C2S')
       expect(m!.coolW).toBe(4000)
@@ -60,7 +60,7 @@ describe('InMemoryIndoorModelCatalog', () => {
     })
 
     it('110T를 조회하면 RNW1101A2U 냉방 11000W/난방 12400W를 반환한다', () => {
-      const m = catalog.byCode('110T')
+      const m = catalog.byCode('RNW1101A2U')
       expect(m).not.toBeNull()
       expect(m!.model).toBe('RNW1101A2U')
       expect(m!.coolW).toBe(11000)
@@ -76,7 +76,7 @@ describe('InMemoryIndoorModelCatalog', () => {
     it('RNW0201C2S를 조회하면 20C 냉방 2000W/난방 2200W를 반환한다', () => {
       const m = catalog.byModel('RNW0201C2S')
       expect(m).not.toBeNull()
-      expect(m!.code).toBe('20C')
+      expect(m!.model).toBe('RNW0201C2S')
       expect(m!.coolW).toBe(2000)
       expect(m!.heatW).toBe(2200)
     })

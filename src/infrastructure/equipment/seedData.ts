@@ -43,9 +43,11 @@ const INDOOR_SEED: ReadonlyArray<[string, string, number, number, string]> = [
 const IN_SERIES = 'Multi V 실내기(큐레이션)'
 
 export const INDOOR_RECORDS: readonly IndoorMasterRecord[] = [
-  ...INDOOR_SEED.map(([code, model, coolW, heatW, type]): IndoorMasterRecord => ({ status: P, code, model, coolW, heatW, type, series: IN_SERIES, energySource: 'EHP' })),
+  // 튜플 첫 칸(옛 장비번호)은 더 이상 마스터가 들고 있지 않다 — 유형·냉방용량에서 파생한다
+  // (주인님 지시 2026-07-20). 원본 대조용으로 튜플에는 남겨 두고 레코드에는 싣지 않는다.
+  ...INDOOR_SEED.map(([, model, coolW, heatW, type]): IndoorMasterRecord => ({ status: P, model, coolW, heatW, type, series: IN_SERIES, energySource: 'EHP' })),
   // 게시 게이트 실증용: 아직 등록만 된 DRAFT 모델은 생성/검도에 노출되지 않아야 한다.
-  { status: PUBLISH_STATUS.DRAFT, code: 'DRAFT99', model: 'RNW9999DRAFT', coolW: 9000, heatW: 10000, type: CASSETTE, series: IN_SERIES, energySource: 'EHP' },
+  { status: PUBLISH_STATUS.DRAFT, model: 'RNW9999DRAFT', coolW: 9000, heatW: 10000, type: CASSETTE, series: IN_SERIES, energySource: 'EHP' },
 ]
 
 const D = '2026-04-20' // effectiveStartDate 공통(목업)

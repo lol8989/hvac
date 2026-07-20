@@ -54,7 +54,7 @@ const buildBaseRow = (
     const model = catalog.get(sel.modelCode)
     if (!model) throw new Error(`실내기 카탈로그에 없는 모델 코드입니다: ${sel.modelCode}`)
     indoor = {
-      code: model.code,
+      code: model.equipmentCode ?? model.model, // 장비번호(파생). 규칙 없는 유형은 모델코드로 폴백
       model: model.model,
       type: model.type,
       coolW: model.coolW,
@@ -91,7 +91,7 @@ const buildBaseRow = (
 // ── 빌더 본체 ────────────────────────────────────────────────
 
 export const buildSelectionTable = (input: SelectionTableInput): SelectionTable => {
-  const catalog = new Map(input.indoorModels.map((m) => [m.code, m] as const))
+  const catalog = new Map(input.indoorModels.map((m) => [m.model, m] as const))
   const specByModel = new Map(input.outdoorSpecs.map((s) => [s.model, s] as const))
   const groupByKey = new Map(input.groups.map((g) => [g.key, g] as const))
   const groupOf = new Map<string, SelectionGroupInput>()
@@ -197,14 +197,16 @@ export const buildSelectionTable = (input: SelectionTableInput): SelectionTable 
     })
   })
 
-  // 5) BOM 실내기: code별 quantity 합산(표 등장 순서)
+  // 5) BOM 실내기: **모델코드별** quantity 합산(표 등장 순서).
+  // 장비번호로 묶으면 안 된다 — 파생값이라 민수전용/조달전용처럼 다른 모델이 같은 번호를 갖고,
+  // 한 줄로 합쳐지면서 모델명 하나가 사라진다.
   const indoorAgg = new Map<string, { code: string; model: string; quantity: number }>()
   for (const row of tableOrder) {
     if (!row.indoor) continue
-    if (!indoorAgg.has(row.indoor.code)) {
-      indoorAgg.set(row.indoor.code, { code: row.indoor.code, model: row.indoor.model, quantity: 0 })
+    if (!indoorAgg.has(row.indoor.model)) {
+      indoorAgg.set(row.indoor.model, { code: row.indoor.code, model: row.indoor.model, quantity: 0 })
     }
-    indoorAgg.get(row.indoor.code)!.quantity += row.indoor.quantity
+    indoorAgg.get(row.indoor.model)!.quantity += row.indoor.quantity
   }
   const indoor = [...indoorAgg.values()].map((v) => Object.freeze(v))
   const outdoor = [...outdoorAgg.values()].map((v) => Object.freeze(v))

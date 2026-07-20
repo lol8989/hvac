@@ -53,7 +53,6 @@ CREATE TABLE products (
   id                       INTEGER PRIMARY KEY,
   series_id                INTEGER NOT NULL REFERENCES product_series(id),
   model_code               TEXT NOT NULL UNIQUE,      -- 모델명 (RNW0401C2S)
-  equipment_code           TEXT,                      -- 장비번호 단축코드 (실내기 '40C')
   name_display             TEXT,
   horsepower               REAL,                      -- 마력(HP). 1HP 미만 소용량은 소수(0.34)
   hp_source                TEXT                       -- MODEL_CODE / DERIVED(용량 환산 추정) / CURATED / MANUAL

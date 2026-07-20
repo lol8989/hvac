@@ -22,7 +22,7 @@ export const aiSelectionFor = (room: Room, models: readonly IndoorModel[]): Indo
     shape: room.shape,
     models,
   })
-  return Object.freeze({ modelCode: selected.model.code, quantity: selected.quantity })
+  return Object.freeze({ modelCode: selected.model.model, quantity: selected.quantity })
 }
 
 // AI 배치 (재)실행: 각 실의 형상·부하로 selectIndoorModel을 돌려 Placement의 AI값을 갱신.
@@ -52,7 +52,7 @@ export const applyAiPlacement = (
 
 // 카탈로그에서 modelCode로 모델 조회. 없으면 throw(정합 보호).
 const findModel = (models: readonly IndoorModel[], modelCode: string): IndoorModel => {
-  const found = models.find((m) => m.code === modelCode)
+  const found = models.find((m) => m.model === modelCode)
   if (found === undefined) {
     throw new Error(`카탈로그에 없는 모델 코드입니다: ${modelCode}`)
   }

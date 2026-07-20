@@ -7,7 +7,6 @@ import { EquipmentDomainError } from './errors'
 export interface ProductDraft {
   seriesCode: string // 4단 분류의 시리즈 코드 (예: 'S_IN_4WAY', 'S_OUT_GHP')
   modelCode: string // 모델명 (고유)
-  equipmentCode: string | null // 장비번호 단축코드 (실내기 '40C')
   horsepower: number | null // 마력(HP) — 실외기
   coolingW: number | null // 정격냉방능력(W)
   heatingW: number | null // 정격난방능력(W). null = 냉방전용
@@ -57,7 +56,6 @@ function assertHasCapacity(coolingW: number | null, heatingW: number | null): vo
 export function assertValidDraft(d: ProductDraft): void {
   assertText(d.seriesCode, '시리즈')
   assertText(d.modelCode, '모델명')
-  if (d.equipmentCode !== null) assertText(d.equipmentCode, '장비번호', 20)
   assertNonNegative(d.coolingW, '냉방 용량')
   assertNonNegative(d.heatingW, '난방 용량')
   assertPositive(d.horsepower, '마력')
@@ -68,7 +66,6 @@ export function assertValidDraft(d: ProductDraft): void {
 export function assertValidPatch(p: ProductPatch): void {
   if (p.seriesCode !== undefined) assertText(p.seriesCode, '시리즈')
   if (p.modelCode !== undefined) assertText(p.modelCode, '모델명')
-  if (p.equipmentCode !== undefined && p.equipmentCode !== null) assertText(p.equipmentCode, '장비번호', 20)
   if (p.coolingW !== undefined) assertNonNegative(p.coolingW, '냉방 용량')
   if (p.heatingW !== undefined) assertNonNegative(p.heatingW, '난방 용량')
   if (p.horsepower !== undefined) assertPositive(p.horsepower, '마력')

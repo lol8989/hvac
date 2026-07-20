@@ -30,7 +30,7 @@ const wToKw = (w: number): number => Math.round(w / 100) / 10
 function readPublishedIndoor(db: Database): IndoorSpecFields[] {
   const rows = queryRows(
     db,
-    `SELECT vp.equipment_code, vp.model_code, vp.cooling_capacity_w, vp.heating_capacity_w,
+    `SELECT vp.model_code, vp.cooling_capacity_w, vp.heating_capacity_w,
             vp.subcategory_name, vp.energy_source, s.name_ko AS series_name
      FROM v_published_products vp
      JOIN product_series s ON vp.series_id = s.id
@@ -38,7 +38,6 @@ function readPublishedIndoor(db: Database): IndoorSpecFields[] {
   )
   return rows.map((r) => ({
     // 장비번호는 큐레이션 게시본만 갖는다. 없으면 모델명으로 대체 표기한다(빈값 금지 — IndoorModel 불변식).
-    code: r.equipment_code == null ? String(r.model_code) : String(r.equipment_code),
     model: String(r.model_code),
     coolW: num(r.cooling_capacity_w),
     heatW: num(r.heating_capacity_w),

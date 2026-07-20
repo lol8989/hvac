@@ -9,7 +9,7 @@ import { selectIndoorModel } from './selectIndoorModel'
 import { IndoorModel } from './IndoorModel'
 
 const m = (code: string, coolW: number, type: string) =>
-  new IndoorModel({ code, model: `M-${code}`, coolW, heatW: Math.round(coolW * 1.12), type, energySource: 'EHP' })
+  new IndoorModel({ model: `M-${code}`, coolW, heatW: Math.round(coolW * 1.12), type, energySource: 'EHP' })
 
 // 0708 회의 예시와 같은 라인업: 4WAY는 52·60·72, 1WAY는 20.
 const CATALOG = [m('52C', 5200, '4WAY 카세트'), m('60C', 6000, '4WAY 카세트'), m('72C', 7200, '4WAY 카세트'), m('20W', 2000, '1WAY 카세트')]
@@ -22,7 +22,7 @@ describe('selectIndoorModel — 동일 용량 배치', () => {
     const r = selectIndoorModel({ requiredCoolW: 19000, areaM2: 20, shape, models: CATALOG })
     expect(r.quantity * r.model.coolW).toBeGreaterThanOrEqual(19000)
     // 같은 모델 하나로 표현된다
-    expect(r.model.code).toBeDefined()
+    expect(r.model.model).toBeDefined()
   })
 
   // 0708 회의 예시 그대로: 190kW 필요 · 장비 52/60/72 → 52×4(=208)
@@ -57,7 +57,7 @@ describe('selectIndoorModel — 타입 결정과 맞물린다', () => {
   it('단위세대는 1WAY 모델을 고른다', () => {
     const r = selectIndoorModel({ requiredCoolW: 1800, areaM2: 12, shape: { ...shape, residential: true }, models: CATALOG })
     expect(r.type).toBe('1WAY')
-    expect(r.model.code).toBe('20W')
+    expect(r.model.model).toBe('M-20W')
   })
 
   it('그 타입 모델이 카탈로그에 없으면 throw 한다 (조용히 다른 타입을 쓰지 않는다)', () => {
@@ -93,14 +93,14 @@ describe('selectIndoorModel — 근소 부족 허용(3%)', () => {
 
   it('부족이 3% 이내면 그 조합을 인정한다 (엑셀 실측: 3255.8W → 32C×1)', () => {
     const r = selectIndoorModel({ requiredCoolW: 3255.8, areaM2: 20, shape, models: only })
-    expect(r.model.code).toBe('32C')
+    expect(r.model.model).toBe('M-32C')
     expect(r.quantity).toBe(1)
   })
 
   it('부족이 3%를 넘으면 대수를 올린다', () => {
     // 3400W: 32C×1 = 3200 → 5.9% 부족(불가) · 40C×1 = 4000 충족
     const r = selectIndoorModel({ requiredCoolW: 3400, areaM2: 20, shape, models: only })
-    expect(r.model.code).toBe('40C')
+    expect(r.model.model).toBe('M-40C')
     expect(r.quantity).toBe(1)
   })
 
@@ -115,7 +115,7 @@ describe('selectIndoorModel — 근소 부족 허용(3%)', () => {
   it('허용 한계 정확히 3% 부족은 인정한다 (경계값)', () => {
     // 필요 3298.97W → 32C×1 = 3200 → 정확히 3.0% 부족
     const r = selectIndoorModel({ requiredCoolW: 3200 / 0.97, areaM2: 20, shape, models: only })
-    expect(r.model.code).toBe('32C')
+    expect(r.model.model).toBe('M-32C')
     expect(r.quantity).toBe(1)
   })
 })

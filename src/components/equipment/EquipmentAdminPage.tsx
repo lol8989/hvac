@@ -76,7 +76,7 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
         (cat === 'ALL' || r.categoryCode === cat) &&
         (status === 'ALL' || r.status === status) &&
         (seriesCode === 'ALL' || r.seriesCode === seriesCode) &&
-        (!needle || r.modelCode.toLowerCase().includes(needle) || (r.equipmentCode ?? '').toLowerCase().includes(needle)),
+        (!needle || r.modelCode.toLowerCase().includes(needle)),
     )
   }, [all, cat, status, seriesCode, q])
 
@@ -233,7 +233,6 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
                   <td>{r.subcategoryName}{r.energySource ? ` · ${r.energySource}` : ''}</td>
                   <td>{r.seriesName}</td>
                   <td className="mono">{r.modelCode}</td>
-                  <td className="mono">{r.equipmentCode ?? '—'}</td>
                   <td className="num">
                     {hp(r.horsepower)}
                     {r.hpSource === 'DERIVED' && (

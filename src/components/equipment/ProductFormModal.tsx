@@ -21,7 +21,6 @@ export interface ProductFormModalProps {
 export default function ProductFormModal({ mode, series, initial, onSave, onClose }: ProductFormModalProps) {
   const [seriesCode, setSeriesCode] = useState(initial?.seriesCode ?? series[0]?.code ?? '')
   const [modelCode, setModelCode] = useState(initial?.modelCode ?? '')
-  const [equipmentCode, setEquipmentCode] = useState(initial?.equipmentCode ?? '')
   const [horsepower, setHorsepower] = useState(toStr(initial?.horsepower ?? null))
   const [coolingW, setCoolingW] = useState(toStr(initial?.coolingW ?? null))
   const [heatingW, setHeatingW] = useState(toStr(initial?.heatingW ?? null))
@@ -39,7 +38,6 @@ export default function ProductFormModal({ mode, series, initial, onSave, onClos
         onSave({
           seriesCode,
           modelCode,
-          equipmentCode: equipmentCode.trim() === '' ? null : equipmentCode,
           // 실내기로 시리즈를 바꾼 뒤 저장하면 숨겨진 실외기 필드는 버린다(유령 값 방지).
           horsepower: isOutdoor ? toNum(horsepower) : null,
           coolingW: toNum(coolingW),
@@ -80,7 +78,6 @@ export default function ProductFormModal({ mode, series, initial, onSave, onClos
 
           <label className="eq-f">
             <span>장비번호</span>
-            <input className="field" value={equipmentCode} onChange={(e) => setEquipmentCode(e.target.value)} placeholder="40C" aria-label="장비번호" />
           </label>
 
           <label className="eq-f">

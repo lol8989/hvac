@@ -22,7 +22,7 @@ import { queryRows, numOrNull, strOrNull } from './query'
 const LIST_SQL = `
   SELECT p.id, c.code AS category_code, c.name_ko AS category_name,
          sc.name_ko AS subcategory_name, s.energy_source,
-         s.code AS series_code, s.name_ko AS series_name, p.model_code, p.equipment_code,
+         s.code AS series_code, s.name_ko AS series_name, p.model_code,
          p.horsepower, p.hp_source, p.cooling_capacity_w, p.heating_capacity_w, p.max_connections, p.status,
          p.created_at, p.updated_at, p.published_at
   FROM products p
@@ -77,7 +77,6 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
       seriesCode: String(r.series_code),
       seriesName: String(r.series_name),
       modelCode: String(r.model_code),
-      equipmentCode: strOrNull(r.equipment_code),
       horsepower: numOrNull(r.horsepower),
       hpSource: isHpSource(r.hp_source) ? r.hp_source : null,
       coolingW: numOrNull(r.cooling_capacity_w),
@@ -113,13 +112,12 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
     return this.inTransaction(() => {
       this.db.run(
         `INSERT INTO products
-           (series_id, model_code, equipment_code, horsepower, cooling_capacity_w, heating_capacity_w,
+           (series_id, model_code, horsepower, cooling_capacity_w, heating_capacity_w,
             max_connections, status, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+         VALUES (?,?,?,?,?,?,?,?,?)`,
         [
           seriesId,
           draft.modelCode.trim(),
-          draft.equipmentCode?.trim() ?? null,
           draft.horsepower,
           draft.coolingW,
           draft.heatingW,
@@ -150,7 +148,6 @@ export class SqliteEquipmentAdminRepository implements EquipmentAdminRepository 
 
     if (patch.seriesCode !== undefined) put('series_id', this.seriesIdOf(patch.seriesCode))
     if (patch.modelCode !== undefined) put('model_code', patch.modelCode.trim())
-    if (patch.equipmentCode !== undefined) put('equipment_code', patch.equipmentCode?.trim() ?? null)
     if (patch.horsepower !== undefined) put('horsepower', patch.horsepower)
     if (patch.coolingW !== undefined) put('cooling_capacity_w', patch.coolingW)
     if (patch.heatingW !== undefined) put('heating_capacity_w', patch.heatingW)

@@ -14,16 +14,16 @@ import { IndoorModel } from '../../domain/generation/IndoorModel'
 
 const table = buildSelectionTable({
   rooms: [Room.create({ id: 'R1', floor: '지하1층', name: '시청각실', areaM2: 20, usage: '시청각실', facility: 'OFFICE', shortSideM: 4, longSideM: 5 })],
-  placements: { R1: Placement.ai('R1', { modelCode: '40C', quantity: 3 }, POS(3)) },
+  placements: { R1: Placement.ai('R1', { modelCode: 'RNW0401C2S', quantity: 3 }, POS(3)) },
   groups: [{ key: 'ODU1', label: '실외기-1', model: 'RPUW082X9E', items: ['R1'] }],
-  indoorModels: [new IndoorModel({ code: '40C', model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP' })],
+  indoorModels: [new IndoorModel({ model: 'RNW0401C2S', coolW: 4000, heatW: 4500, type: '4WAY 카세트', energySource: 'EHP' })],
   outdoorSpecs: [{ model: 'RPUW082X9E', coolKw: 23.3, heatKw: 25.9, hp: 8 }],
 })
 const snapshot = {
   type: 'table' as const,
   table,
   groupOptions: [{ key: 'ODU1', label: '실외기-1' }],
-  indoorModelOptions: [{ code: '40C' }, { code: '20C' }],
+  indoorModelOptions: [{ code: 'RNW0401C2S' }, { code: 'RNW0201C2S' }],
 }
 
 beforeEach(() => {

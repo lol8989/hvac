@@ -1,7 +1,7 @@
 import type { SelectionRow } from '../../domain/generation/SelectionTable'
 import { FALLBACK_KCAL } from '../../domain/shared/unitLoadTable'
 
-// 모델 셀렉트 옵션 — 장비번호 코드만 필요(새 창 동기화 시 직렬화 가능하도록 클래스 비의존).
+// 모델 셀렉트 옵션 — 모델코드(식별자)만 필요(새 창 동기화 시 직렬화 가능하도록 클래스 비의존).
 export interface IndoorModelOption { code: string }
 
 // 편집 셀: 비제어 input + blur/Enter 커밋. 외부 값이 바뀌면 key로 리마운트되어 초기화된다.
@@ -103,23 +103,27 @@ export default function SelectionRowView({
       </td>
       <td>{w(requiredW.cool)}</td>
       <td>{w(requiredW.heat)}</td>
-      <td className="c">
+      {/* 장비번호는 **표시값**이다 — 유형·냉방용량에서 파생하며 서로 다른 모델이 같은 번호를 가질 수 있다.
+          그래서 선택 위젯을 여기 두지 않는다. 모델 교체는 옆의 '실내기 모델명'(식별자) 칸에서 한다. */}
+      <td className="c mono">{indoor?.code ?? ''}</td>
+      <td className="t">
         <select
-          className="cell"
-          value={indoor?.code ?? ''}
+          className="cell t"
+          value={indoor?.model ?? ''}
           onChange={(e) => { if (e.target.value) onOverrideIndoor(row.roomId, e.target.value, indoor?.quantity ?? 1) }}
         >
           <option value="" disabled>미지정</option>
           {indoorModels.map((m) => <option key={m.code} value={m.code}>{m.code}</option>)}
         </select>
       </td>
-      <td className="t">{indoor?.model ?? ''}</td>
       <td>{indoor ? w(indoor.coolW) : ''}</td>
       <td>{indoor ? w(indoor.heatW) : ''}</td>
       <td className="c">
         {indoor ? (
           <>
-            <EditCell value={String(indoor.quantity)} onCommit={(v) => { const q = qty(v); if (q !== null) onOverrideIndoor(row.roomId, indoor.code, q) }} />
+            {/* 대수만 바꾼다 → 모델은 그대로. 여기 넘기는 건 **모델코드**다.
+                indoor.code는 표시용 장비번호(파생·충돌 가능)라 카탈로그 조회 키가 아니다. */}
+            <EditCell value={String(indoor.quantity)} onCommit={(v) => { const q = qty(v); if (q !== null) onOverrideIndoor(row.roomId, indoor.model, q) }} />
             {indoor.overridden && (
               <><span className="badge manual">수정</span><button className="reset" title="AI 추천으로 초기화" onClick={() => onResetIndoor(row.roomId)}>↺</button></>
             )}

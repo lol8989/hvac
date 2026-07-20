@@ -18,15 +18,15 @@ describe('InMemoryEquipmentMaster (게시 SSOT + 게이트)', () => {
       expect(pub.every((m) => m.energySource === 'EHP')).toBe(true)
     })
 
-    it('40C는 RNW0401C2S 냉방 4000W/난방 4500W이다', () => {
-      const m = pub.find((x) => x.code === '40C')!
-      expect(m.model).toBe('RNW0401C2S')
+    // 장비번호(40C)는 마스터가 들고 있지 않다 — 모델코드로 찾는다(2026-07-20).
+    it('RNW0401C2S는 냉방 4000W/난방 4500W이다', () => {
+      const m = pub.find((x) => x.model === 'RNW0401C2S')!
       expect(m.coolW).toBe(4000)
       expect(m.heatW).toBe(4500)
     })
 
     it('[게이트] 비게시(DRAFT) 실내기는 published에 포함되지 않는다', () => {
-      expect(pub.some((m) => m.code === 'DRAFT99')).toBe(false)
+      expect(pub.some((m) => m.model === 'DRAFT99')).toBe(false)
     })
   })
 
