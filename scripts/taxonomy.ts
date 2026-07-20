@@ -34,6 +34,9 @@ const INDOOR_TYPES: ReadonlyArray<[RegExp, string, string]> = [
   [/벽걸이/, 'IN_WALL', '벽걸이형'],
   [/바닥\s*상치/, 'IN_FLOOR', '바닥상치형'],
   [/상업용\s*천장/, 'IN_CEIL_COMM', '상업용 천장형'],
+  // 시트명이 '실내기-천장형'인 것들. 이게 없으면 '기타 실내기'로 뭉친다
+  // (현업 조합표 라벨도 '천장형'이다 — 2026-07-20).
+  [/천장형/, 'IN_CEIL', '천장형'],
   [/스탠드/, 'IN_STAND', '스탠드형'],
 ]
 
@@ -230,10 +233,36 @@ export function classifySheet(fileName: string, sheetName: string): Taxon | null
   if (/(^|_)(SMART_)?MVS_/.test(f)) {
     const smart = f.includes('SMART_')
     const scope = f.includes('상업') ? '상업' : '주거'
-    const co = f.includes('냉방전용')
-    const series = `${smart ? 'Smart ' : ''}Multi V S(${scope}${co ? '_냉방전용' : ''})`
-    if (/실내기|IDU/i.test(s) || /실내기/.test(f)) return indoor(s, 'EHP', series)
-    return outdoor(co ? 'OUT_CO' : 'OUT_HR', co ? '냉방전용' : '냉난방 절환형', 'EHP', series, true)
+    const series = `${smart ? 'Smart ' : ''}Multi V S(${scope}${f.includes('냉방전용') ? '_냉방전용' : ''})`
+
+    // 'Multi V S(주거)'는 파일명에 '냉방전용'이 없지만 실제로는 냉방전용이다.
+    // 근거 3가지가 일치한다(2026-07-20):
+    //   ① 현업 회신 조합표 탭 라벨 주석 "->주거가 아니라 냉방전용인듯합니다"
+    //      (근거자료 탭은 우리가 만든 자료라 조합표 탭이 정본 — 주인님 확인)
+    //   ② 모델코드 RPU'Q' — 절환형은 RPU'W'(Multi V S·S(R32)·Super 5·TA…), 냉방전용은 RPU'Q'
+    //   ③ 스펙시트 난방용량이 14모델 전부 없음(0/14). 다른 절환형 시리즈는 100% 난방용량이 있다
+    //      (Multi V S 9/9 · S(상업) 1/1 · S(R32) 6/6 · i·Super 5 계열 전부). 냉방전용 3시리즈는 전부 0
+    // → 난방이 필요한 실에는 배정되지 않아야 한다(selectOutdoorUnits의 heatKw=null 배제).
+    const coolingOnly = f.includes('냉방전용') || series === 'Multi V S(주거)'
+
+    if (/실내기|IDU/i.test(s) || /실내기/.test(f)) {
+      // 현업 회신 조합표 탭: '1WAY 카세트(듀얼베인) | Multi V S(주거) (4way->1way수정)'
+      // — 우리가 4WAY로 분류한 것을 현업이 1WAY로 명시 정정했다. 이 정정은 Multi V S(주거)에만 있다
+      //   (민수전용·조달전용·SINGLE의 듀얼베인은 조합표에서도 4WAY 그대로다).
+      if (series === 'Multi V S(주거)' && /듀얼베인/.test(s)) {
+        return {
+          categoryCode: 'INDOOR',
+          subcategoryCode: 'IN_1WAY_DV',
+          subcategoryName: '1WAY 카세트(듀얼베인)',
+          energySource: 'EHP',
+          seriesCode: seriesCode(series, 'IN_1WAY_DV'),
+          seriesName: series,
+          isVrf: false,
+        }
+      }
+      return indoor(s, 'EHP', series)
+    }
+    return outdoor(coolingOnly ? 'OUT_CO' : 'OUT_HR', coolingOnly ? '냉방전용' : '냉난방 절환형', 'EHP', series, true)
   }
 
   // ALL in 1 = 가정용 멀티(실외기 1 ↔ 실내기 N). 모델명 숫자가 마력이 아니라 용량이므로 VRF 아님.
