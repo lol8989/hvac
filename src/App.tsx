@@ -14,6 +14,8 @@ import MappingDock from './components/generation/MappingDock'
 import type { DockRoomInfo } from './components/generation/MappingDock'
 import ConfirmModal from './components/ConfirmModal'
 import ProjectSettings from './components/steps/ProjectSettings'
+import CeilingHeightsPanel from './components/steps/CeilingHeights'
+import { applyCeilingHeights } from './domain/generation/ceilingHeight'
 import GuardModal from './components/generation/GuardModal'
 import WorkBar from './components/generation/WorkBar'
 import StatusBar from './components/generation/StatusBar'
@@ -125,11 +127,11 @@ export default function App({
   //  · facility : 시설군(단위부하의 전제)
   // 초기 화면부터 실이 검출돼 있다 — 검출 스텝을 없앴으므로 로드 시점에 실·형상을 시딩한다.
   const undoable = useUndoable<World>(
-    () => ({ plan: repo.load(), ...seedDetectedRooms(DEFAULT_FACILITY), placements: {}, outdoorPositions: {}, facility: DEFAULT_FACILITY }),
+    () => ({ plan: repo.load(), ...seedDetectedRooms(DEFAULT_FACILITY), placements: {}, outdoorPositions: {}, facility: DEFAULT_FACILITY, ceilingHeights: {} }),
     '',
   )
   const world = undoable.present
-  const { plan, rooms: domainRooms, geom: roomGeom, placements, outdoorPositions, facility } = world
+  const { plan, rooms: domainRooms, geom: roomGeom, placements, outdoorPositions, facility, ceilingHeights } = world
   // 사용자의 편집 1회 = 커밋 1회(= Ctrl+Z 1회). 파생 동기화는 replace를 쓴다(히스토리를 더럽히지 않는다).
   const edit = undoable.commit
 
@@ -1085,9 +1087,33 @@ export default function App({
   // 배치가 있으면 무엇을 잃는지 확인을 받는다. (실내기 배치 단계에 그대로 머문다)
   const changeFacility = (f: FacilityType) =>
     runGuarded(guardDestructive('FACILITY_CHANGE', guardContext()), () => {
-      edit((w) => ({ ...w, facility: f, ...seedDetectedRooms(f), placements: {}, outdoorPositions: {} }), '시설군 변경')
+      // 재시딩은 부하강도를 STANDARD로 되돌린다 → 이미 입력된 천정고를 다시 얹어야
+      // "4m 층인데 표준부하"라는 어긋난 상태가 안 남는다.
+      edit((w) => ({
+        ...w,
+        facility: f,
+        ...(({ rooms, geom }) => ({ rooms: applyCeilingHeights(rooms, w.ceilingHeights), geom }))(seedDetectedRooms(f)),
+        placements: {},
+        outdoorPositions: {},
+      }), '시설군 변경')
       setSelRooms([])
     }, '시설군 변경')
+
+  // 천정고는 실이 아니라 층 단위로 받는다. 층 목록은 뷰어의 층 전환과 같은 출처를 쓴다
+  // (따로 세면 두 목록이 어긋난다).
+  const floorNames = useMemo(() => floors.map((f) => f.floor), [floors])
+
+  // 천정고 변경: 4m 이상이면 특수부하 → 그 층 실들의 단위부하가 올라간다.
+  // 시설군 변경과 달리 실을 재시딩하지 않는다(형상·실명·사용자 수정은 그대로) —
+  // 바뀌는 것은 부하강도뿐이고, 실내기 선정 변동은 그 부하를 타고 따라온다.
+  const changeCeilingHeight = (floor: string, heightM: number) =>
+    runGuarded(guardDestructive('CEILING_HEIGHT_CHANGE', guardContext()), () => {
+      edit((w) => {
+        const ceilingHeights = { ...w.ceilingHeights, [floor]: heightM }
+        return { ...w, ceilingHeights, rooms: applyCeilingHeights(w.rooms, ceilingHeights) }
+      }, '천정고 변경')
+      flash(`${floor} 천정고를 ${heightM}m로 바꿨습니다. 실내기를 다시 배치하면 새 부하가 반영됩니다.`)
+    }, '천정고 변경')
 
   // ── 되돌리기 / 다시하기 ──
   // 편집(World)만 되돌린다. 선택·단계 같은 '보기' 상태는 히스토리에 없다.
@@ -1169,6 +1195,10 @@ export default function App({
             {/* 시설군은 단위부하의 전제다. 배치 후 바꾸면 부하가 통째로 다시 계산된다 → 확인을 받는다.
                 실 검출을 스텝에서 뺐으므로 시설군 선택은 첫 스텝(실내기 배치)에 둔다. */}
             {step === 'place' && <ProjectSettings facility={facility} onChange={changeFacility} />}
+            {/* 천정고도 단위부하의 전제다(4m 이상=특수부하). 시설군과 같은 자리·같은 단계에 둔다. */}
+            {step === 'place' && (
+              <CeilingHeightsPanel floors={floorNames} heights={ceilingHeights} onChange={changeCeilingHeight} />
+            )}
             {step === 'place' && <button className="btn sm primary" onClick={doPlace}>{placed ? '재배치' : '✦ AI 실내기 배치'}</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => runOutdoorSelection()}>✦ 실외기 재선정</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => setMapOpen(true)}>실외기 조합 매핑</button>}

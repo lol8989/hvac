@@ -262,6 +262,21 @@ button{font-family:inherit;cursor:pointer;}
 .proj-set .field{padding:4px 8px;font-size:13px;}
 .proj-set .field:disabled{background:#F2F2F2;color:#999;cursor:not-allowed;}
 
+/* 층별 천정고 — 층 수만큼 늘어나므로 팝오버로 접어 둔다(작업바를 밀지 않게) */
+.ceil-set{position:relative;display:inline-flex;}
+.ceil-set__toggle{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;font-size:13px;color:#666;background:#fff;border:1px solid var(--line);border-radius:4px;cursor:pointer;}
+.ceil-set__toggle[aria-expanded="true"]{border-color:#888;}
+.ceil-set__badge{font-size:12px;color:#333;font-variant-numeric:tabular-nums;}
+.ceil-set__pop{position:absolute;top:calc(100% + 6px);left:0;z-index:30;min-width:264px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.14);}
+.ceil-set__hint{margin:0 0 8px;font-size:12px;line-height:1.5;color:#666;}
+.ceil-set__row{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;flex-wrap:wrap;}
+.ceil-set__floor{flex:1;min-width:64px;color:#333;}
+.ceil-set__row .field{width:72px;padding:4px 6px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;}
+.ceil-set__row .field[aria-invalid="true"]{border-color:#C0392B;}
+.ceil-set__unit{color:#666;font-size:12px;}
+.ceil-set__tag{padding:1px 6px;font-size:11px;color:#7A4A00;background:#FDF3E2;border:1px solid #E8C98A;border-radius:3px;}
+.ceil-set__err{flex-basis:100%;font-size:11px;color:#C0392B;}
+
 /* 장비일람표 새 창 — 계열별 탭 + 넓은 표 */
 .sch-tabs{display:flex;gap:6px;margin-left:14px;}
 .sch-count{opacity:.7;font-size:12px;margin-left:4px;}

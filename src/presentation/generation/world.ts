@@ -10,6 +10,7 @@ import type { Room as DomainRoom } from '../../domain/generation/Room'
 import type { Placement } from '../../domain/generation/Placement'
 import type { Polygon } from '../../domain/shared/Polygon'
 import type { FacilityType } from '../../domain/shared/unitLoadTable'
+import type { CeilingHeights } from '../../domain/generation/ceilingHeight'
 
 export interface World {
   plan: AssignmentPlan // 실외기 조합·배정
@@ -18,4 +19,5 @@ export interface World {
   placements: Record<string, Placement> // 실내기 배치(모델·대수·좌표)
   outdoorPositions: Record<string, { x: number; y: number }> // 실외기 심볼 좌표
   facility: FacilityType // 시설군(단위부하의 전제)
+  ceilingHeights: CeilingHeights // 층 → 천정고(m). 없는 층은 기본 3.0m — 부하강도의 전제
 }

@@ -31,6 +31,7 @@ export type GuardCode =
   | 'FACILITY_CHANGE'
   | 'ROOM_SLICE'
   | 'ROOM_MERGE'
+  | 'CEILING_HEIGHT_CHANGE'
 
 export type GuardVerdict =
   | { kind: 'ALLOW' }
@@ -177,7 +178,7 @@ export const guardRegress = (from: StepId, to: StepId, c: GuardContext): GuardVe
   )
 }
 
-export type DestructiveAction = 'FACILITY_CHANGE' | 'ROOM_SLICE' | 'ROOM_MERGE'
+export type DestructiveAction = 'FACILITY_CHANGE' | 'ROOM_SLICE' | 'ROOM_MERGE' | 'CEILING_HEIGHT_CHANGE'
 
 // 되돌리기 어려운 액션: 실행 전에 무엇을 잃는지 알린다.
 export const guardDestructive = (action: DestructiveAction, c: GuardContext): GuardVerdict => {
@@ -203,6 +204,18 @@ export const guardDestructive = (action: DestructiveAction, c: GuardContext): Gu
             '실을 자릅니다',
             '실 1곳이 2곳이 되어 실내기 대수가 심볼 위치대로 다시 나뉩니다.',
             '잘린 실은 실외기 배정이 풀려 미배정으로 돌아갑니다(조합을 다시 확인해야 합니다).',
+          )
+
+    // 천정고를 바꾸면 부하강도(4m 이상=특수부하)가 달라져 그 층 전체의 부하가 다시 잡힌다.
+    // 시설군 변경과 달리 실을 재시딩하지는 않지만(형상·실명은 그대로), 실내기 선정은 다시 돈다.
+    case 'CEILING_HEIGHT_CHANGE':
+      return c.placedRoomCount === 0
+        ? ALLOW // 배치 전이면 잃을 것이 없다
+        : confirm(
+            'CEILING_HEIGHT_CHANGE',
+            '천정고를 바꿉니다',
+            '천정고 4m 이상은 특수부하로 잡혀 그 층 실들의 부하가 다시 계산됩니다.',
+            '부하가 달라지면 실내기 타입·대수가 바뀔 수 있습니다(예: 4kW를 넘으면 1WAY 자리에 4WAY). 실외기 조합도 다시 확인해야 합니다.',
           )
 
     case 'FACILITY_CHANGE':
