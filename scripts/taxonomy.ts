@@ -79,6 +79,39 @@ const indoor = (sheet: string, sys: string, series: string): Taxon => {
 }
 
 // 파일명 + 시트명 → 분류. 분류 불가면 null(시드에서 제외하고 로그로 남긴다).
+// 시스템 에어컨 단품(SINGLE / Universal) 실내기의 유형은 **모델코드 앞글자**가 정한다.
+//
+// 현업 회신(2026-07-16 질문 5): "T= 카세트 / P= 스탠드 / V=상업용 천장형(카세트와 형상이 다릅니다.) / B=덕트형"
+// 우리가 질문에 'B=벽걸이형으로 이해했다'고 적었고 현업이 **덕트형으로 정정**했다.
+//
+// 단품 시트는 시트명이 유형을 안 담는 게 많아(IDU·PAC·실내기·spec_IDU…) 전부 '기타 실내기'로
+// 뭉쳐 있었다(134모델). 앞글자로 가르면 현업 실내기 시리즈 근거자료의 분포와 정확히 맞는다:
+//   T 72(천장형 카세트) · P 56(스탠드) · V 4(상업용 천장형) · B 2(덕트형)
+//   ※ 시트명이 유형을 담는 경우(듀얼베인CST 16 · CST 2-way 2)는 그쪽이 더 구체적이라 우선한다.
+export const SINGLE_INDOOR_BY_PREFIX: Readonly<Record<string, { code: string; name: string }>> = {
+  T: { code: 'IN_CEIL_CST', name: '천장형 카세트' },
+  P: { code: 'IN_STAND', name: '스탠드형' },
+  V: { code: 'IN_CEIL_COMM', name: '상업용 천장형' },
+  B: { code: 'IN_DUCT', name: '덕트형' },
+}
+
+// 단품 실내기 1건의 중분류. 시트명이 유형을 안 담아 '기타 실내기'로 떨어진 건만 앞글자로 가른다.
+// 앞글자가 T/P/V/B가 아니면 근거가 없으므로 기타 실내기로 둔다(지어내지 않는다).
+export function singleIndoorTaxon(base: Taxon, modelCode: string): Taxon {
+  if (base.categoryCode !== 'INDOOR' || base.seriesName !== 'SINGLE / Universal') return base
+  if (base.subcategoryCode !== 'IN_ETC') return base // 시트명이 더 구체적이다
+
+  const hit = SINGLE_INDOOR_BY_PREFIX[modelCode.charAt(0).toUpperCase()]
+  if (!hit) return base
+
+  return {
+    ...base,
+    subcategoryCode: hit.code,
+    subcategoryName: hit.name,
+    seriesCode: seriesCode(base.seriesName, hit.code),
+  }
+}
+
 export function classifySheet(fileName: string, sheetName: string): Taxon | null {
   const f = fileName
   const s = sheetName

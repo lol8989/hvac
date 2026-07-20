@@ -21,7 +21,7 @@ import { horsepowerFromCapacityW } from '../src/domain/shared/Horsepower'
 import { PUBLISH_STATUS } from '../src/domain/equipment/PublishStatus'
 import { INDOOR_RECORDS, OUTDOOR_RECORDS } from '../src/infrastructure/equipment/seedData'
 import type { SeedData, SeedProduct, SeedSeries, SeedSubcategory, SeedPrice, SeedCombination } from '../src/infrastructure/equipment/seed/seedTypes'
-import { CATEGORIES, classifySheet } from './taxonomy'
+import { CATEGORIES, classifySheet, singleIndoorTaxon } from './taxonomy'
 
 const SPEC_DIR = resolve('../03_참고자료/LG전자 스펙시트 모음')
 // 구형 .xls 10개는 Excel로 xlsx 변환(scripts/convertXls.ps1), zip 2개는 풀어서 하위 폴더에 둔다.
@@ -158,9 +158,30 @@ async function main() {
 
       for (const p of sheet.products) {
         if (products.has(p.modelCode)) continue // 같은 모델이 여러 시트/파일에 있으면 첫 건 유지
+
+        // 단품(SINGLE) 실내기는 시트가 아니라 모델코드 앞글자가 유형을 정한다(현업 회신 질문 5).
+        // 같은 시트 안에서도 모델마다 유형이 갈리므로 시리즈를 모델 단위로 정한다.
+        const t = singleIndoorTaxon(taxon, p.modelCode)
+        if (t.subcategoryCode !== taxon.subcategoryCode) {
+          if (!subcategories.has(t.subcategoryCode)) {
+            subcategories.set(t.subcategoryCode, { code: t.subcategoryCode, categoryCode: t.categoryCode, nameKo: t.subcategoryName })
+          }
+          if (!series.has(t.seriesCode)) {
+            const mfl = /MFL(\d+)/.exec(file)
+            series.set(t.seriesCode, {
+              code: t.seriesCode,
+              subcategoryCode: t.subcategoryCode,
+              nameKo: t.seriesName,
+              mflCode: mfl ? `MFL${mfl[1]}` : null,
+              isVrf: t.isVrf,
+              energySource: t.energySource,
+            })
+          }
+        }
+
         const { hp, src } = resolveHp(taxon.categoryCode, taxon.isVrf, p.modelCode, p.coolingW)
         products.set(p.modelCode, {
-          seriesCode: taxon.seriesCode,
+          seriesCode: t.seriesCode,
           modelCode: p.modelCode,
           equipmentCode: null,
           horsepower: hp,
