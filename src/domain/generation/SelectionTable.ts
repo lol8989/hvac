@@ -71,6 +71,7 @@ const buildBaseRow = (
     roomId: room.id,
     floor: room.floor,
     roomName: room.name,
+    usageMatch: room.usageResolution.matched,
     areaM2: room.areaM2,
     unitLoad: {
       coolKcal: u.coolKcal,

@@ -1,4 +1,5 @@
 import type { SelectionRow } from '../../domain/generation/SelectionTable'
+import { FALLBACK_KCAL } from '../../domain/shared/unitLoadTable'
 
 // 모델 셀렉트 옵션 — 장비번호 코드만 필요(새 창 동기화 시 직렬화 가능하도록 클래스 비의존).
 export interface IndoorModelOption { code: string }
@@ -56,7 +57,29 @@ export default function SelectionRowView({
     <tr className={rowClass}>
       {floorSpan !== null && <td className="floorcell" rowSpan={floorSpan}>{row.floor}</td>}
       <td className="t">
+        {/* 입력이 width:100%라 배지를 그냥 두면 셀 밖(면적 열)으로 밀린다 — 한 줄 flex로 나눠 준다. */}
+        <span className="namecell">
         <EditCell text value={row.roomName} onCommit={(v) => onRenameRoom(row.roomId, v)} />
+        {/* 단위부하가 표에 근거 없이 기본값 150으로 떨어진 실만 표시한다. 근거가 있는 실
+            (exact/normalized/alias)에 배지를 달면 모든 행에 붙어 정보가 없다.
+            unknown과 unnamed는 조치가 다르므로 문구를 나눈다. */}
+        {row.usageMatch === 'unknown' && (
+          <span
+            className="badge usage unknown"
+            title={`'${row.roomName}'이(가) 단위부하표에 없어 기본값 ${FALLBACK_KCAL}kcal/h·㎡로 계산했습니다. 실명을 확인하거나 단위부하를 직접 입력하세요.`}
+          >
+            표에 없음
+          </span>
+        )}
+        {row.usageMatch === 'unnamed' && (
+          <span
+            className="badge usage unnamed"
+            title={`실명이 없어 기본값 ${FALLBACK_KCAL}kcal/h·㎡로 계산했습니다. 도면에 실명을 기입해야 정확해집니다.`}
+          >
+            실명 없음
+          </span>
+        )}
+        </span>
       </td>
       <td>{row.areaM2.toFixed(2)}</td>
       <td>

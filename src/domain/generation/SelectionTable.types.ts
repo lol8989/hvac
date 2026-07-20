@@ -5,6 +5,7 @@ import type { ComboRange } from '../shared/ComboRange'
 import type { Room } from './Room'
 import type { Placement } from './Placement'
 import type { IndoorModel } from './IndoorModel'
+import type { UsageMatch } from '../shared/usageResolution'
 
 export interface SelectionGroupInput {
   key: string
@@ -35,6 +36,9 @@ export interface SelectionRow {
   roomId: string
   floor: string
   roomName: string
+  // 단위부하를 무엇을 근거로 얻었는가. unknown/unnamed는 표에 근거가 없어 150으로
+  // 떨어진 값이라 현업 확인이 필요하다(조치가 서로 다르다 — usageResolution 참조).
+  usageMatch: UsageMatch
   areaM2: number
   unitLoad: {
     coolKcal: number

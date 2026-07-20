@@ -26,6 +26,13 @@
 /* 단위부하 오버라이드 적정 판정 — 생성 영역 무채색 규칙(CLAUDE.md §6): 색이 아니라 명도로 구분한다. */
 .selgrid .badge.range.ok{background:transparent;border:1px solid #bbb;color:#777;padding:1px 3px;}
 .selgrid .badge.range.oor{background:#111;color:#fff;font-weight:600;}
+/* 실명 셀: 편집 입력(가변) + 근거 배지(고정). 배지가 면적 열로 밀리지 않게 한 줄로 나눈다. */
+.selgrid .namecell{display:flex;align-items:center;gap:4px;}
+.selgrid .namecell input.cell{flex:1;min-width:0;}
+.selgrid .namecell .badge{flex:none;margin-left:0;}
+/* 단위부하 근거 없음 — 표에 없는 실명(사전 추가 후보) / 실명 자체가 없음(도면 기입 필요) */
+.selgrid .badge.usage.unknown{background:#7A4A00;color:#fff;}
+.selgrid .badge.usage.unnamed{background:#8A1A1A;color:#fff;}
 .selgrid button.reset{border:none;background:transparent;color:#999;cursor:pointer;font-size:11px;padding:0 2px;}
 .selgrid button.reset:hover{color:#111;}
 .selgrid td.combo-ok{color:#111;}

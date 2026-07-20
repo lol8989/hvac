@@ -12,6 +12,7 @@ import {
   withAi,
 } from '../shared/Adjustable'
 import { UnitLoad, unitLoadForUsage } from '../shared/UnitLoad'
+import { resolveUnitLoadKcal, type UnitLoadResolution } from '../shared/usageResolution'
 import type { FacilityType, LoadIntensity } from '../shared/unitLoadTable'
 import type { RoomShape } from './placementRules'
 
@@ -85,6 +86,13 @@ export class Room {
       residential: isResidential(this.facility),
       corridor: isCorridor(this.usage),
     }
+  }
+
+  // 이 실의 단위부하가 '무엇을 근거로' 나왔는가. 실명이 표에 없으면 조용히 150으로
+  // 떨어지므로(부하가 틀려도 화면은 정상으로 보인다) 근거를 표면에 올린다.
+  // 파생값이라 필드로 두지 않는다 — usage·facility가 바뀌면 함께 따라와야 한다.
+  get usageResolution(): UnitLoadResolution {
+    return resolveUnitLoadKcal(this.facility, this.usage, this.intensity)
   }
 
   get effectiveUnitLoad(): UnitLoad {

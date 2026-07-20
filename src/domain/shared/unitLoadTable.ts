@@ -121,6 +121,17 @@ function rowOf(facility: FacilityType, usage: string): LoadRow | undefined {
   return rows[norm(usage)] ?? rows[resolveUsageAlias(usage)]
 }
 
+// 표에 그 실명이 실재하는가. lookupUnitLoadKcal의 반환값으로는 판별할 수 없다 —
+// '관리실'의 standard가 150이라 '못 찾아서 150'과 숫자가 같기 때문이다(usageResolution이 요구).
+export function hasDirectUsageRow(facility: FacilityType, usage: string): boolean {
+  return TABLE[facility]?.[norm(usage)] !== undefined
+}
+
+// 동의어까지 흡수해서 찾히는가.
+export function hasUsageRow(facility: FacilityType, usage: string): boolean {
+  return rowOf(facility, usage) !== undefined
+}
+
 // 표에 그 강도 칸이 없으면 Standard로 떨어진다. 실명이 아예 없으면 FALLBACK_KCAL.
 export function lookupUnitLoadKcal(facility: FacilityType, usage: string, intensity: LoadIntensity = 'STANDARD'): number {
   const row = rowOf(facility, usage)
