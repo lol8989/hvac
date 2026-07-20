@@ -75,34 +75,44 @@ describe('getCompatMatrix', () => {
   })
 })
 
-// ⚠️ 알려진 결함(2026-07-20) — 카탈로그 축의 일부가 현업 시드와 (중분류) 이름이 달라
-// 시드값을 못 받고 기본 'X'로 떨어진다. 카탈로그 1368칸 중 318칸(23%).
-// 원인은 시리즈명이 아니라 **중분류 명칭 체계**가 시드(현업 표기)와 카탈로그(우리 분류)에서
-// 다른 것이다 — cleanSeedLabel은 시리즈명 주석만 뗀다.
-// 해소하려면 중분류 매핑을 현업이 확정해야 한다(1:N·N:1·충돌 존재).
-//   근거·결정 목록: doc/05_설계결정/실내외기_조합_확인표_현업회신_반영_2026-07-16.md §5
-// 이 테스트는 '더 나빠지지 않게' 막는 래칫이다. 매핑이 확정되면 목록이 줄고 이 테스트가 깨진다 —
-// 그때 목록을 줄이는 것이 정상 경로다.
-describe('현업 시드 커버리지 (알려진 결함 래칫)', () => {
-  const ORPHAN_INDOOR_COLUMNS = [
-    '기타 실내기 | AWHP 싱글 시스템보일러',
-    '2WAY 카세트 | Multi V 실내기(민수전용)',
-    '4WAY 카세트(듀얼베인) | Multi V S(주거)',
-    '기타 실내기 | Multi V S(주거)',
-    '기타 실내기 | Multi V 실내기(시스템보일러)',
-    '기타 실내기 | SINGLE / Universal',
-    '기타 실내기 | Smart Multi V S(주거_냉방전용)',
-    '벽걸이형 | Multi V S(주거)',
-  ]
-
-  it('시드 근거를 전혀 못 받는 실내기 열은 알려진 목록 그대로다', async () => {
-    const { repo } = await makeRepo()
-    const m = repo.getCompatMatrix()
-    const orphans = m.indoorColumns
+// 현업 시드 커버리지 — 중분류 명칭 체계가 시드(현업 표기)와 카탈로그(우리 분류)에서 다르다.
+// seedValueAt이 시리즈명으로 되짚어(후보 유일 또는 값 만장일치일 때만) 현업 판정을 살린다.
+// 이 테스트는 래칫이다 — 커버리지가 나빠지면 즉시 깨진다.
+//   근거·남은 결정: doc/05_설계결정/실내외기_조합_확인표_현업회신_반영_2026-07-16.md §6
+describe('현업 시드 커버리지 (래칫)', () => {
+  const orphanCols = (m: ReturnType<SqliteEquipmentAdminRepository['getCompatMatrix']>) =>
+    m.indoorColumns
       .filter((col) => m.outdoorRows.every((row) => seedValueAt(row, col) == null))
       .map((col) => `${col.subcategory} | ${col.series}`)
 
-    expect(orphans.sort()).toEqual([...ORPHAN_INDOOR_COLUMNS].sort())
+  it('현업 근거를 전혀 못 받는 실내기 열은 없다', async () => {
+    const { repo } = await makeRepo()
+    expect(orphanCols(repo.getCompatMatrix())).toEqual([])
+  })
+
+  // 남은 미근거 칸은 전부 한 행에 몰려 있다.
+  // 카탈로그는 'Multi V 실외기(큐레이션)'을 절환형·냉방전용·GHP 세 중분류에 두는데 현업 시드엔
+  // 절환형·GHP 둘뿐이다. 두 후보의 값이 갈리는 열에서는 만장일치가 아니라 자동 채택할 수 없다 —
+  // 임의로 고르면 현업 판정을 날조하는 것이다. 현업 확인 대기(문서 §6).
+  it('근거 못 받는 칸은 큐레이션 냉방전용 행에만 남는다', async () => {
+    const { repo } = await makeRepo()
+    const m = repo.getCompatMatrix()
+    const ungroundedRows = new Set<string>()
+    for (const row of m.outdoorRows) {
+      for (const col of m.indoorColumns) {
+        if (seedValueAt(row, col) == null) ungroundedRows.add(`${row.subcategory} | ${row.series}`)
+      }
+    }
+    expect([...ungroundedRows]).toEqual(['냉방전용 | Multi V 실외기(큐레이션)'])
+  })
+
+  it('중분류 이름이 달라도 시리즈가 같으면 현업 판정을 받는다', async () => {
+    const { repo } = await makeRepo()
+    const m = repo.getCompatMatrix()
+    // 카탈로그 '기타 실내기 | Multi V 실내기(시스템보일러)' ← 현업 '시스템보일러 | 〃'
+    const boiler = { subcategory: '기타 실내기', series: 'Multi V 실내기(시스템보일러)' }
+    expect(seedValueAt({ subcategory: '냉난방 절환형', series: 'Multi V S' }, boiler)).not.toBeNull()
+    expect(m.indoorColumns.some((c) => c.subcategory === boiler.subcategory && c.series === boiler.series)).toBe(true)
   })
 })
 
