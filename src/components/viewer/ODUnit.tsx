@@ -6,11 +6,12 @@ interface ODUnitProps {
   selected: boolean
   label: string // 예: 실외기-1
   model?: string // 예: RPUW12BX9M
+  hp?: number // 마력. 실외기 도면 표기는 장비번호가 아니라 마력이다(0708 회의록)
   onDown: (e: React.MouseEvent, id: string) => void
 }
 
 // 실외기는 실내기(카세트)보다 크고 팬 그릴이 있는 박스로 표현.
-export default function ODUnit({ sym, selected, label, model, onDown }: ODUnitProps) {
+export default function ODUnit({ sym, selected, label, model, hp, onDown }: ODUnitProps) {
   return (
     <g transform={`translate(${sym.x}, ${sym.y})`} onMouseDown={(e) => onDown(e, sym.id)} style={{ cursor: 'move' }}>
       {selected && (
@@ -40,7 +41,7 @@ export default function ODUnit({ sym, selected, label, model, onDown }: ODUnitPr
       {model && (
         <g style={{ pointerEvents: 'none' }}>
           <rect x={-48} y={30} width={96} height={13} rx={3} fill="#222222" opacity={selected ? 0.92 : 0.72} />
-          <text x={0} y={39} textAnchor="middle" fontSize={7} fontWeight="700" fill="#FFFFFF">{model}</text>
+          <text x={0} y={39} textAnchor="middle" fontSize={7} fontWeight="700" fill="#FFFFFF">{hp ? `${hp}HP · ${model}` : model}</text>
         </g>
       )}
     </g>

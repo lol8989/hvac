@@ -14,6 +14,7 @@ export interface OutdoorGroupSummary {
   key: string
   label: string
   model: string
+  hp?: number // 실외기 도면 표기는 마력이다(장비번호를 쓰지 않는다 — 0708 회의록)
   items: string[]
 }
 
@@ -77,7 +78,7 @@ export const buildDrawingSvg = ({ rooms, indoorSymbols, indoorModelByRoom, group
         `<g transform="translate(${p.x}, ${p.y})">` +
         `<rect x="${-ODU_W / 2}" y="${-ODU_H / 2}" width="${ODU_W}" height="${ODU_H}" fill="#ffffff" stroke="#000000"/>` +
         `<text x="${-ODU_W / 2 + 8}" y="${-ODU_H / 2 + 18}" font-size="10" font-weight="bold" fill="#000000">${esc(g.label)}</text>` +
-        `<text x="${-ODU_W / 2 + 8}" y="${-ODU_H / 2 + 34}" font-size="9" fill="#333333">${esc(g.model)} · 연결 ${g.items.length}</text></g>`
+        `<text x="${-ODU_W / 2 + 8}" y="${-ODU_H / 2 + 34}" font-size="9" fill="#333333">${g.hp ? `${g.hp}HP · ` : ''}${esc(g.model)} · 연결 ${g.items.length}</text></g>`
       )
     })
 

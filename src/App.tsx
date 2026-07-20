@@ -114,6 +114,9 @@ export default function App({
   // 실내기 모델 카탈로그(장비마스터 PUBLISHED 참조, 장비번호 코드 기반).
   const [indoorCatalog] = useState(() => new InMemoryIndoorModelCatalog(master))
   const indoorModels = useMemo(() => indoorCatalog.list(), [indoorCatalog])
+  // 실외기 도면 표기는 장비번호가 아니라 **마력**이다(0708 회의록, 주인님 확인 2026-07-20).
+  // 마력은 도메인 OutdoorUnit이 아니라 카탈로그 스펙에 있으므로 표시 계층에서 모델로 조인한다.
+  const hpByModel = useMemo(() => new Map(catalog.list().map((s) => [s.model, s.hp] as const)), [catalog])
 
   // ── 편집 상태(World) ──
   // 생성 파이프라인의 편집 상태를 하나로 묶는다. 되돌리기(Ctrl+Z)가 원자적이려면
@@ -736,7 +739,7 @@ export default function App({
   const selectionTable = buildSelectionTable({
     rooms: Object.values(domainRooms),
     placements,
-    groups: groups.map((g) => ({ key: g.key, label: g.label, model: g.model, items: g.items })),
+    groups: groups.map((g) => ({ key: g.key, label: g.label, model: g.model, hp: hpByModel.get(g.model), items: g.items })),
     indoorModels,
     outdoorSpecs: catalog.list().map((s) => ({ model: s.model, coolKw: s.capacityKw, heatKw: s.heatKw, hp: s.hp, comboRange: s.comboRange })),
   })
@@ -839,8 +842,11 @@ export default function App({
   )
   const floorSelectedIds = useMemo(() => selRooms.filter((id) => activeRoomIds.has(id)), [selRooms, activeRoomIds])
   const floorOutdoorGroups = useMemo(
-    () => activeGroups.filter((g) => activeFloorGroupKeys.has(g.key)).map((g) => ({ key: g.key, label: g.label, model: g.model })),
-    [activeGroups, activeFloorGroupKeys],
+    () =>
+      activeGroups
+        .filter((g) => activeFloorGroupKeys.has(g.key))
+        .map((g) => ({ key: g.key, label: g.label, model: g.model, hp: hpByModel.get(g.model) })),
+    [activeGroups, activeFloorGroupKeys, hpByModel],
   )
   // 활성 층 실들의 bbox(뷰어 좌표계) — 뷰어가 이 범위에 맞춘다.
   const fitBounds = useMemo(() => {

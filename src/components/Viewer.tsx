@@ -51,11 +51,14 @@ export const LAYER_TOGGLES: readonly { name: LayerName; label: string }[] = [
   { name: 'zone', label: '실 경계' },
 ]
 
-// 실외기 배치용 그룹 요약(도면 심볼 라벨·모델).
+// 실외기 배치용 그룹 요약(도면 심볼 라벨·모델·마력).
+// 실외기는 장비번호를 쓰지 않는다 — 도면 표기는 **마력(HP)** 이다(0708 회의록 「장비번호기입」,
+// 주인님 확인 2026-07-20). 마력은 카탈로그 스펙에서 오므로 표시 계층에서 조인한다.
 export interface OutdoorGroupInfo {
   key: string
   label: string
   model: string
+  hp?: number
 }
 
 // 딥줌 타일 피라미드 매니페스트(tools/dxf_to_tiles.py 산출).
@@ -877,7 +880,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
           {outdoors.map((u) => {
             const g = outdoorGroups?.find((x) => x.key === u.id)
             return (
-              <ODUnit key={u.id} sym={u} selected={selOdu === u.id} label={g?.label ?? u.id} model={g?.model} onDown={onODUDown} />
+              <ODUnit key={u.id} sym={u} selected={selOdu === u.id} label={g?.label ?? u.id} model={g?.model} hp={g?.hp} onDown={onODUDown} />
             )
           })}
         </g>
