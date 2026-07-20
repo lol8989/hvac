@@ -26,8 +26,9 @@ describe('publishedOutdoor — 비-VRF 격리', () => {
     expect(chiller.hpSource).toBe('DERIVED') // 냉방용량 환산 백필
     expect(chiller.maxConnections).toBeNull()
 
-    repo.setStatus(chiller.id, 'PUBLISHED') // 게시는 된다
-    expect(repo.listProducts().find((r) => r.id === chiller.id)!.status).toBe('PUBLISHED')
+    // 게시 요건을 갖췄으므로 시드가 이미 게시한다(2026-07-20 정책: 요건 통과분 전량 게시).
+    // 비-VRF는 최대 연결 수가 없어도 게시된다 — 그래서 격리가 더 중요해졌다.
+    expect(chiller.status).toBe('PUBLISHED')
 
     // 그러나 생성단 스냅샷을 다시 뜨면 조합 후보에 없다.
     const bytes = sq.db.export()

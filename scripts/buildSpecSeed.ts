@@ -1,9 +1,12 @@
 // LG 스펙시트 50개 → 장비마스터 시드(public/equipment-seed.json + seedMeta.ts).
 //   실행: npm run seed:build
 //
-// 정책 (주인님 확정 2026-07-09)
-//  - 전량 적재하되 신규 모델은 DRAFT. 생성·검도가 쓰는 게시본은 기존 큐레이션 23종만 PUBLISHED.
-//    (스펙시트에 실내기 장비번호가 없어 지어낼 수 없다 → 게시본은 장비번호를 가진 큐레이션 레코드가 담당)
+// 정책
+//  - 전량 적재하고, **게시 요건(domain/equipment/Publishability)을 통과하면 게시**한다.
+//    (주인님 결정 2026-07-20. 이전 정책은 '큐레이션 23종만 게시'였는데, 그러면 장비마스터를
+//     다 만들어 놓고 생성이 목업 수준(실내기 19·실외기 7)으로만 돌았다.)
+//    장비번호는 게시 요건이 아니다 — 소비측 불변식이 요구하는 건 용량·마력·최대연결이다.
+//    스펙시트에 실내기 장비번호가 없어 큐레이션 레코드만 장비번호를 갖는다(선정표 컬럼은 그만큼 빈다).
 //  - 큐레이션 모델이 스펙시트에도 있으면: hot 필드는 큐레이션(선정표 검증값) 우선, 롱테일 스펙은 시트에서 채운다.
 //  - 마력(HP)은 모델명에서 유도하되, VRF 계열(Multi V·GHP·Water)만. 칠러·CDU·SINGLE은 모델명 숫자가 HP가 아니다.
 //    비-VRF 실외기는 냉방용량 환산(÷2907)으로 백필한다(주인님 지시 2026-07-10, hpSource='DERIVED').
@@ -19,6 +22,7 @@ import type { HpSource } from '../src/domain/equipment/HpSource'
 import { horsepowerFromModelCode } from '../src/domain/equipment/ModelCode'
 import { horsepowerFromCapacityW } from '../src/domain/shared/Horsepower'
 import { PUBLISH_STATUS } from '../src/domain/equipment/PublishStatus'
+import { canPublish } from '../src/domain/equipment/Publishability'
 import { INDOOR_RECORDS, OUTDOOR_RECORDS } from '../src/infrastructure/equipment/seedData'
 import type { SeedData, SeedProduct, SeedSeries, SeedSubcategory, SeedPrice, SeedCombination } from '../src/infrastructure/equipment/seed/seedTypes'
 import { CATEGORIES, classifySheet, singleIndoorTaxon } from './taxonomy'
@@ -192,7 +196,24 @@ async function main() {
           efficiencyGradeId: null, // 시트의 효율 등급 행은 대부분 '-' → 추출하지 않는다
           copCooling: null,
           copHeating: null,
-          status: PUBLISH_STATUS.DRAFT,
+          // 게시 요건(domain/equipment/Publishability)을 통과하면 게시한다.
+          //
+          // 예전 정책은 '큐레이션 23종만 게시'였다(장비번호가 큐레이션에만 있어서). 그 결과 생성이
+          // 목업 수준(실내기 19·실외기 7)으로만 돌았다 — 장비마스터를 다 만들어 놓고 쓰지 못했다.
+          // 장비번호는 게시 요건이 아니다(Publishability 참조). 소비측 불변식이 요구하는 것은
+          // 용량·마력·최대연결이고, 그게 갖춰진 모델은 생성이 안전하게 읽을 수 있다.
+          // (주인님 결정 2026-07-20)
+          status: canPublish({
+            categoryCode: t.categoryCode,
+            modelCode: p.modelCode,
+            coolingW: p.coolingW,
+            heatingW: p.heatingW,
+            horsepower: hp,
+            maxConnections: p.maxConnections,
+            isVrf: t.isVrf,
+          })
+            ? PUBLISH_STATUS.PUBLISHED
+            : PUBLISH_STATUS.DRAFT,
           specData: p.specData,
           source: `${file} | ${sheet.sheetName}`,
         })

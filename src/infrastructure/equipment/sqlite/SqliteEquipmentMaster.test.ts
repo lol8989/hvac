@@ -17,27 +17,39 @@ const byModelI = (xs: readonly IndoorSpecFields[]) => [...xs].sort((a, b) => a.m
 const byModelO = (xs: readonly OutdoorSpecFields[]) => [...xs].sort((a, b) => a.model.localeCompare(b.model))
 
 describe('SqliteEquipmentMaster (SQLite 백엔드)', () => {
-  it('publishedIndoor/Outdoor가 인메모리 마스터와 동치이다(생성단 무영향)', async () => {
+  // 2026-07-20 정책 변경: 게시 요건(Publishability)을 통과하면 전량 게시한다.
+  // 그래서 SQLite(실 장비마스터)와 InMemory(큐레이션 목업 폴백)는 더 이상 '동치'가 아니다.
+  // 남는 보장은 **포함 관계**다 — 폴백에서 실DB로 바꿔도 기존 큐레이션 모델이 사라지면 안 된다.
+  it('SQLite는 인메모리 큐레이션을 모두 포함한다(폴백 → 실DB 전환 시 유실 없음)', async () => {
     const sq = await createSqliteEquipmentMaster({ initSql: nodeInit, loadSeed: loadNodeSeed })
     const mem = new InMemoryEquipmentMaster()
-    expect(byModelI(sq.publishedIndoor())).toEqual(byModelI(mem.publishedIndoor()))
-    expect(byModelO(sq.publishedOutdoor())).toEqual(byModelO(mem.publishedOutdoor()))
+
+    const sqIndoor = new Set(sq.publishedIndoor().map((m) => m.model))
+    const sqOutdoor = new Set(sq.publishedOutdoor().map((m) => m.model))
+    for (const m of mem.publishedIndoor()) expect(sqIndoor.has(m.model)).toBe(true)
+    for (const m of mem.publishedOutdoor()) expect(sqOutdoor.has(m.model)).toBe(true)
   })
 
-  it('반환 순서까지 InMemory와 동일하다(list()/UI 표시 순서 회귀 고정)', async () => {
-    // 소비측(카탈로그 list())이 순서를 그대로 노출하므로, 정렬 없이 순서까지 고정한다.
-    const sq = await createSqliteEquipmentMaster({ initSql: nodeInit, loadSeed: loadNodeSeed })
-    const mem = new InMemoryEquipmentMaster()
-    expect(sq.publishedIndoor()).toEqual(mem.publishedIndoor())
-    expect(sq.publishedOutdoor()).toEqual(mem.publishedOutdoor())
+  it('반환 순서가 결정적이다(list()/UI 표시 순서 회귀 고정)', async () => {
+    // 소비측(카탈로그 list())이 순서를 그대로 노출한다. 백엔드가 달라졌으므로 InMemory와의
+    // 순서 일치는 더 이상 성립하지 않지만, 같은 시드를 두 번 열면 같은 순서여야 한다.
+    const a = await createSqliteEquipmentMaster({ initSql: nodeInit, loadSeed: loadNodeSeed })
+    const b = await createSqliteEquipmentMaster({ initSql: nodeInit, loadSeed: loadNodeSeed })
+    expect(a.publishedIndoor().map((m) => m.model)).toEqual(b.publishedIndoor().map((m) => m.model))
+    expect(a.publishedOutdoor().map((m) => m.model)).toEqual(b.publishedOutdoor().map((m) => m.model))
   })
 
-  it('[게이트] 게시된 실내기 19·실외기 7만 노출(DRAFT/ARCHIVED 제외)', async () => {
+  it('[게이트] 요건 통과분만 노출한다 — DRAFT/ARCHIVED 제외, 비-VRF 실외기 제외', async () => {
     const sq = await createSqliteEquipmentMaster({ initSql: nodeInit, loadSeed: loadNodeSeed })
-    expect(sq.publishedIndoor()).toHaveLength(19)
-    expect(sq.publishedOutdoor()).toHaveLength(7)
+
+    // 큐레이션 목업(19·7) 수준이 아니라 실 장비마스터 규모로 노출된다.
+    expect(sq.publishedIndoor()).toHaveLength(234)
+    expect(sq.publishedOutdoor()).toHaveLength(697)
+
     expect(sq.publishedIndoor().some((m) => m.code === 'DRAFT99')).toBe(false)
     expect(sq.publishedOutdoor().some((m) => m.model === 'RPUW-ARCHIVED')).toBe(false)
+    // 비-VRF(칠러·CDU·단품)는 게시돼도 조합 후보로 새지 않는다 — SqliteEquipmentMaster.vrf.test.ts
+    expect(sq.publishedOutdoor().some((m) => m.model === 'ACAH020LET2')).toBe(false)
   })
 
   it('실외기 스펙 왕복 정확성(kW·단가·등급·COP·최대연결)', async () => {

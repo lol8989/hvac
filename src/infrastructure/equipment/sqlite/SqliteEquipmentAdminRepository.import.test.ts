@@ -151,7 +151,7 @@ describe('종단: 실제 스펙시트 → 검증 → 적재 → 게시', () => {
   it('시드에 GHP 조합 모델(GP-W560C2S = 56HP)이 이미 실데이터로 들어 있다', async () => {
     const { repo } = await makeRepo()
     expect(repo.listProducts().find((r) => r.modelCode === 'GP-W560C2S')).toMatchObject({
-      horsepower: 56, coolingW: 164000, energySource: 'GHP', status: 'DRAFT',
+      horsepower: 56, coolingW: 164000, energySource: 'GHP', status: 'PUBLISHED',
     })
   })
 
