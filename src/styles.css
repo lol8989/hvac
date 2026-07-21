@@ -147,12 +147,11 @@ button{font-family:inherit;cursor:pointer;}
 .md-h .field{padding:4px 8px;font-size:12px;max-width:240px;}
 .md-h .x{border:none;background:transparent;color:#fff;font-size:18px;line-height:1;padding:0 2px;}
 .md-body{flex:1;display:flex;gap:14px;padding:12px 14px;overflow:hidden;}
-.mapdock .odus{grid-template-columns:repeat(auto-fill,minmax(290px,1fr));}
-.mapdock .pool{max-width:280px;}
+.mapdock .pool-col{flex:1;min-width:240px;max-width:340px;}
 
 .m-body{flex:1;display:flex;gap:14px;padding:14px 18px;overflow:hidden;}
 /* grid-auto-rows:max-content — auto 트랙은 컨테이너 높이에 맞춰 균등 분배되어 카드가 다음 행을 덮는다 */
-.odus{flex:2;min-width:0;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:max-content;gap:12px;align-content:start;overflow-y:auto;padding-right:4px;}
+.odus{flex:2;min-width:0;display:block;overflow-y:auto;padding-right:4px;}
 .pool{flex:1;min-width:230px;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
 .pool .ph,.odu .oh{background:var(--dark);color:#fff;font-size:14px;font-weight:700;padding:9px 12px;}
 .pool .pbody{flex:1;overflow-y:auto;padding:10px;}
@@ -164,9 +163,75 @@ button{font-family:inherit;cursor:pointer;}
 .g.warn>i{background:repeating-linear-gradient(45deg,#333,#333 4px,#888 4px,#888 8px);}
 .drop{padding:10px 12px;min-height:92px;max-height:210px;overflow-y:auto;}
 .drop.dragover{background:#EDEDED;outline:2px dashed #888;outline-offset:-6px;}
-.chip{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:6px;padding:6px 9px;margin-bottom:7px;background:#fff;font-size:14px;cursor:grab;}
+/* 실 중심 조합 매핑: 층 → 실외기 → 실 (참고 레거시 "실외기 시스템 구성" 동형). */
+.floorsec{margin-bottom:12px;}
+.floorhd{font-size:12px;font-weight:700;color:#555;padding:0 2px 5px;border-bottom:1px solid var(--line2);margin-bottom:8px;}
+.floorempty{color:#bbb;font-size:12px;padding:6px 4px;}
+/* 카드를 적정 폭 그리드로 묶는다 — 전폭 카드에서 실명이 가운데를 다 먹어 생기던 공백 제거 + 화면효율. */
+.floorgroups{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,480px));gap:10px;justify-content:start;align-items:start;}
+.floorsec .odu{margin-bottom:0;}
+.odu .oh .oh-r{display:flex;align-items:center;gap:6px;font-weight:400;font-size:11px;}
+.rtable{padding:4px 8px 8px;}
+.rtable.dragover{background:#EDEDED;outline:2px dashed #888;outline-offset:-4px;}
+.rempty{color:#bbb;font-size:11px;padding:6px 4px;}
+/* 실 행: 컬럼 정렬(실명 최우선 넓게, 숫자는 tabular-nums 우측정렬). 선택은 무채색 반전. */
+.rhead,.rrow{display:flex;align-items:center;gap:8px;padding:3px 6px;}
+.rhead{font-size:10.5px;color:#9a9a9a;border-bottom:1px solid var(--line2);padding-bottom:4px;margin-bottom:2px;}
+.rrow{font-size:13px;border-radius:5px;cursor:pointer;user-select:none;}
+.rrow:hover{background:rgba(0,0,0,0.05);}
+.rrow.sel{background:var(--dark);color:#fff;}
+.rrow.sel:hover{background:var(--dark);}
+.c-name{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rhead .c-name{font-weight:400;}
+.c-area{width:54px;text-align:right;font-variant-numeric:tabular-nums;flex-shrink:0;}
+.c-kcal{width:46px;text-align:right;font-variant-numeric:tabular-nums;flex-shrink:0;color:#8a8a8a;}
+.rrow.sel .c-kcal{color:#c9c9c9;}
+.c-load{width:56px;text-align:right;font-variant-numeric:tabular-nums;flex-shrink:0;}
+/* 단위부하(kcal) 직접 수정 셀 — 평소엔 텍스트처럼, 호버·포커스 시 입력창. 헤더 'kcal'과 우측 정렬로 얼라인. */
+.c-kcal .loadin{box-sizing:border-box;width:100%;text-align:right;border:1px solid transparent;background:transparent;font:inherit;font-variant-numeric:tabular-nums;padding:0 2px;border-radius:3px;color:inherit;}
+.c-kcal .loadin:hover{border-color:#ccc;background:#fff;color:#333;}
+.c-kcal .loadin:focus{border-color:var(--dark);background:#fff;color:#333;outline:none;}
+.rrow.sel .c-kcal .loadin{color:#c9c9c9;}
+.rrow.sel .c-kcal .loadin:hover,.rrow.sel .c-kcal .loadin:focus{color:#333;}
+/* 실외기 헤더 클릭 = 그 그룹의 모든 실 하이라이팅 */
+.oh-click{cursor:pointer;}
+.oh-click:hover{filter:brightness(0.9);}
+/* 실외기 그룹별 색상(생성 무채색 규칙 예외) — 탭(헤더)=그룹 색, 실내기 행 영역=연한 동일 색, 카드 테두리=그룹 색. */
+.odu-colored{border-color:var(--gcolor,var(--line));}
+.odu-colored .oh{background:var(--gcolor,var(--dark));}
+.odu-colored .rtable{background:#fff;}
+/* 각 실 행: 그룹 색으로 채우고 왼쪽 액센트 바(정렬 유지 위해 border 대신 inset shadow). */
+.odu-colored .rrow{background:var(--gtint,transparent);box-shadow:inset 3px 0 0 var(--gcolor);margin-bottom:3px;}
+.odu-colored .rrow:hover{background:var(--gtint,#f5f5f5);filter:brightness(0.96);}
+/* 선택 시 검은색이 아니라 진한 그룹색으로(흰 글자 대비 유지). */
+.odu-colored .rrow.sel{background:var(--gcolor);box-shadow:none;}
+.odu-colored .rrow.sel:hover{background:var(--gcolor);filter:brightness(0.92);}
+.c-model{width:98px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#8a8a8a;}
+.rrow.sel .c-model{color:#c9c9c9;}
+.c-qty{width:30px;text-align:right;font-variant-numeric:tabular-nums;flex-shrink:0;}
+.c-x{width:16px;flex-shrink:0;border:none;background:transparent;color:#999;font-size:12px;line-height:1;padding:0;cursor:pointer;}
+.rrow.sel .c-x{color:#ddd;}
+/* 배정 해제 = 휴지통 아이콘(도크 전용). currentColor로 무채색 상속. */
+.c-trash{display:inline-flex;align-items:center;justify-content:center;}
+.c-trash:hover{color:#333;}
+.rrow.sel .c-trash:hover{color:#fff;}
+/* 우측 컬럼: 선정 대기 + 미배정 */
+.pool-col{display:flex;flex-direction:column;gap:10px;min-height:0;}
+.stagebox,.pool-col .pool{flex:1;min-height:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+.stagebox .ph{background:var(--dark);color:#fff;font-size:14px;font-weight:700;padding:8px 12px;}
+.pool-col .ph{display:flex;align-items:center;gap:6px;}
+.pool-col .ph .sp{flex:1;}
+.ph-c{font-weight:400;opacity:.75;font-size:12px;}
+.stagebox .pbody,.pool-col .pool .pbody{flex:1;overflow-y:auto;padding:8px;}
+.poolhint{font-size:11px;color:#8a8a8a;line-height:1.5;padding:2px 2px 8px;}
+.btn.sm.primary{background:#fff;color:var(--dark);border:1px solid #fff;font-weight:700;}
+.btn.sm.primary:disabled{opacity:.4;cursor:not-allowed;}
+.chip{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:6px;padding:6px 9px;margin-bottom:7px;background:#fff;font-size:14px;cursor:pointer;user-select:none;}
+.chip:hover{background:#F5F5F5;}
+.chip.sel{background:var(--dark);border-color:var(--dark);color:#fff;}
 .chip .cap{color:#888;font-size:12px;}
-.chip .x{border:none;background:transparent;color:#999;font-size:13px;}
+.chip.sel .cap{color:#ccc;}
+.chip .x{border:none;background:transparent;color:#999;font-size:13px;cursor:pointer;}
 .warnbar{background:var(--warnbg);border-top:1px solid var(--line);color:#111;font-size:12px;padding:7px 12px;}
 .odu .badge{display:inline-block;font-size:11.5px;line-height:1;padding:2px 5px;border-radius:2px;vertical-align:1px;}
 .odu .badge.warn{background:#555555;color:#fff;}
@@ -181,6 +246,10 @@ button{font-family:inherit;cursor:pointer;}
 .ofoot .btn{padding:5px 9px;}
 .ofoot .btn:disabled{opacity:.45;cursor:not-allowed;}
 .plansvg{position:absolute;inset:0;width:100%;height:100%;display:block;background:#F7F7F8;touch-action:none;overscroll-behavior:contain;-webkit-user-select:none;user-select:none;}
+/* 선택한 실들 위에 뜨는 '실외기 선정' 오버레이 버튼(선택 bbox 상단 중앙). */
+.sel-action{position:absolute;transform:translate(-50%,calc(-100% - 8px));z-index:20;background:var(--dark);color:#fff;border:none;border-radius:7px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.3);white-space:nowrap;}
+.sel-action:hover{background:#000;}
+.sel-action::after{content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--dark);border-bottom:0;}
 .plansvg.panmode,.plansvg.panmode *{cursor:grab;}
 .plansvg.panning,.plansvg.panning *{cursor:grabbing;}
 /* 자르기(V): 포인터 대신 라인이 커서다 — 자식(ZoneRect의 인라인 cursor)까지 덮어야 한다 */

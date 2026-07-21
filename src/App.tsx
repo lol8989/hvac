@@ -11,7 +11,7 @@ import { buildDrawingSvg } from './presentation/generation/drawingSvg'
 import { downloadText, CSV_BOM } from './presentation/download'
 import ModelPanel from './components/ModelPanel'
 import MappingDock from './components/generation/MappingDock'
-import type { DockRoomInfo } from './components/generation/MappingDock'
+import { buildDockView } from './presentation/generation/dockView'
 import ConfirmModal from './components/ConfirmModal'
 import ProjectSettings from './components/steps/ProjectSettings'
 import CeilingHeightsPanel from './components/steps/CeilingHeights'
@@ -32,7 +32,7 @@ import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemor
 import type { OutdoorModelSpec } from './application/generation/ports'
 import { makeReassignRoom } from './application/generation/ReassignRoom'
 import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoorModel'
-import { makeAddGroup, makeRemoveGroup, makeSplitGroup } from './application/generation/GroupCommands'
+import { makeAddGroup, makeRemoveGroup } from './application/generation/GroupCommands'
 import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, syncPlanUnits, selectOutdoorPlan, indoorUnitsFor } from './presentation/generation/planAdapter'
 import { compatPredicateFromMatrix } from './presentation/generation/compatPredicate'
 import { compatMatrixFromSeed } from './infrastructure/equipment/seed/compatMatrixFromSeed'
@@ -349,7 +349,6 @@ export default function App({
       replace: makeReplaceOutdoorModel({ planRepository: repo }),
       add: makeAddGroup({ planRepository: repo }),
       remove: makeRemoveGroup({ planRepository: repo }),
-      split: makeSplitGroup({ planRepository: repo }),
     }),
     [repo],
   )
@@ -431,7 +430,11 @@ export default function App({
   const moveRoom = (id: string, to: string): boolean => {
     try {
       const res = uc.reassign({ roomId: id, to })
-      if (res.ok) sync('실외기 배정 변경')
+      if (res.ok) {
+        // 실을 빼서 빈 그룹이 되면 자동 정리한다(분할·삭제 버튼을 없앤 대체 — 그룹은 선정으로만 생긴다).
+        for (const g of repo.load().groups) if (g.roomIds.length === 0) uc.remove({ key: g.key })
+        sync('실외기 배정 변경')
+      }
       return res.ok
     } catch (e) {
       if (e instanceof NotFoundError) return false
@@ -452,31 +455,30 @@ export default function App({
     }
   }
 
-  // 그룹 분할: 연결된 실의 절반을 같은 실외기 모델의 새 그룹으로 이동.
-  const splitGroup = (key: string) => {
-    const g = plan.groupByKey(key)
-    if (!g || g.roomIds.length < 2) return
-    const meta = nextGroupMeta(plan)
-    uc.split({ key, meta })
-    sync('실외기 그룹 분할')
-    flash(`${g.label}을(를) 분할해 ${meta.label}을(를) 추가했습니다`)
-  }
-
-  // 실외기 그룹 추가 (빈 그룹).
-  const addGroup = (spec: OutdoorModelSpec) => {
-    const meta = nextGroupMeta(plan)
-    uc.add({ meta, outdoorUnit: outdoorUnitFromSpec(spec) })
-    sync('실외기 그룹 추가')
-    flash(`${meta.label} (${spec.model})을(를) 추가했습니다`)
-  }
-
-  // 실외기 그룹 삭제: 연결된 실내기는 미배정 풀로 반환.
-  const removeGroup = (key: string) => {
-    const g = plan.groupByKey(key)
-    if (!g) return
-    uc.remove({ key })
-    sync('실외기 그룹 삭제')
-    flash(`${g.label}을(를) 삭제했습니다`)
+  // ── 실외기 선정: 도면에서 선택한 실들 위에 뜨는 오버레이 버튼이 부른다(분할·삭제·선정대기 대체) ──
+  // 선택한 실들만 대상으로 실외기를 선정해 새 그룹으로 묶는다(전체 재선정이 아니다). 이미 다른
+  // 실외기에 있던 실도 이 새 그룹으로 옮겨지고, 비게 된 옛 그룹은 자동 정리된다.
+  // 도메인 선정(selectOutdoorPlan)이 층×계열 버킷·조합비로 실외기를 고른다.
+  const selectOutdoorForSelected = (roomIds: readonly string[]) => {
+    const set = new Set(roomIds)
+    const units = unitsFrom(placements).filter((u) => set.has(u.roomId))
+    if (!units.length) { flash('선정할 실을 먼저 선택하세요'); return }
+    try {
+      const sub = selectOutdoorPlan(units, (rid) => domainRooms[rid]?.floor ?? '', catalog, isOutdoorCompatible)
+      for (const g of sub.groups) {
+        const meta = nextGroupMeta(repo.load())
+        uc.add({ meta, outdoorUnit: g.outdoorUnit })
+        for (const rid of g.roomIds) uc.reassign({ roomId: rid, to: meta.key })
+      }
+      // 선택 실들이 빠져 빈 그룹이 된 옛 실외기는 정리한다.
+      for (const gg of repo.load().groups) if (gg.roomIds.length === 0) uc.remove({ key: gg.key })
+      sync('실외기 선정')
+      setSelRooms([])
+      flash(`✦ 선택한 ${units.length}대 기준 실외기 ${sub.groups.length}대를 선정했습니다`)
+    } catch (e) {
+      if (e instanceof NoCompatibleOutdoorError || e instanceof UnpackableLoadError) { flash(e.message); return }
+      throw e
+    }
   }
 
   // 우측 패널 실내기 목록에서 실을 클릭하면 선택에 토글. 새로 켠 실은 맨 앞에 두어
@@ -622,17 +624,6 @@ export default function App({
     flash(`실내기 ${ids.length}대를 삭제했습니다 (선정표 대수에 반영)`)
   }
 
-  // 조합 매핑 도크가 쓰는 실 정보. 칩의 kW는 조합비와 같은 기준(설치 정격용량)이다.
-  const dockRoomInfo = useMemo<Record<string, DockRoomInfo>>(
-    () =>
-      Object.fromEntries(
-        Object.keys(domainRooms).map((id) => [
-          id,
-          { name: domainRooms[id].name, type: indoorInfo[id]?.kind ?? '', capKw: indoorCapByRoom[id] ?? 0 },
-        ]),
-      ),
-    [domainRooms, indoorInfo, indoorCapByRoom],
-  )
 
   // ── 실외기 심볼(도면 좌표) ──
   const outdoorSymbols = useMemo<UnitSym[]>(
@@ -704,6 +695,14 @@ export default function App({
     try { updateRoom(id, (r) => r.overrideUnitLoad(new UnitLoad(coolKcal, heatKcal)), '단위부하 수정') } catch { flash('단위부하는 0보다 큰 숫자여야 합니다') }
   }
   const resetUnitLoad = (id: string) => updateRoom(id, (r) => r.clearUnitLoadOverride(), '단위부하 초기화')
+  // 조합 매핑에서 단위부하(kcal/h·㎡)를 직접 고친다 — 실제 입력값. 부하(kW)는 면적으로 자동 재계산된다.
+  // 난방 단위부하는 보존한다(냉방만 편집).
+  const overrideRoomCoolKcal = (id: string, coolKcal: number) => {
+    if (!(coolKcal > 0)) { flash('단위부하는 0보다 큰 숫자여야 합니다'); return }
+    try {
+      updateRoom(id, (r) => r.overrideUnitLoad(new UnitLoad(coolKcal, r.effectiveUnitLoad.heatKcal)), '단위부하 수정')
+    } catch { flash('단위부하는 0보다 큰 숫자여야 합니다') }
+  }
   // 선정표에서 모델·대수를 고치면 도면 심볼 개수도 함께 바뀐다(대수 SSOT = 심볼).
   const overrideIndoor = (id: string, modelCode: string, quantity: number) => {
     if (!domainRooms[id]) return
@@ -743,6 +742,10 @@ export default function App({
     indoorModels,
     outdoorSpecs: catalog.list().map((s) => ({ model: s.model, coolKw: s.capacityKw, heatKw: s.heatKw, hp: s.hp, comboRange: s.comboRange })),
   })
+
+  // 조합 매핑 도크 뷰: 층 → 실외기 → 실(면적·칼로리·부하·모델·대수). 도메인(SelectionTable)이 이미 계산한 값을 옮긴다.
+  const dockFloors = useMemo(() => buildDockView(selectionTable), [selectionTable])
+  const dockUnassigned = useMemo(() => dockFloors.flatMap((f) => f.unassigned), [dockFloors])
 
   // 장비일람표 시트(계열별) — 다운로드와 '새 창' 미리보기가 같은 값을 본다.
   //
@@ -1261,6 +1264,9 @@ export default function App({
             selectedIds={floorSelectedIds}
             onSelectionChange={setSelRooms}
             onEscape={() => setMapOpen(false)}
+            onSelectOutdoorForSelection={
+              step === 'combine' ? () => selectOutdoorForSelected(floorSelectedIds) : undefined
+            }
             history={{
               canUndo: undoable.canUndo,
               canRedo: undoable.canRedo,
@@ -1312,17 +1318,17 @@ export default function App({
           {mapOpen && step === 'combine' && (
             <MappingDock
               catalog={catalog.list()}
-              groups={groups}
-              pool={pool}
-              roomInfo={dockRoomInfo}
+              floors={dockFloors}
+              pool={dockUnassigned}
               roomTotal={Object.keys(domainRooms).length}
+              selectedRooms={selRooms}
               height={dockH}
               onHeightChange={setDockH}
+              onSelectRoom={toggleRoom}
+              onSelectGroup={(ids) => setSelRooms(ids)}
+              onEditKcal={overrideRoomCoolKcal}
               onMove={moveRoom}
               onReplace={replaceModel}
-              onSplit={splitGroup}
-              onAddGroup={addGroup}
-              onRemove={removeGroup}
               onClose={() => setMapOpen(false)}
             />
           )}

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react'
+import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react'
 import type { ReactElement } from 'react'
 import type { Room } from '../data'
 import ACUnit from './viewer/ACUnit'
@@ -118,6 +118,8 @@ interface ViewerProps {
   // 편집 히스토리 — 되돌리기 대상은 대부분 도면 편집이라 컨트롤도 캔버스에 둔다.
   // 히스토리 자체(스택)는 App이 갖는다. 뷰어는 상태를 표시하고 클릭을 전달할 뿐이다.
   history?: HistoryControl
+  // 조합 단계: 선택된 실들 위에 뜨는 '실외기 선정' 오버레이 버튼의 동작(없으면 버튼 미표시).
+  onSelectOutdoorForSelection?: () => void
 }
 
 export interface HistoryControl {
@@ -149,7 +151,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     canAddUnit = true, canPlaceOutdoors = false,
     canSliceRooms = false, onRoomSlice, onSliceUnavailable, onZoneResize,
     canMergeRooms = false, onRoomsMerge, isAdjacent, onMergeUnavailable,
-    history,
+    history, onSelectOutdoorForSelection,
   }: ViewerProps,
   ref,
 ) {
@@ -224,6 +226,9 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const [toolMenuOpen, setToolMenuOpen] = useState(false)
 
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  // 선택된 실들 위에 뜨는 '실외기 선정' 오버레이 버튼의 화면 위치(px, .viewer 기준). 없으면 미표시.
+  const [selBtnPos, setSelBtnPos] = useState<{ x: number; y: number } | null>(null)
   const panRef = useRef<{ sx: number; sy: number; vx: number; vy: number; a: number; d: number } | null>(null)
   const dragRef = useRef<{ startX: number; startY: number; orig: Record<string, { x: number; y: number }>; moved: boolean } | null>(null)
   const rotRef = useRef<{ startX: number; orig: Record<string, number> } | null>(null)
@@ -279,6 +284,30 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  // '실외기 선정' 오버레이 버튼 위치: 선택된 실들의 bbox 상단 중앙을 화면 px로 변환한다.
+  // view(팬·줌)·크기·선택이 바뀔 때마다 다시 계산해 선택 위를 따라다닌다.
+  useLayoutEffect(() => {
+    const svg = svgRef.current
+    const wrap = wrapRef.current
+    if (!onSelectOutdoorForSelection || !svg || !wrap || selectedIds.length === 0) { setSelBtnPos(null); return }
+    const picked = zones.filter((z) => selectedIds.includes(z.id))
+    if (!picked.length) { setSelBtnPos(null); return }
+    let minX = Infinity, maxX = -Infinity, minY = Infinity
+    for (const z of picked) for (const p of z.points) {
+      if (p.x < minX) minX = p.x
+      if (p.x > maxX) maxX = p.x
+      if (p.y < minY) minY = p.y
+    }
+    const ctm = svg.getScreenCTM()
+    if (!ctm) { setSelBtnPos(null); return }
+    const pt = svg.createSVGPoint()
+    pt.x = (minX + maxX) / 2
+    pt.y = minY
+    const scr = pt.matrixTransform(ctm)
+    const wr = wrap.getBoundingClientRect()
+    setSelBtnPos({ x: scr.x - wr.left, y: scr.y - wr.top })
+  }, [onSelectOutdoorForSelection, selectedIds, zones, view, svgW])
 
   // C(에어컨) 모드: 선택된 실내기 심볼 → 담당 실을 패널 선택으로 반영(단일 클릭·드래그 동일 동작).
   // 실도 함께 하이라이팅됨(selectedIds→ZoneRect). 마운트 시 초기 선택 보존, 방 밖 심볼 무시, 같은 실 다중 심볼 합침.
@@ -765,7 +794,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   })()
 
   return (
-    <div className="viewer">
+    <div className="viewer" ref={wrapRef}>
       {/* 좌상단 뷰어 도구: 레이어 필터 + 격자. (조작 힌트는 우상단 단축키 위젯에 있다 — 중복 제거) */}
       <div className="vtools">
         {onLayersChange && (
@@ -942,6 +971,18 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
             : '실 병합 · 합칠 두 실을 차례로 클릭하세요'}
           {mergePreview?.first && mergePreview?.hover && !mergePreview.adjacent && <span> · 붙어 있지 않습니다</span>}
         </div>
+      )}
+
+      {/* 선택한 실들 위에 뜨는 컨텍스트 액션 — 이 실들로 실외기를 선정(그룹 생성)한다. */}
+      {selBtnPos && onSelectOutdoorForSelection && (
+        <button
+          className="sel-action"
+          style={{ left: selBtnPos.x, top: selBtnPos.y }}
+          onClick={onSelectOutdoorForSelection}
+          title="선택한 실들로 실외기를 선정해 그룹을 만듭니다"
+        >
+          ＋ 실외기 선정 · {selectedIds.length}개실
+        </button>
       )}
 
       {/* 하단 중앙 도크 — 편집 히스토리(좌) + Figma식 도구바(우) */}
