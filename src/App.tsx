@@ -1173,6 +1173,10 @@ export default function App({
   // 우측 패널: 모델 선택이 필요한 단계(실내기 배치·실외기 조합)만 ModelPanel, 나머지는 컨텍스트 패널.
   const showPanel = step === 'place' || step === 'combine'
 
+  // 편집 확정: 산출물 단계 진입 = 확정. 확정되면 편집을 잠가 산출물을 고정한다.
+  // '편집 재개'(이전 단계로 돌아가기)로 다시 편집할 수 있다(버전/롤백은 두지 않는다 — 주인님 결정 2026-07-21).
+  const confirmed = step === 'output'
+
   return (
     <div className="app">
       <div className="gnb">
@@ -1198,7 +1202,12 @@ export default function App({
         onGo={regress}
         actions={
           <>
-            <button className="btn sm" disabled={isFirstStep(step)} onClick={() => regress(prevStep(step))}>← 이전</button>
+            {confirmed ? (
+              <button className="btn sm primary" onClick={() => regress(prevStep(step))} title="편집을 다시 열어 실내기·실외기·조합을 수정합니다">← 편집 재개</button>
+            ) : (
+              <button className="btn sm" disabled={isFirstStep(step)} onClick={() => regress(prevStep(step))}>← 이전</button>
+            )}
+            {confirmed && <span className="confirm-badge" title="산출물이 확정돼 편집이 잠겼습니다. '편집 재개'로 다시 열 수 있습니다.">🔒 확정됨 · 편집 잠금</span>}
             {/* 되돌리기/다시하기(↶↷)는 캔버스 하단 도크에 있다 — 되돌리는 대상이 도면 편집이라 손이 거기 있다.
                 상단 바에는 스텝 진행 CTA만 남긴다(성격이 다른 버튼을 한 줄에 섞지 않는다). */}
             {/* 시설군은 단위부하의 전제다. 배치 후 바꾸면 부하가 통째로 다시 계산된다 → 확인을 받는다.
@@ -1224,8 +1233,12 @@ export default function App({
               <button
                 className="btn sm primary"
                 onClick={() => advance(nextStep(step))}
-                title={`${stepDef(nextStep(step)).label} 단계로 이동`}
-              >다음 단계 →</button>
+                title={
+                  nextStep(step) === 'output'
+                    ? '편집을 확정하고 산출물을 고정합니다. 편집이 잠기며, 편집 재개로 다시 열 수 있습니다.'
+                    : `${stepDef(nextStep(step)).label} 단계로 이동`
+                }
+              >{nextStep(step) === 'output' ? '✓ 편집 확정' : '다음 단계 →'}</button>
             )}
             <OverflowMenu items={[{ label: '◉ 현재 화면 캡처', onClick: captureView }]} />
           </>
@@ -1276,13 +1289,13 @@ export default function App({
               onRedo: doRedo,
             }}
             indoorSymbols={floorIndoorSymbols}
-            onUnitsMove={moveUnits}
-            onUnitsRotate={rotateUnits}
-            onUnitsDelete={deleteUnits}
-            onUnitAdd={addUnitToRoom}
+            onUnitsMove={confirmed ? undefined : moveUnits}
+            onUnitsRotate={confirmed ? undefined : rotateUnits}
+            onUnitsDelete={confirmed ? undefined : deleteUnits}
+            onUnitAdd={confirmed ? undefined : addUnitToRoom}
             outdoorSymbols={floorOutdoorSymbols}
-            onOutdoorsMove={moveOutdoors}
-            onOutdoorsDelete={deleteOutdoors}
+            onOutdoorsMove={confirmed ? undefined : moveOutdoors}
+            onOutdoorsDelete={confirmed ? undefined : deleteOutdoors}
             onOutdoorsAutoPlace={autoPlaceOutdoors}
             indoorInfo={indoorInfo}
             tiles={tiles}
@@ -1302,7 +1315,7 @@ export default function App({
                   : '실 자르기는 실내기 배치 단계에서만 가능합니다',
               )
             }
-            onZoneResize={resizeZone}
+            onZoneResize={confirmed ? undefined : resizeZone}
             canMergeRooms={step === 'place' && Object.keys(domainRooms).length > 1}
             onRoomsMerge={doMerge}
             isAdjacent={roomsAdjacent}

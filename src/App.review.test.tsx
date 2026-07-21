@@ -33,7 +33,7 @@ const progressToCombine = () => {
 const progressToOutput = () => {
   fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
   fireEvent.click(screen.getByRole('button', { name: '＋ 실외기 배치' }))
-  fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
+  fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' })) // 산출물 진입 = 편집 확정
 }
 
 describe('App — 초기 상태 (실 검출 완료)', () => {
@@ -93,7 +93,7 @@ describe('App — 스텝 가드', () => {
     render(<App />)
     progressToCombine()
     fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
-    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' })) // 산출물 진입 시도 = 편집 확정(실외기 미배치라 차단)
 
     expect(screen.getByRole('alertdialog', { name: '실외기를 도면에 배치해야 합니다' })).toBeInTheDocument()
     expect(screen.getByText(/1대 중 0대/)).toBeInTheDocument()

@@ -250,6 +250,8 @@ button{font-family:inherit;cursor:pointer;}
 .sel-action{position:absolute;transform:translate(-50%,calc(-100% - 8px));z-index:20;background:var(--dark);color:#fff;border:none;border-radius:7px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.3);white-space:nowrap;}
 .sel-action:hover{background:#000;}
 .sel-action::after{content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--dark);border-bottom:0;}
+/* 편집 확정 배지 — 산출물이 확정돼 편집이 잠겼음을 알린다. */
+.confirm-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:#15803d;background:#eafaf0;border:1px solid #b7e4c7;border-radius:6px;padding:3px 8px;white-space:nowrap;}
 .plansvg.panmode,.plansvg.panmode *{cursor:grab;}
 .plansvg.panning,.plansvg.panning *{cursor:grabbing;}
 /* 자르기(V): 포인터 대신 라인이 커서다 — 자식(ZoneRect의 인라인 cursor)까지 덮어야 한다 */
