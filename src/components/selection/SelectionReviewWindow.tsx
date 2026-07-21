@@ -41,7 +41,7 @@ export default function SelectionReviewWindow() {
   return (
     <div className="review-window">
       <div className="rw-h">
-        <span className="mt">장비선정표 — 실시간 연동(메인 창 상태 기준)</span>
+        <span className="mt">장비선정표 — 실시간 연동</span>
         <button
           className="btn sm"
           onClick={() => downloadText('장비선정표.csv', CSV_BOM + buildSelectionCsv(snap.table), 'text/csv;charset=utf-8')}

@@ -8,21 +8,21 @@
 // 한 줄에 섞을 이유가 없다(SRP).
 
 import type { ReactNode } from 'react'
-import Stepper from '../Stepper'
+import ModeBar from '../ModeBar'
 import type { StepId } from '../../domain/generation/StepGuard'
 
 interface WorkBarProps {
   current: StepId
-  onGo: (id: StepId) => void
+  onPick: (id: StepId) => void
   actions: ReactNode
 }
 
-export default function WorkBar({ current, onGo, actions }: WorkBarProps) {
+export default function WorkBar({ current, onPick, actions }: WorkBarProps) {
   return (
     <div className="workbar">
       <a href="#" className="wb-back">← 목록으로</a>
       <div className="wb-steps">
-        <Stepper current={current} onGo={onGo} />
+        <ModeBar current={current} onPick={onPick} />
       </div>
       <div className="wb-actions">{actions}</div>
     </div>

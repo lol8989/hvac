@@ -3,7 +3,7 @@
 // (실 검출은 스텝이 아니라 초기 상태 — 도면을 열면 실이 이미 검출돼 있다.)
 // (선정표는 스텝이 아니라 새 창 — 도면을 가리지 않고 확인·조정, BroadcastChannel 연동)
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, act, within } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import App from './App'
 import { FakeBroadcastChannel } from './test/fakeBroadcastChannel'
 import { SELECTION_CHANNEL } from './presentation/generation/selectionSync'
@@ -26,14 +26,14 @@ afterEach(() => vi.unstubAllGlobals())
 // 순서 근거: 실내기를 다 배치해야 정격이 확정되고, 그래야 실외기를 고를 수 있다.
 const progressToCombine = () => {
   fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
-  fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
+  fireEvent.click(screen.getByRole('button', { name: '실외기 선정·조합' })) // 편집 도구 자유 전환(가드 없음)
 }
 
-// 조합 → 실외기 배치(도면에 심벌) → 산출물.
+// 조합 → 실외기 배치(도면에 심벌) → 편집 확정 → 산출물.
 const progressToOutput = () => {
-  fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
+  fireEvent.click(screen.getByRole('button', { name: '실외기 배치' })) // 실외기 배치 도구로 전환
   fireEvent.click(screen.getByRole('button', { name: '＋ 실외기 배치' }))
-  fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' })) // 산출물 진입 = 편집 확정
+  fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' })) // 편집 확정 → 산출물
 }
 
 describe('App — 초기 상태 (실 검출 완료)', () => {
@@ -49,18 +49,14 @@ describe('App — 초기 상태 (실 검출 완료)', () => {
   })
 })
 
-describe('App — 스텝 가드', () => {
-  // 주인님 지시 2026-07-16: 실내기 없는 실은 막지 말고 주의만 하고 넘어갈 수 있게 한다.
-  it('실내기를 배치하지 않고 실외기 선정으로 가려 하면 주의 팝업이 뜨지만 계속 진행할 수 있다', () => {
+describe('App — 편집 모드 · 편집 확정 가드', () => {
+  // 2페이즈 편집 모드(2026-07-21): 편집 도구는 순서 강제 없이 자유롭게 오간다.
+  // 전제 검사(실내기 없는 실 등)는 스텝 전환이 아니라 '편집 확정' 시점에 일괄로 한다.
+  it('편집 도구는 가드 팝업 없이 자유롭게 전환된다', () => {
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
-
-    const dialog = screen.getByRole('alertdialog', { name: '실내기가 없는 실이 있습니다' })
-    expect(within(dialog).getByText(/거실/)).toBeInTheDocument() // 어느 실이 비었는지
-    expect(within(dialog).getByText(/제외/)).toBeInTheDocument() // 진행하면 무엇을 잃는지
-    // 차단이 아니라 주의 — '계속 진행'으로 넘어갈 수 있다.
-    fireEvent.click(screen.getByRole('button', { name: '계속 진행' }))
-    // 실외기 선정·조합 단계로 넘어갔다(조합 매핑 버튼이 보인다).
+    // 실내기 배치 전이라도 '실외기 선정·조합' 도구로 바로 전환된다(팝업 없음).
+    fireEvent.click(screen.getByRole('button', { name: '실외기 선정·조합' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '실외기 조합 매핑' })).toBeInTheDocument()
   })
 
@@ -72,7 +68,7 @@ describe('App — 스텝 가드', () => {
     // 도크의 편집은 즉시 반영된다(별도 '적용' 버튼이 없다).
     fireEvent.drop(container.querySelector('.pool .pbody')!, dropPayload('AC_002', 'ODU1'))
 
-    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' })) // 편집 확정 시 미배정 실을 잡아낸다
     expect(screen.getByRole('alertdialog', { name: '배정되지 않은 실이 있습니다' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '확인' }))
     // 단계는 그대로(조합 매핑 버튼이 여전히 보인다)
@@ -92,8 +88,7 @@ describe('App — 스텝 가드', () => {
   it('실외기를 도면에 안 놓고 산출물로 가려 하면 몇 대 중 몇 대인지 알려준다', () => {
     render(<App />)
     progressToCombine()
-    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
-    fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' })) // 산출물 진입 시도 = 편집 확정(실외기 미배치라 차단)
+    fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' })) // 실외기 미배치라 편집 확정이 차단된다
 
     expect(screen.getByRole('alertdialog', { name: '실외기를 도면에 배치해야 합니다' })).toBeInTheDocument()
     expect(screen.getByText(/1대 중 0대/)).toBeInTheDocument()

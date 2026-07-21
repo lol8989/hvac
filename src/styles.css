@@ -26,7 +26,8 @@ button{font-family:inherit;cursor:pointer;}
 .workbar{height:48px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 16px;flex-shrink:0;}
 .wb-back{color:#666;font-size:13px;text-decoration:none;white-space:nowrap;flex-shrink:0;}
 .wb-back:hover{color:#111;}
-.wb-steps{flex:1;min-width:0;display:flex;justify-content:center;overflow:hidden;}
+/* ModeBar는 좌측 고정 — 우측 액션 폭이 도구마다 달라도 편집 인디케이터가 움직이지 않게. */
+.wb-steps{flex:1;min-width:0;display:flex;justify-content:flex-start;overflow:hidden;}
 .wb-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
 
 /* 오버플로(⋯) 메뉴 */
@@ -56,6 +57,21 @@ button{font-family:inherit;cursor:pointer;}
 .stepper .step:not(:disabled):hover .step-label{color:#111;}
 .stepper .step-line{width:26px;height:2px;background:#DDD;flex-shrink:0;}
 .stepper .step-line.on{background:#888;}
+/* 2페이즈 모드바 — [편집: 도구 3개 자유전환] → [산출물]. */
+.modebar{display:flex;align-items:center;justify-content:center;gap:10px;}
+.mb-phase{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:3px 8px;}
+.mb-edit.active{border-color:var(--dark);background:#fafafa;}
+.mb-plabel{font-size:12px;font-weight:700;color:#555;}
+.mb-edit.active .mb-plabel{color:#111;}
+.mb-tools{display:flex;gap:4px;}
+/* font-weight를 활성/비활성 동일하게 유지 — 굵기 변화로 pill 폭이 흔들리지 않게(정렬 안정). */
+.mb-tool{background:transparent;border:1px solid transparent;border-radius:6px;padding:3px 9px;font-size:13px;font-weight:600;color:#777;cursor:pointer;white-space:nowrap;}
+.mb-tool:hover{color:#111;background:#f0f0f0;}
+.mb-tool.on{background:var(--dark);border-color:var(--dark);color:#fff;}
+.mb-sep{color:#bbb;font-size:14px;}
+.mb-output{border:1px solid var(--line);border-radius:8px;padding:5px 12px;font-size:13px;color:#777;background:#fff;cursor:pointer;font-weight:700;white-space:nowrap;}
+.mb-output:hover{color:#111;border-color:#999;}
+.mb-output.active{background:#15803d;border-color:#15803d;color:#fff;}
 
 
 

@@ -123,7 +123,7 @@ describe('App — 실 병합', () => {
   it('실내기 배치 단계가 아니면 M은 안내만 한다', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
-    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' })) // → 실외기 선정·조합
+    fireEvent.click(screen.getByRole('button', { name: '실외기 선정·조합' })) // → 실외기 선정·조합
     enterMerge()
     expect(screen.getByText(/실내기 배치 단계에서만/)).toBeInTheDocument()
   })

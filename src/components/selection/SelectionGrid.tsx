@@ -21,7 +21,6 @@ export default function SelectionGrid({ table, ...rowProps }: SelectionGridProps
     <div className="selgrid-wrap">
       <div className="selgrid-title">
         장비선정표 검토
-        <span className="hint">셀을 수정하면 하류 값이 재계산됩니다 · 수정 셀은 AI 재선정에도 보존</span>
       </div>
       <table className="selgrid">
         <thead>

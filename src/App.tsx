@@ -24,8 +24,7 @@ import PanelShell from './components/generation/PanelShell'
 import OutdoorPanel from './components/generation/panels/OutdoorPanel'
 import OutputPanel from './components/generation/panels/OutputPanel'
 import type { FacilityType } from './domain/shared/unitLoadTable'
-import { prevStep, nextStep, isFirstStep, isLastStep, stepDef } from './presentation/generation/steps'
-import { guardAdvance, guardRegress, guardDestructive } from './domain/generation/StepGuard'
+import { guardAdvance, guardDestructive } from './domain/generation/StepGuard'
 import type { StepId, GuardContext, GuardVerdict } from './domain/generation/StepGuard'
 import { InMemoryPlanRepository } from './infrastructure/generation/InMemoryPlanRepository'
 import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemoryOutdoorModelCatalog'
@@ -267,7 +266,8 @@ export default function App({
   const viewerRef = useRef<ViewerHandle>(null) // 'AI 실내기 배치' 명령용
 
   // 생성 파이프라인 진행 단계(상태머신) + 목업 단계 플래그.
-  const [step, setStep] = useState<StepId>('place') // 실은 이미 검출됨 — 첫 스텝은 실내기 배치
+  const [step, setStep] = useState<StepId>('place') // 편집 도구(실내기/실외기 선정·조합/실외기 배치) 또는 'output'(산출물)
+  const [editReturn, setEditReturn] = useState<StepId>('outdoor') // 편집 재개 시 돌아갈 편집 도구(확정 직전 도구)
   const [generated, setGenerated] = useState(false)
 
   // 실제 도면: Python(ezdxf)로 전처리한 딥줌 타일 피라미드. 좌표계 정합의 토대.
@@ -1080,11 +1080,22 @@ export default function App({
     }), '실 크기 조정')
   }
 
-  const doPlace = () => { aiPlace() } // 배치만(단계 유지) → 이동·회전으로 조정 후 다음 단계로
-  // 전진: 가드를 통과해야 넘어간다. 막히면 왜 못 가는지 팝업이 말한다.
-  const advance = (to: StepId) => runGuarded(guardAdvance(step, guardContext()), () => setStep(to))
-  // 후진: 하류를 무효로 만들 수 있으면 확인을 받는다.
-  const regress = (to: StepId) => runGuarded(guardRegress(step, to, guardContext()), () => setStep(to), '돌아가기')
+  const doPlace = () => { aiPlace() } // 배치만 → 이동·회전으로 조정. 편집 도구는 순서 강제 없이 자유롭게 오간다.
+
+  // 편집 확정: 세 편집 단계의 전제를 한 번에 검사한다(place→combine→outdoor 순). BLOCK이면 막고,
+  // CONFIRM이면 확인 후 산출물로. 확정되면 편집이 잠긴다(Viewer 콜백 차단). '편집 재개'로 되열 수 있다.
+  const confirmEdit = () => {
+    const ctx = guardContext()
+    const verdicts = (['place', 'combine', 'outdoor'] as StepId[]).map((s) => guardAdvance(s, ctx))
+    const proceed = () => { setEditReturn(step); setStep('output') }
+    const firstBlock = verdicts.find((v) => v.kind === 'BLOCK')
+    if (firstBlock) { runGuarded(firstBlock, proceed); return } // BLOCK: 모달만 뜨고 진행하지 않는다
+    const firstConfirm = verdicts.find((v) => v.kind === 'CONFIRM')
+    runGuarded(firstConfirm ?? { kind: 'ALLOW' }, proceed) // CONFIRM이면 확인 후, 없으면 바로 진행
+  }
+  const resumeEdit = () => setStep(editReturn) // 편집 재개 — 잠금 해제하고 확정 직전 도구로 복귀
+  // 인디케이터/도구 선택: 편집 도구는 자유 전환, '산출물'은 편집 확정 게이트로.
+  const onPickStep = (to: StepId) => { if (to === 'output') confirmEdit(); else setStep(to) }
 
   const doGenerate = () =>
     runGuarded(guardAdvance('output', guardContext()), () => {
@@ -1199,46 +1210,31 @@ export default function App({
 
       <WorkBar
         current={step}
-        onGo={regress}
+        onPick={onPickStep}
         actions={
           <>
-            {confirmed ? (
-              <button className="btn sm primary" onClick={() => regress(prevStep(step))} title="편집을 다시 열어 실내기·실외기·조합을 수정합니다">← 편집 재개</button>
-            ) : (
-              <button className="btn sm" disabled={isFirstStep(step)} onClick={() => regress(prevStep(step))}>← 이전</button>
-            )}
+            {/* 산출물(확정) 상태: 편집 재개로 되열고, 배지로 잠금을 알린다. */}
+            {confirmed && <button className="btn sm primary" onClick={resumeEdit} title="편집을 다시 열어 실내기·실외기·조합을 수정합니다">← 편집 재개</button>}
             {confirmed && <span className="confirm-badge" title="산출물이 확정돼 편집이 잠겼습니다. '편집 재개'로 다시 열 수 있습니다.">🔒 확정됨 · 편집 잠금</span>}
-            {/* 되돌리기/다시하기(↶↷)는 캔버스 하단 도크에 있다 — 되돌리는 대상이 도면 편집이라 손이 거기 있다.
-                상단 바에는 스텝 진행 CTA만 남긴다(성격이 다른 버튼을 한 줄에 섞지 않는다). */}
-            {/* 시설군은 단위부하의 전제다. 배치 후 바꾸면 부하가 통째로 다시 계산된다 → 확인을 받는다.
-                실 검출을 스텝에서 뺐으므로 시설군 선택은 첫 스텝(실내기 배치)에 둔다. */}
+            {/* 편집 도구별 액션(자유 전환). 되돌리기(↶↷)는 캔버스 하단 도크에 있다. */}
             {step === 'place' && <ProjectSettings facility={facility} onChange={changeFacility} />}
-            {/* 천정고도 단위부하의 전제다(4m 이상=특수부하). 시설군과 같은 자리·같은 단계에 둔다. */}
             {step === 'place' && (
               <CeilingHeightsPanel floors={floorNames} heights={ceilingHeights} onChange={changeCeilingHeight} />
             )}
             {step === 'place' && <button className="btn sm primary" onClick={doPlace}>{placed ? '재배치' : '✦ AI 실내기 배치'}</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => runOutdoorSelection()}>✦ 실외기 재선정</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => setMapOpen(true)}>실외기 조합 매핑</button>}
-            {/* 선정표는 스텝이 아니라 새 창 — 도면을 가리지 않고 확인·조정(실시간 연동). */}
-            {step === 'combine' && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
-            {step === 'combine' && <button className="btn sm" onClick={openScheduleWindow}>⧉ 일람표 확인</button>}
-            {step === 'output' && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
-            {step === 'output' && <button className="btn sm" onClick={openScheduleWindow}>⧉ 일람표 확인</button>}
+            {/* 선정표·일람표는 스텝이 아니라 새 창 — 도면을 가리지 않고 확인·조정(실시간 연동). */}
+            {(step === 'combine' || step === 'output') && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
+            {(step === 'combine' || step === 'output') && <button className="btn sm" onClick={openScheduleWindow}>⧉ 일람표 확인</button>}
             {step === 'output' && <button className="btn sm primary" onClick={doGenerate}>{generated ? '재생성' : '장비선정표·도면 생성'}</button>}
-            {/* 이동 버튼은 '다음 단계 →' 하나뿐이다. 목적지 이름을 라벨에 쓰면(예: '실내기 배치 →')
-                같은 단계의 실행 버튼('✦ AI 실내기 배치')과 글자가 겹쳐, 누르면 배치가 실행된다고 오해한다.
-                목적지는 툴팁으로 알린다. 전제 미충족이어도 버튼은 살아 있다 — 누르면 가드가 이유를 말한다. */}
-            {!isLastStep(step) && (
+            {/* 편집 확정: 세 편집 전제를 일괄 검사 후 산출물로. 전제 미충족이어도 버튼은 살아 있다 — 누르면 가드가 이유를 말한다. */}
+            {!confirmed && (
               <button
                 className="btn sm primary"
-                onClick={() => advance(nextStep(step))}
-                title={
-                  nextStep(step) === 'output'
-                    ? '편집을 확정하고 산출물을 고정합니다. 편집이 잠기며, 편집 재개로 다시 열 수 있습니다.'
-                    : `${stepDef(nextStep(step)).label} 단계로 이동`
-                }
-              >{nextStep(step) === 'output' ? '✓ 편집 확정' : '다음 단계 →'}</button>
+                onClick={confirmEdit}
+                title="편집을 확정하고 산출물을 고정합니다. 편집이 잠기며, 편집 재개로 다시 열 수 있습니다."
+              >✓ 편집 확정</button>
             )}
             <OverflowMenu items={[{ label: '◉ 현재 화면 캡처', onClick: captureView }]} />
           </>

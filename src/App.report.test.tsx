@@ -42,7 +42,7 @@ describe('App — 조합 리포트 초기 상태 (NEXT #2·#3)', () => {
     // 실외기 단계 진입 시 선정 알고리즘이 돈다 → 전 실 배정(미배정 0).
     // 정격 37.6kW EHP → 46.4kW 절환형 1대(조합비 0.81). 냉방전용 39.2kW는 난방 요구로 배제된다.
     // 실외기 대수·모델은 상수가 아니라 이 계산의 결과다.
-    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
+    fireEvent.click(screen.getByRole('button', { name: '실외기 선정·조합' }))
     expect(reportText(container)).toContain('실내기 배정 6/6')
     expect(reportText(container)).toContain('미배정 0')
     expect(reportText(container)).toContain('실외기 1대')
@@ -59,7 +59,7 @@ describe('App — 조합 리포트 초기 상태 (NEXT #2·#3)', () => {
       // 시설군 변경 = 그 시설군의 단위부하로 실 재시딩(배치 전이라 확인 없이 즉시 반영).
       fireEvent.change(screen.getByLabelText('시설군'), { target: { value: facility } })
       fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
-      fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' }))
+      fireEvent.click(screen.getByRole('button', { name: '실외기 선정·조합' }))
       const t = reportText(container)
       unmount()
       const load = /총 부하 ([\d.]+) kW/.exec(t)![1]

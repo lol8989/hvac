@@ -50,7 +50,7 @@ describe('SelectionReviewWindow', () => {
 
     render(<SelectionReviewWindow />)
     act(() => main.postMessage(snapshot))
-    expect(screen.getByText('장비선정표 — 실시간 연동(메인 창 상태 기준)')).toBeInTheDocument()
+    expect(screen.getByText('장비선정표 — 실시간 연동')).toBeInTheDocument()
     expect(screen.getByDisplayValue('시청각실')).toBeInTheDocument()
 
     const nameInput = screen.getByDisplayValue('시청각실')

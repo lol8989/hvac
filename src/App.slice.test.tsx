@@ -62,7 +62,7 @@ describe('App — 실 자르기', () => {
   it('실내기 배치 단계가 아니면 V는 안내만 하고 모드로 들어가지 않는다', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
-    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' })) // → 실외기 선정·조합
+    fireEvent.click(screen.getByRole('button', { name: '실외기 선정·조합' })) // → 실외기 선정·조합
     enterSlice()
 
     expect(screen.getByText(/실내기 배치 단계에서만/)).toBeInTheDocument()
@@ -121,7 +121,7 @@ describe('App — 실 자르기', () => {
     enterSlice()
     expect(container.querySelector('.slicehud')).not.toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: '다음 단계 →' })) // place → combine
+    fireEvent.click(screen.getByRole('button', { name: '실외기 선정·조합' })) // place → combine
     expect(container.querySelector('.slicehud')).toBeNull() // 모드가 풀린다
 
     clickPlan(container, 149, 99)
