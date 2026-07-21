@@ -187,6 +187,9 @@ button{font-family:inherit;cursor:pointer;}
 .floorgroups{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,480px));gap:10px;justify-content:start;align-items:start;}
 .floorsec .odu{margin-bottom:0;}
 .odu .oh .oh-r{display:flex;align-items:center;gap:6px;font-weight:400;font-size:11px;}
+/* 실외기 카드 삭제 버튼(헤더 우측) — 컬러 헤더 위 흰색 휴지통. */
+.oh-del{display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;color:rgba(255,255,255,.65);cursor:pointer;padding:0 1px;}
+.oh-del:hover{color:#fff;}
 .rtable{padding:4px 8px 8px;}
 .rtable.dragover{background:#EDEDED;outline:2px dashed #888;outline-offset:-4px;}
 .rempty{color:#bbb;font-size:11px;padding:6px 4px;}

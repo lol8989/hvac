@@ -442,6 +442,15 @@ export default function App({
     }
   }
 
+  // 실외기 카드 삭제 — 연결된 실은 미배정 풀로 돌아간다(다시 선정하면 새 그룹으로 묶인다).
+  const removeGroup = (key: string) => {
+    const g = plan.groupByKey(key)
+    if (!g) return
+    uc.remove({ key })
+    sync('실외기 삭제')
+    flash(`${g.label}을(를) 삭제했습니다 — 연결 실 ${g.roomIds.length}곳이 미배정으로 돌아갔습니다`)
+  }
+
   // 실외기 모델 교체. 계열이 바뀌어 호환 안 되는 실내기는 미배정 풀로 반환.
   const replaceModel = (key: string, spec: OutdoorModelSpec) => {
     const g = plan.groupByKey(key)
@@ -1222,7 +1231,6 @@ export default function App({
               <CeilingHeightsPanel floors={floorNames} heights={ceilingHeights} onChange={changeCeilingHeight} />
             )}
             {step === 'place' && <button className="btn sm primary" onClick={doPlace}>{placed ? '재배치' : '✦ AI 실내기 배치'}</button>}
-            {step === 'combine' && <button className="btn sm" onClick={() => runOutdoorSelection()}>✦ 실외기 재선정</button>}
             {step === 'combine' && <button className="btn sm" onClick={() => setMapOpen(true)}>실외기 조합 매핑</button>}
             {/* 선정표·일람표는 스텝이 아니라 새 창 — 도면을 가리지 않고 확인·조정(실시간 연동). */}
             {(step === 'combine' || step === 'output') && <button className="btn sm" onClick={openSelectionWindow}>⧉ 선정표 확인</button>}
@@ -1335,6 +1343,7 @@ export default function App({
               onHeightChange={setDockH}
               onSelectRoom={toggleRoom}
               onSelectGroup={(ids) => setSelRooms(ids)}
+              onRemove={removeGroup}
               onEditKcal={overrideRoomCoolKcal}
               onMove={moveRoom}
               onReplace={replaceModel}

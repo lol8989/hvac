@@ -121,6 +121,7 @@ interface MappingDockProps {
   onHeightChange: (h: number) => void
   onSelectRoom: (id: string) => void
   onSelectGroup: (roomIds: string[]) => void // 실외기 헤더 클릭 → 그 그룹의 모든 실 하이라이팅
+  onRemove: (key: string) => void // 실외기 카드 삭제 (연결 실은 미배정으로)
   onEditKcal: (id: string, kcal: number) => void // 실 단위부하(kcal) 직접 수정 (부하kW는 자동 재계산)
   onMove: (id: string, to: string) => boolean // to: 그룹 key | 'pool'
   onReplace: (key: string, spec: OutdoorModelSpec) => void
@@ -129,7 +130,7 @@ interface MappingDockProps {
 
 export default function MappingDock({
   catalog, floors, pool, roomTotal, selectedRooms, height, onHeightChange,
-  onSelectRoom, onSelectGroup, onEditKcal, onMove, onReplace, onClose,
+  onSelectRoom, onSelectGroup, onRemove, onEditKcal, onMove, onReplace, onClose,
 }: MappingDockProps) {
   const [overKey, setOverKey] = useState<string | null>(null)
   const [warnKey, setWarnKey] = useState<string | null>(null)
@@ -235,6 +236,14 @@ export default function MappingDock({
                       <span className="oh-r">
                         {g.hp}HP · {g.coolKw}kW
                         {jt && <span className="badge warn">{jt}</span>}
+                        <button
+                          className="oh-del"
+                          title="이 실외기 삭제 — 연결된 실은 미배정으로 돌아갑니다"
+                          aria-label={`${g.label} 삭제`}
+                          onClick={(e) => { e.stopPropagation(); onRemove(g.key) }}
+                        >
+                          <TrashIcon />
+                        </button>
                       </span>
                     </div>
                     <div className="ometa">

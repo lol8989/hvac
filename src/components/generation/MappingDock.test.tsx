@@ -39,6 +39,7 @@ const setup = (props: Partial<React.ComponentProps<typeof MappingDock>> = {}) =>
       onHeightChange={props.onHeightChange ?? vi.fn()}
       onSelectRoom={props.onSelectRoom ?? vi.fn()}
       onSelectGroup={props.onSelectGroup ?? vi.fn()}
+      onRemove={props.onRemove ?? vi.fn()}
       onEditKcal={props.onEditKcal ?? vi.fn()}
       onMove={props.onMove ?? vi.fn(() => true)}
       onReplace={props.onReplace ?? vi.fn()}
@@ -100,6 +101,15 @@ describe('MappingDock — 단위부하 직접 수정 / 실외기 클릭 하이�
     setup({ onSelectGroup })
     ;(card('실외기-1').querySelector('.oh') as HTMLElement).click()
     expect(onSelectGroup).toHaveBeenCalledWith(['AC_005', 'AC_004'])
+  })
+
+  it('카드 삭제 버튼을 누르면 그 그룹 key로 onRemove를 부르고, 헤더 선택으로 번지지 않는다', () => {
+    const onRemove = vi.fn()
+    const onSelectGroup = vi.fn()
+    setup({ onRemove, onSelectGroup })
+    ;(screen.getByLabelText('실외기-1 삭제') as HTMLElement).click()
+    expect(onRemove).toHaveBeenCalledWith('ODU1')
+    expect(onSelectGroup).not.toHaveBeenCalled()
   })
 })
 
