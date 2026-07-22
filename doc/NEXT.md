@@ -17,9 +17,11 @@
   6파일 중복 제거. (SelectionTable 비율 `*1000`은 도메인 sensitive라 미변경)
 - [x] **`SelectionTable` 실외기 셀 중복** (`c95e6c8`) → `buildOutdoorCell(spec, groupCoolWSum)` 추출.
 
-**Phase B — 인프라:**
-- [ ] **`SqliteEquipmentAdminRepository`(459) 4책임 분리** — product / combo-policy / compat-matrix 리포지토리로
-  (테이블·액터가 다름, 주석 배너가 이미 seam 표시). status-UPDATE SQL 중복(L179-189 vs 222-234) → `applyStatus`.
+**Phase B — 인프라 (완료 2026-07-22):**
+- [x] **`SqliteEquipmentAdminRepository`(459) 4책임 분리** — `SqliteTx`(공유 트랜잭션·영속·타임스탬프) +
+  `SqliteProductRepository`(읽기·쓰기·게시·업로드) + `SqliteComboPolicyRepository` + `SqliteCompatMatrixRepository`,
+  본체는 조합·위임(생성자·포트 동일). status-UPDATE SQL 중복 → `applyStatus` 하나로(P2 dedup). 통합 포트 그대로.
+  admin 테스트 81 무변경 통과 + 브라우저 3뷰(목록·조합비·호환표) 런타임 검증·콘솔 0. tsc·lint 클린·1233 그린.
 
 **Phase C — 컴포넌트 공통화:**
 - [ ] **`useToast()` + `usePagedFilter()`** — 관리자 3페이지(Equipment/ComboPolicy/CompatMatrix)의 토스트·검색·
