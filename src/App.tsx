@@ -13,13 +13,11 @@ import ModelPanel from './components/ModelPanel'
 import MappingDock from './components/generation/MappingDock'
 import { buildDockView } from './presentation/generation/dockView'
 import { roomColorMap } from './presentation/generation/groupColors'
-import { planConfirmFlow } from './presentation/generation/confirmEditFlow'
 import { usePersistentPanel } from './presentation/generation/usePersistentPanel'
 import { useUndoRedoShortcuts } from './presentation/generation/useUndoRedoShortcuts'
 import ConfirmModal from './components/ConfirmModal'
 import ProjectSettings from './components/steps/ProjectSettings'
 import CeilingHeightsPanel from './components/steps/CeilingHeights'
-import { applyCeilingHeights } from './domain/generation/ceilingHeight'
 import GuardModal from './components/generation/GuardModal'
 import WorkBar from './components/generation/WorkBar'
 import StatusBar from './components/generation/StatusBar'
@@ -28,8 +26,10 @@ import PanelShell from './components/generation/PanelShell'
 import OutdoorPanel from './components/generation/panels/OutdoorPanel'
 import OutputPanel from './components/generation/panels/OutputPanel'
 import type { FacilityType } from './domain/shared/unitLoadTable'
-import { guardAdvance, guardDestructive } from './domain/generation/StepGuard'
-import type { StepId, GuardContext, GuardVerdict } from './domain/generation/StepGuard'
+import { guardDestructive } from './domain/generation/StepGuard'
+import type { StepId } from './domain/generation/StepGuard'
+import { buildGuardContext } from './presentation/generation/guardContext'
+import { useGenerationSteps } from './presentation/generation/useGenerationSteps'
 import { InMemoryPlanRepository } from './infrastructure/generation/InMemoryPlanRepository'
 import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemoryOutdoorModelCatalog'
 import { makeReassignRoom } from './application/generation/ReassignRoom'
@@ -235,8 +235,6 @@ export default function App({
   // 우측 패널 접힘/폭은 localStorage에 유지(새로고침 후에도 복원).
   const { open: panelOpen, setOpen: setPanelOpen, width: panelW, setWidth: setPanelW } = usePersistentPanel()
   // 실외기 심볼 좌표(그룹 key → 좌표). 도면에 놓였는지 여부가 곧 '배치 완료' 여부다.
-  // 스텝 가드 팝업(차단/확인). null = 닫힘.
-  const [guard, setGuard] = useState<{ verdict: Extract<GuardVerdict, { kind: 'BLOCK' } | { kind: 'CONFIRM' }>; proceed: () => void; confirmLabel?: string; confirms?: Extract<GuardVerdict, { kind: 'CONFIRM' }>[] } | null>(null)
   const [mapOpen, setMapOpen] = useState(false)
   const [dockH, setDockH] = useState(300) // 조합 매핑 도크 높이(드래그로 조절)
   const [layers, setLayers] = useState<LayerVisibility>(ALL_LAYERS_ON) // 레이어별 표시 토글 → 뷰어
@@ -244,10 +242,8 @@ export default function App({
   const [toast, setToast] = useState('')
   const viewerRef = useRef<ViewerHandle>(null) // 'AI 실내기 배치' 명령용
 
-  // 생성 파이프라인 진행 단계(상태머신) + 목업 단계 플래그.
+  // 생성 파이프라인 진행 단계(상태머신). editReturn·generated·guard 모달은 useGenerationSteps가 소유한다.
   const [step, setStep] = useState<StepId>('place') // 편집 도구(실내기/실외기 선정·조합/실외기 배치) 또는 'output'(산출물)
-  const [editReturn, setEditReturn] = useState<StepId>('outdoor') // 편집 재개 시 돌아갈 편집 도구(확정 직전 도구)
-  const [generated, setGenerated] = useState(false)
   // 사용자가 실외기를 삭제해 그룹을 비웠으면 자동 선정을 억제한다(그룹 0 → 재선정 방지).
   // 실내기를 재배치하면 새 시작이라 해제한다.
   const suppressAutoSelectRef = useRef(false)
@@ -575,27 +571,21 @@ export default function App({
     return checkClearances(placed).map((v) => v.message)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planDims, outdoorPositions, plan])
-  const guardContext = (): GuardContext => ({
-    roomCount: Object.keys(domainRooms).length,
-    placedRoomCount: Object.keys(placements).length,
-    roomsWithoutIndoor: Object.keys(domainRooms).filter((id) => !placements[id]).map((id) => domainRooms[id].name),
-    unassignedRoomCount: pool.length,
-    activeGroupCount: activeGroups.length,
-    emptyGroupCount: groups.length - activeGroups.length,
-    overloadedGroups: activeGroups.filter((g) => g.judgement === 'OVERLOADED').map((g) => g.label),
-    groupsWithoutPosition: activeGroups.filter((g) => !outdoorPositions[g.key]).map((g) => g.label),
-    clearanceViolations,
-    // 선정표 행 = 실. BOM만 있고 행이 없으면 산출물이 빈 표가 된다.
-    selectionRowCount: selectionTable.bom.indoor.length,
+  // 스텝 가드 문맥(순수 조립) — 현재 상태를 세어 도메인 가드에 넘길 요약을 만든다(무엇을 세는가만).
+  const guardCtx = buildGuardContext({
+    domainRooms, placements, pool, groups, activeGroups, outdoorPositions,
+    clearanceViolations, selectionRowCount: selectionTable.bom.indoor.length,
   })
 
-  // 판정을 실행한다. ALLOW면 즉시 진행, BLOCK/CONFIRM이면 팝업을 띄운다.
-  const runGuarded = (verdict: GuardVerdict, proceed: () => void, confirmLabel?: string) => {
-    if (verdict.kind === 'ALLOW') { proceed(); return }
-    setGuard({ verdict, proceed, confirmLabel })
-  }
+  // 스텝 전환 + 가드/확인 모달 + 파괴적 편집(시설군·천정고)을 한 훅으로 묶는다(§5.8).
+  // step은 App이 소유(화면 곳곳에서 가드 문맥보다 먼저 읽히는 뷰 상태) — 훅은 전환 로직만 담당한다.
+  const {
+    generated, confirmed, guard, runGuarded, acceptGuard, dismissGuard,
+    onPickStep, confirmEdit, resumeEdit, doGenerate, changeFacility, changeCeilingHeight,
+  } = useGenerationSteps({
+    step, setStep, guardCtx, edit, setSelRooms, flash, reseedRooms: seedDetectedRooms,
+  })
 
-  // 단계 전환 핸들러(파이프라인 진행).
   const placed = Object.keys(placements).length > 0
 
   // ── 실 자르기(V 도구) ──
@@ -650,7 +640,7 @@ export default function App({
   // 단계를 넘긴 뒤에도 모드가 남아 클릭이 실을 잘랐다(적대적 QA). 실행 직전에 단계를 다시 확인한다.
   const doSlice = (roomId: string, line: SliceLine) => {
     if (step !== 'place') { flash('실 자르기는 실내기 배치 단계에서만 가능합니다'); return }
-    runGuarded(guardDestructive('ROOM_SLICE', guardContext()), () => applySlice(roomId, line), '자르기')
+    runGuarded(guardDestructive('ROOM_SLICE', guardCtx), () => applySlice(roomId, line), '자르기')
   }
 
   // ── 실 병합(M 도구) ──
@@ -709,7 +699,7 @@ export default function App({
 
   const doMerge = (aId: string, bId: string) => {
     if (step !== 'place') { flash('실 병합은 실내기 배치 단계에서만 가능합니다'); return }
-    runGuarded(guardDestructive('ROOM_MERGE', guardContext()), () => applyMerge(aId, bId), '병합')
+    runGuarded(guardDestructive('ROOM_MERGE', guardCtx), () => applyMerge(aId, bId), '병합')
   }
 
   // 두 실이 붙어 있는가 — 뷰어의 프리뷰가 물어본다(판정은 도메인 기하가 한다).
@@ -744,57 +734,6 @@ export default function App({
   }
 
   const doPlace = () => { aiPlace() } // 배치만 → 이동·회전으로 조정. 편집 도구는 순서 강제 없이 자유롭게 오간다.
-
-  // 편집 확정: 세 편집 단계의 전제를 한 번에 검사한다(place→combine→outdoor 순). BLOCK이면 막고,
-  // CONFIRM이면 확인 후 산출물로. 확정되면 편집이 잠긴다(Viewer 콜백 차단). '편집 재개'로 되열 수 있다.
-  const confirmEdit = () => {
-    const ctx = guardContext()
-    const verdicts = (['place', 'combine', 'outdoor'] as StepId[]).map((s) => guardAdvance(s, ctx))
-    const proceed = () => { setEditReturn(step); setStep('output') }
-    const flow = planConfirmFlow(verdicts)
-    if (flow.kind === 'block') { runGuarded(flow.verdict, proceed); return } // BLOCK: 모달만 뜨고 진행하지 않는다
-    if (flow.kind === 'proceed') { proceed(); return }
-    // CONFIRM: 1건이면 그대로, 2건 이상이면 한 모달에 모아 안내한다(첫 개만 보여주고 넘어가지 않는다).
-    setGuard({ verdict: flow.confirms[0], proceed, confirms: flow.confirms })
-  }
-  const resumeEdit = () => setStep(editReturn) // 편집 재개 — 잠금 해제하고 확정 직전 도구로 복귀
-  // 인디케이터/도구 선택: 편집 도구는 자유 전환, '산출물'은 편집 확정 게이트로.
-  const onPickStep = (to: StepId) => { if (to === 'output') confirmEdit(); else setStep(to) }
-
-  const doGenerate = () =>
-    runGuarded(guardAdvance('output', guardContext()), () => {
-      setGenerated(true)
-      flash('장비선정표·장비일람표·도면 산출물을 생성했습니다')
-    })
-
-  // 시설군 변경: 단위부하의 전제가 바뀐다 → 그 시설군으로 실을 다시 시딩하고 배치·조합은 초기화한다.
-  // 배치가 있으면 무엇을 잃는지 확인을 받는다. (실내기 배치 단계에 그대로 머문다)
-  const changeFacility = (f: FacilityType) =>
-    runGuarded(guardDestructive('FACILITY_CHANGE', guardContext()), () => {
-      // 재시딩은 부하강도를 STANDARD로 되돌린다 → 이미 입력된 천정고를 다시 얹어야
-      // "4m 층인데 표준부하"라는 어긋난 상태가 안 남는다.
-      edit((w) => ({
-        ...w,
-        facility: f,
-        ...(({ rooms, geom }) => ({ rooms: applyCeilingHeights(rooms, w.ceilingHeights), geom }))(seedDetectedRooms(f)),
-        placements: {},
-        outdoorPositions: {},
-      }), '시설군 변경')
-      setSelRooms([])
-    }, '시설군 변경')
-
-
-  // 천정고 변경: 4m 이상이면 특수부하 → 그 층 실들의 단위부하가 올라간다.
-  // 시설군 변경과 달리 실을 재시딩하지 않는다(형상·실명·사용자 수정은 그대로) —
-  // 바뀌는 것은 부하강도뿐이고, 실내기 선정 변동은 그 부하를 타고 따라온다.
-  const changeCeilingHeight = (floor: string, heightM: number) =>
-    runGuarded(guardDestructive('CEILING_HEIGHT_CHANGE', guardContext()), () => {
-      edit((w) => {
-        const ceilingHeights = { ...w.ceilingHeights, [floor]: heightM }
-        return { ...w, ceilingHeights, rooms: applyCeilingHeights(w.rooms, ceilingHeights) }
-      }, '천정고 변경')
-      flash(`${floor} 천정고를 ${heightM}m로 바꿨습니다. 실내기를 다시 배치하면 새 부하가 반영됩니다.`)
-    }, '천정고 변경')
 
   // ── 되돌리기 / 다시하기 ──
   // 편집(World)만 되돌린다. 선택·단계 같은 '보기' 상태는 히스토리에 없다.
@@ -831,10 +770,7 @@ export default function App({
 
   // 우측 패널: 모델 선택이 필요한 단계(실내기 배치·실외기 조합)만 ModelPanel, 나머지는 컨텍스트 패널.
   const showPanel = step === 'place' || step === 'combine'
-
-  // 편집 확정: 산출물 단계 진입 = 확정. 확정되면 편집을 잠가 산출물을 고정한다.
-  // '편집 재개'(이전 단계로 돌아가기)로 다시 편집할 수 있다(버전/롤백은 두지 않는다 — 주인님 결정 2026-07-21).
-  const confirmed = step === 'output'
+  // confirmed(산출물 확정 = 편집 잠금)는 useGenerationSteps가 step에서 파생한다.
 
   return (
     <div className="app">
@@ -1060,8 +996,8 @@ export default function App({
           verdict={guard.verdict}
           confirmLabel={guard.confirmLabel}
           confirms={guard.confirms}
-          onProceed={() => { const p = guard.proceed; setGuard(null); p() }}
-          onClose={() => setGuard(null)}
+          onProceed={acceptGuard}
+          onClose={dismissGuard}
         />
       )}
 
