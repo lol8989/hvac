@@ -103,6 +103,29 @@ describe('buildDrawingSvg (도면 좌표 → 독립 SVG 도면)', () => {
     expect(svg).toContain('실외기-1')
   })
 
+  it('배정된 실은 그룹 색(tint 채움·head 테두리)으로, 미배정 실은 무채색으로 그린다', () => {
+    const svg = buildDrawingSvg(
+      input({ roomColors: { AC_001: { head: '#2f5fae', tint: '#eef3fb' } } }),
+    )
+    // 배정 실(AC_001): tint 채움 + head 테두리
+    expect(svg).toContain('fill="#eef3fb"')
+    expect(svg).toContain('stroke="#2f5fae"')
+    // 미배정 실(AC_002): 여전히 무채색(fill none)
+    expect(svg).toContain('fill="none" stroke="#333333"')
+  })
+
+  it('실내기 모델 배지를 그룹 색(head)으로 칠한다', () => {
+    const svg = buildDrawingSvg(
+      input({
+        indoorSymbols: [{ id: 'AC_001#1', roomId: 'AC_001', x: 60, y: 60, rot: 0 }],
+        indoorModelByRoom: { AC_001: 'R-W0901A2U' },
+        roomColors: { AC_001: { head: '#1f8a80', tint: '#e8f5f3' } },
+      }),
+    )
+    expect(svg).toContain('fill="#1f8a80"') // 배지 pill
+    expect(svg).toContain('R-W0901A2U')
+  })
+
   it('XML 특수문자를 이스케이프한다', () => {
     const rooms = { AC_001: { ...room('회의실<A&B>', 0, 0) } }
     const svg = buildDrawingSvg(input({ rooms }))

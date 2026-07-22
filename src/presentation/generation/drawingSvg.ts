@@ -9,6 +9,7 @@ import type { Room } from '../../data'
 import type { UnitSym } from '../../components/viewer/geometry'
 import { Polygon } from '../../domain/shared/Polygon'
 import type { Pt } from '../../domain/shared/Polygon'
+import type { GroupColor } from './groupColors'
 
 export interface OutdoorGroupSummary {
   key: string
@@ -24,6 +25,7 @@ export interface DrawingInput {
   indoorModelByRoom: Record<string, string> // 실별 적용 실내기 모델명(라벨)
   groups: readonly OutdoorGroupSummary[]
   outdoorPositions: Record<string, { x: number; y: number }> // 그룹 key → 도면 좌표. 없으면 미배치
+  roomColors?: Record<string, GroupColor> // 실 id → 실외기 그룹 색(화면·도크와 동일). 미배정 실은 없음 → 무채색
 }
 
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -40,25 +42,34 @@ const PAD = 24
 const ODU_W = 120
 const ODU_H = 44
 
-export const buildDrawingSvg = ({ rooms, indoorSymbols, indoorModelByRoom, groups, outdoorPositions }: DrawingInput): string => {
+export const buildDrawingSvg = ({ rooms, indoorSymbols, indoorModelByRoom, groups, outdoorPositions, roomColors }: DrawingInput): string => {
   const rs = Object.entries(rooms)
 
   // 실은 폴리곤이다 — 사각형은 정점 4개짜리 특수 케이스일 뿐이고, V 도구로 자르면 사선이 생긴다.
-  // 화면에서 자른 모양이 그대로 산출 도면에 실려야 한다.
+  // 화면에서 자른 모양이 그대로 산출 도면에 실려야 한다. 배정된 실은 실외기 그룹 색(화면과 동일).
   const roomEls = rs.map(([id, r]) => {
     const pts = r.points.map((p) => `${round(p.x)},${round(p.y)}`).join(' ')
     const label = labelAnchor(r.points)
+    const color = roomColors?.[id]
+    const poly = color
+      ? `<polygon points="${pts}" fill="${color.tint}" fill-opacity="0.7" stroke="${color.head}" stroke-width="1.5"/>`
+      : `<polygon points="${pts}" fill="none" stroke="#333333"/>`
     return (
-      `<g><polygon points="${pts}" fill="none" stroke="#333333"/>` +
+      `<g>${poly}` +
       `<text x="${round(label.x)}" y="${round(label.y)}" font-size="10" text-anchor="middle" fill="#000000">${esc(id)} ${esc(r.name)} (${round(r.area)}㎡)</text></g>`
     )
   })
 
   // 실내기: 놓인 좌표·회전 그대로. 라벨은 회전 밖(항상 수평).
+  // 모델 배지는 실외기 그룹 색(head)으로 칠해 "이 실내기가 어느 실외기 소속인지" 표시(화면과 동일).
   const indoorEls = indoorSymbols.map((s) => {
     const model = s.roomId ? indoorModelByRoom[s.roomId] : undefined
+    const color = s.roomId ? roomColors?.[s.roomId] : undefined
     const label = model
-      ? `<text x="0" y="28" font-size="9" text-anchor="middle" fill="#333333">${esc(model)}</text>`
+      ? color
+        ? `<g><rect x="-28" y="20" width="56" height="12" rx="2" fill="${color.head}"/>` +
+          `<text x="0" y="29" font-size="7.5" text-anchor="middle" fill="#ffffff">${esc(model)}</text></g>`
+        : `<text x="0" y="28" font-size="9" text-anchor="middle" fill="#333333">${esc(model)}</text>`
       : ''
     return (
       `<g transform="translate(${s.x}, ${s.y})">` +

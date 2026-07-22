@@ -32,8 +32,10 @@
     선택 시 head 두꺼운 링) + ACUnit(실내기 모델 배지를 head색으로). 미배정 실은 무채색.
   - 브라우저 실검증: 2그룹(거실·로비=블루 #2f5fae / 나머지 4실=틸 #1f8a80) → 도면 방·배지 색이 도크 탭색과 일치.
     zone 테두리 색 == 도크 `--gcolor`. tsc·1217 그린·콘솔 에러 0.
-  - [ ] (후속 판단) 산출 SVG(`buildDrawingSvg`, 다운로드 도면.svg)에도 색을 넣을지 — 지금은 인터랙티브 뷰어만.
-    인쇄/납품 도면은 무채색이 나을 수도 있어 주인님 결정 필요.
+  - [x] **산출 SVG(도면.svg)에도 같은 색** (2026-07-22, 주인님 결정: 같은색) — `buildDrawingSvg`에 `roomColors` 추가.
+    배정 실=tint 채움+head 테두리, 실내기 모델 배지=head, 미배정 실=무채색. App이 `roomColorMap(dockFloors)`(비게이트)를
+    넘긴다. drawingSvg 단위테스트 +2. 브라우저 실검증: 생성한 도면.svg의 polygon 테두리 #2f5fae·#1f8a80, 채움
+    #eef3fb·#e8f5f3, 배지 #2f5fae·#1f8a80 — **도크 탭·화면·산출 SVG 3곳 일치**. 콘솔 에러 0.
 - [x] **죽은 코드 정리** (2026-07-22) — `Stepper.tsx` 삭제(ModeBar 대체, import 0), styles.css `.stepper`류 CSS 11줄 제거,
       `selection.css`의 고아 `.selgrid-title .hint` 제거(힌트 삭제로 미사용). tsc·1211 그린. `poolhint`·`stepIndex`는 사용 중이라 존치.
 - [ ] (검토 필요) 편집 확정 시 CONFIRM이 여러 개면 첫 개만 보여주고 진행 — 필요하면 합쳐서 안내.

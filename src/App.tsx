@@ -840,6 +840,7 @@ export default function App({
       indoorModelByRoom: indoorByRoom,
       groups,
       outdoorPositions,
+      roomColors: roomColorMap(dockFloors), // 화면·도크와 같은 그룹 색을 산출 도면에도
     })
     downloadText('도면.svg', svg, 'image/svg+xml')
     flash('도면.svg를 생성했습니다')
