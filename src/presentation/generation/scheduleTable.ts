@@ -11,6 +11,7 @@
 import type { OutdoorModelSpec } from '../../application/generation/ports'
 import type { IndoorModel } from '../../domain/generation/IndoorModel'
 import type { SpecData } from '../../domain/equipment/SpecLookup'
+import { kwToW } from '../../domain/shared/capacityUnits' // kW→W(정수)
 import { specCell, specValue, SPEC_KEYS } from '../../domain/equipment/SpecLookup'
 import { DASH, breaker, dimensions, firstNumber, firstOf, maxOf, powerSupply, toKw, wireSpec } from '../equipment/scheduleFormat'
 
@@ -123,7 +124,7 @@ export const OUTDOOR_GHP_COLUMNS = [
 // ── 셀 채우기 ──
 
 const num = (v: number | null | undefined): string => (v == null ? DASH : String(v))
-const kwToW = (kw: number | null): string => (kw == null ? DASH : String(Math.round(kw * 1000)))
+const kwToWCell = (kw: number | null): string => (kw == null ? DASH : String(kwToW(kw)))
 const get = (spec: SpecData | undefined, keys: readonly string[]): string | null => (spec ? specValue(spec, keys) : null)
 // 소비전력은 단위(W/kW)가 계열마다 다르다 → 셀째로 꺼내 환산한다.
 const getKw = (spec: SpecData | undefined, keys: readonly string[]): string => toKw(spec ? specCell(spec, keys) : null)
@@ -165,8 +166,8 @@ function outdoorRow(bom: { hp: number; model: string; quantity: number }, o: Odu
     o.category,
     o.model,
     String(bom.quantity),
-    kwToW(o.capacityKw),
-    kwToW(o.heatKw),
+    kwToWCell(o.capacityKw),
+    kwToWCell(o.heatKw),
     powerSupply(get(spec, SPEC_KEYS.전원)),
     getKw(spec, SPEC_KEYS.소비전력_냉방),
     getKw(spec, SPEC_KEYS.소비전력_난방),

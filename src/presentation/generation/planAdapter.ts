@@ -4,6 +4,7 @@
 // 목적은 "동작 보존" — 컴포넌트가 기대하는 레거시 뷰 형태를 그대로 만든다.
 
 import { AssignmentPlan } from '../../domain/generation/AssignmentPlan'
+import { wToKw } from '../../domain/shared/capacityUnits'
 import { OutdoorGroup } from '../../domain/generation/OutdoorGroup'
 import type { GroupMeta } from '../../domain/generation/OutdoorGroup'
 import { OutdoorUnit } from '../../domain/generation/OutdoorUnit'
@@ -48,7 +49,7 @@ export const indoorUnitsFor = (
     id: indoorUnitId(room.id, i + 1),
     roomId: room.id,
     roomName: room.name,
-    coolKw: model.coolW / 1000,
+    coolKw: wToKw(model.coolW),
     sys: model.energySource,
     subcategory: model.type,
     series: model.series,

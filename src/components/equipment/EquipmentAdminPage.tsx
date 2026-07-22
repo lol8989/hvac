@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { BulkStatusResult, EquipmentAdminRepository, ProductRow } from '../../application/equipment/adminPorts'
 import type { PublishStatus } from '../../domain/equipment/PublishStatus'
+import { roundKw } from '../../domain/shared/capacityUnits'
 import ProductFormModal from './ProductFormModal'
 import SpecSheetUploadModal from './SpecSheetUploadModal'
 import BulkActionBar from './BulkActionBar'
@@ -13,7 +14,7 @@ import { formatDateTime } from '../../presentation/formatDateTime'
 
 // 게시 상태 라벨(무채색 뱃지). 관리 목록은 전 상태를 노출한다.
 const STATUS_LABEL: Record<PublishStatus, string> = { DRAFT: '작성중', PUBLISHED: '게시', ARCHIVED: '단종' }
-const kw = (w: number | null) => (w == null ? '—' : (Math.round(w / 100) / 10).toFixed(1))
+const kw = (w: number | null) => (w == null ? '—' : roundKw(w).toFixed(1))
 const hp = (n: number | null) => (n == null ? '—' : String(n))
 
 // 냉방용량 환산으로 백필한 마력은 실측이 아니다 → 목록에서 구분해 표기한다.

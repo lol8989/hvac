@@ -7,6 +7,7 @@
 // 여기서는 그 표를 도크가 렌더할 최소 형태로 옮기기만 한다(계산은 도메인이 이미 했다).
 
 import type { SelectionTable, SelectionRow, ComboJudgement } from '../../domain/generation/SelectionTable.types'
+import { wToKw } from '../../domain/shared/capacityUnits'
 
 export interface DockRoomRow {
   roomId: string
@@ -42,7 +43,7 @@ const rowOf = (r: SelectionRow): DockRoomRow => ({
   name: r.roomName,
   areaM2: r.areaM2,
   coolKcal: r.unitLoad.coolKcal,
-  loadKw: r.requiredW.cool / 1000,
+  loadKw: wToKw(r.requiredW.cool),
   model: r.indoor?.model ?? null,
   qty: r.indoor?.quantity ?? 0,
 })

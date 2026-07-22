@@ -9,6 +9,7 @@
 // 값 '-' 또는 공란은 null(미상). 롱테일 스펙은 라벨 경로를 키로 전부 보존한다.
 
 import type { ParsedProduct, SpecCell } from '../../../domain/equipment/SpecImport'
+import { kwToW } from '../../../domain/shared/capacityUnits' // kW→W(정수)
 
 export type CellValue = string | number | boolean | Date | null
 export type SheetRow = readonly CellValue[]
@@ -111,9 +112,6 @@ function detectLayout(rows: readonly SheetRow[], scanRows = 8): Layout | null {
   }
   return best && best.unitCol >= 1 ? best : null
 }
-
-// kW → W(정수). 저장 왕복 시 부동소수 오차를 남기지 않는다.
-const kwToW = (kw: number): number => Math.round(kw * 1000)
 
 // 공백(비단절 공백 포함) 제거 후 숫자화. 실패는 null.
 function parseNum(s: string): number | null {

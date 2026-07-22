@@ -7,6 +7,7 @@
 import type { Database, SqlJsStatic } from 'sql.js'
 import type { EquipmentMaster } from '../../../domain/equipment/EquipmentMaster'
 import type { IndoorSpecFields, OutdoorSpecFields } from '../../../domain/equipment/MasterRecord'
+import { roundKw } from '../../../domain/shared/capacityUnits' // W(정수)→kW(0.1 반올림)
 import type { EnergySourceCode } from '../../../domain/shared/EnergySource'
 import { ComboRange } from '../../../domain/shared/ComboRange'
 import { COMBO_MAX_KEY, COMBO_MIN_KEY } from './settingsKeys'
@@ -23,9 +24,6 @@ export interface BytesStore {
   load(): Promise<Uint8Array | null>
   save(bytes: Uint8Array): Promise<void>
 }
-
-// W(정수) → kW(소수 1자리). 저장 왕복 부동소수 오차 방지.
-const wToKw = (w: number): number => Math.round(w / 100) / 10
 
 function readPublishedIndoor(db: Database): IndoorSpecFields[] {
   const rows = queryRows(
@@ -91,8 +89,8 @@ function readPublishedOutdoor(db: Database): OutdoorSpecFields[] {
       cat: String(r.subcategory_name),
       series: String(r.series_name),
       sys: r.energy_source as EnergySourceCode,
-      cool: wToKw(num(r.cooling_capacity_w)),
-      heatKw: r.heating_capacity_w == null ? null : wToKw(num(r.heating_capacity_w)),
+      cool: roundKw(num(r.cooling_capacity_w)),
+      heatKw: r.heating_capacity_w == null ? null : roundKw(num(r.heating_capacity_w)),
       hp: num(r.horsepower),
       maxConn: num(r.max_connections),
       efficiencyGradeId: numOrNull(r.efficiency_grade_id),
