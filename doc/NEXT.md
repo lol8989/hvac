@@ -5,10 +5,10 @@
 ## ⏭ 새 세션 이어가기 (2026-07-22 푸시 시점) — **여기부터 시작**
 
 > **상태:** `main` 브랜치. 작업트리 클린. 전체 테스트 **1257 그린**, tsc 클린.
-> App.tsx **1465 → 997줄** (Phase D 완료). Viewer.tsx **1076 → 1057줄** (Phase E 진행 중, 2단계 완료).
+> App.tsx **1465 → 997줄** (Phase D 완료). Viewer.tsx **1076 → 997줄** (Phase E 진행 중, 3단계 완료).
 > **#11 undo 토대 브라우저 검증 완료**(삭제→Ctrl+Z→Ctrl+Y, plan↔repo 동기 정확) — 이전 세션의 미검증 우려 해소.
 >
-> **다음 할 일 = Phase E 계속**(`usePanZoom`부터) (아래 백로그 참조). 이어지는 순서:
+> **다음 할 일 = Phase E 계속**(`useCassetteSelectionSync`부터) (아래 백로그 참조). 이어지는 순서:
 > 1. [x] **#8 `usePlanCommands`** (`fb37d9e`) — `runOutdoorSelection`(자동선정 이펙트)·`selectOutdoorForSelected`·
 >    `moveRoom`·`removeGroup`·`replaceModel`+`sync`. 중복 제거: 빈그룹정리→`cleanEmptyGroups()` /
 >    `selectOutdoorPlan`+catch→`trySelectOutdoor` / floor-lookup→`floorOf`. App 1326→1227줄.
@@ -85,8 +85,11 @@
 - [x] `useDraftCommit<T>`(`c3b5b3c`) — draft 3쌍(실내기·실외기·실형상) state+ref+수동동기 → `value·ref·set·clear`
   훅으로 통합. Viewer 1067→1057줄. tsc·1257 그린. 브라우저 실검증(콘솔 0): 삭제→Ctrl+Z→Ctrl+Y.
   **이때 #11 undo 토대 브라우저 검증도 완료**(37.2↔32.0kW·미배정 6↔5, plan↔repo 동기 정확).
-- [ ] `usePanZoom` → `useCassetteSelectionSync` → `useSliceMode`/`useMergeMode`
-  → 드래그 멀티플렉서(387-513) 분해 → `useViewerShortcuts`(정책/메커니즘 분리)
+- [x] `usePanZoom`(`adc6234`) — 뷰포트 변환(팬·줌·화면맞춤): FIT·clampW·view·svgW+3이펙트+toSvg·zoomBy·resetView.
+  팬 드래그는 멀티플렉서에 남김(setView만 전달). fit-reset을 렌더 감지 패턴으로(린트 해소). Viewer 1057→997줄.
+  브라우저 실검증(콘솔 0): 줌인·화면맞춤(100%).
+- [ ] `useCassetteSelectionSync` → `useSliceMode`/`useMergeMode`
+  → 드래그 멀티플렉서(~360-480) 분해(팬 branch·panRef 포함) → `useViewerShortcuts`(정책/메커니즘 분리)
   → 37 prop을 indoor/outdoor/slice/merge/viewport 클러스터로.
 
 **§5.7 결정 2건 (처리 완료 2026-07-22):**
