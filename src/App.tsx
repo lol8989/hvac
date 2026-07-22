@@ -467,50 +467,47 @@ export default function App({
   }
 
 
-  // '모델 적용' 클릭 → 유효성 검사 후 확인 팝업을 띄운다(일괄 적용 전 주의).
-  // 팝업의 확인 = applyModel 실행, 취소 = 아무 이벤트 없이 닫힘.
-  const requestApply = () => {
-    if (tab === 'in') {
-      const m = indoorCards[effIn]
-      if (!m) return
-      if (liveSelRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
-      const scope = liveSelRooms.length > 1 ? `${primary} 외 ${liveSelRooms.length - 1}실` : primary
-      setConfirmMsg(`실내기 ${m.mn}을(를) 선택한 ${scope}에 일괄 적용합니다. 계속하시겠습니까?`)
-      return
-    }
+  // '모델 적용' 클릭 → 유효성 검사 후 확인 팝업을 띄운다(일괄 적용 전 주의). 탭별로 나뉜다.
+  const requestApplyIndoor = () => {
+    const m = indoorCards[effIn]
+    if (!m) return
+    if (liveSelRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
+    const scope = liveSelRooms.length > 1 ? `${primary} 외 ${liveSelRooms.length - 1}실` : primary
+    setConfirmMsg(`실내기 ${m.mn}을(를) 선택한 ${scope}에 일괄 적용합니다. 계속하시겠습니까?`)
+  }
+  const requestApplyOutdoor = () => {
     const m = outdoorCards[effOut]
     if (!m) return
     const g = primary ? groupOfRoom(groups, primary) : null
     if (!g) { flash('선택한 실이 실외기 그룹에 배정되어 있지 않습니다'); return }
     setConfirmMsg(`${g.label}의 실외기 모델을 ${m.mn}(으)로 교체합니다. 계속하시겠습니까?`)
   }
+  const requestApply = () => (tab === 'in' ? requestApplyIndoor() : requestApplyOutdoor())
 
-  // 선택 모델을 선택 실에 적용(쓰기).
-  //  · 실내기: 선택된 모든 실에 모델을 배정(indoorByRoom) → 목록/헤더에 반영
-  //  · 실외기: 대표 실이 속한 그룹의 실외기를 실제 교체(도메인 유즈케이스 재사용)
-  const applyModel = () => {
-    if (tab === 'in') {
-      const m = indoorCards[effIn]
-      if (!m) return
-      if (liveSelRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
-      const model = indoorCatalog.byModel(m.mn)
-      if (!model) { flash('카탈로그에 없는 실내기 모델입니다'); return }
-      // 수동 적용 = 사용자 오버라이드(AI 재선정에도 보존). 대수는 기존 값 유지, 최초면 1.
-      editPlacements(`실내기 모델 적용(${m.mn})`, (prev) => {
-        const next = { ...prev }
-        liveSelRooms.forEach((id) => {
-          const sel = { modelCode: model.model, quantity: prev[id]?.effectiveSelection.quantity ?? 1 }
-          // 모델만 바뀌고 대수는 그대로 → 심볼 좌표도 그대로.
-          const positions = prev[id] ? [...prev[id].positions] : layoutFor(id, sel.quantity)
-          next[id] = (prev[id] ?? Placement.ai(id, sel, positions)).overrideSelection(sel, positions)
-        })
-        return next
+  // 선택 모델을 선택 실에 적용(쓰기). 팝업 확인 후 실행. 탭별로 나뉜다.
+  //  · 실내기: 선택된 모든 실에 모델을 배정 → 목록/헤더에 반영(수동 적용은 AI 재선정에도 보존되는 오버라이드).
+  const applyIndoorModel = () => {
+    const m = indoorCards[effIn]
+    if (!m) return
+    if (liveSelRooms.length === 0) { flash('적용할 실을 먼저 선택하세요'); return }
+    const model = indoorCatalog.byModel(m.mn)
+    if (!model) { flash('카탈로그에 없는 실내기 모델입니다'); return }
+    // 수동 적용 = 사용자 오버라이드(AI 재선정에도 보존). 대수는 기존 값 유지, 최초면 1.
+    editPlacements(`실내기 모델 적용(${m.mn})`, (prev) => {
+      const next = { ...prev }
+      liveSelRooms.forEach((id) => {
+        const sel = { modelCode: model.model, quantity: prev[id]?.effectiveSelection.quantity ?? 1 }
+        // 모델만 바뀌고 대수는 그대로 → 심볼 좌표도 그대로.
+        const positions = prev[id] ? [...prev[id].positions] : layoutFor(id, sel.quantity)
+        next[id] = (prev[id] ?? Placement.ai(id, sel, positions)).overrideSelection(sel, positions)
       })
-      const scope = liveSelRooms.length > 1 ? `${primary} 외 ${liveSelRooms.length - 1}실` : primary
-      flash(`실내기 ${m.mn}을(를) ${scope}에 적용했습니다`)
-      return
-    }
-    // 실외기 탭: 대표 실이 속한 그룹의 실외기 모델을 교체.
+      return next
+    })
+    const scope = liveSelRooms.length > 1 ? `${primary} 외 ${liveSelRooms.length - 1}실` : primary
+    flash(`실내기 ${m.mn}을(를) ${scope}에 적용했습니다`)
+  }
+  //  · 실외기: 대표 실이 속한 그룹의 실외기를 실제 교체(도메인 유즈케이스 재사용).
+  const applyOutdoorModel = () => {
     const m = outdoorCards[effOut]
     if (!m) return
     const g = primary ? groupOfRoom(groups, primary) : null
@@ -519,6 +516,7 @@ export default function App({
     if (!spec) { flash('카탈로그에 없는 실외기 모델입니다'); return }
     replaceModel(g.key, spec) // 유즈케이스가 계열 불일치 처리 + 자체 토스트
   }
+  const applyModel = () => (tab === 'in' ? applyIndoorModel() : applyOutdoorModel())
 
   // 'AI 실내기 배치' = 모델·대수 선정 + 좌표 생성. 도면 심볼은 그 결과를 그린다(별도 명령 없음).
   const aiPlace = () => {
