@@ -5,15 +5,16 @@
 ## ⏭ 새 세션 이어가기 (2026-07-22 푸시 시점) — **여기부터 시작**
 
 > **상태:** `main` 브랜치. 작업트리 클린. 전체 테스트 **1242 그린**, tsc 클린.
-> App.tsx **1465 → 1227줄**. 아래 '리팩터 백로그'의 **Phase D를 #9부터 이어간다**.
+> App.tsx **1465 → 1080줄**. 아래 '리팩터 백로그'의 **Phase D를 #10부터 이어간다**.
 >
-> **다음 할 일 = Phase D #9 `useIndoorPlacement` 추출** (아래 백로그 참조). 이어지는 순서:
+> **다음 할 일 = Phase D #10 `useGenerationSteps` 추출** (아래 백로그 참조). 이어지는 순서:
 > 1. [x] **#8 `usePlanCommands`** (`fb37d9e`) — `runOutdoorSelection`(자동선정 이펙트)·`selectOutdoorForSelected`·
->    `moveRoom`·`removeGroup`·`replaceModel`+`sync` 추출. 중복 제거: 빈그룹정리→`cleanEmptyGroups()` /
->    `selectOutdoorPlan`+catch→`trySelectOutdoor(units,onOk)` / floor-lookup→`floorOf`. App 1326→1227줄.
->    tsc·1242 그린·브라우저 실검증(콘솔 0): 자동선정 6/6, removeGroup b안 suppress, replaceModel 재계산.
-> 2. **#9 `useIndoorPlacement`** — `aiPlace`·`moveUnits`·`rotateUnits`(near-identical→`mutateUnits(kind,entries)`로 통합)·
->    `deleteUnits`·`addUnitToRoom`·`overrideIndoor`·`resetIndoor`·`parseUnitId`·`layoutFor`·`resizePositions`·`unitsFrom`·`indoorSymbols`.
+>    `moveRoom`·`removeGroup`·`replaceModel`+`sync`. 중복 제거: 빈그룹정리→`cleanEmptyGroups()` /
+>    `selectOutdoorPlan`+catch→`trySelectOutdoor` / floor-lookup→`floorOf`. App 1326→1227줄.
+> 2. [x] **#9 `useIndoorPlacement`** (`923980d`) — `layoutFor`·`resizePositions`·`unitsFrom`·`parseUnitId`·`indoorSymbols`·
+>    `aiPlace`·`moveUnits`·`rotateUnits`·`deleteUnits`·`addUnitToRoom`·`overrideIndoor`·`resetIndoor`+`worldPolyOf`.
+>    move/rotate→`mutateUnits(label,entries,apply)` 통합. App 1227→1080줄. tsc·1242 그린·브라우저 실검증(콘솔 0):
+>    AI배치 심볼, addUnitToRoom +6.0kW, 실 미선택 +실내기→존 전환.
 > 3. **#10 `useGenerationSteps`** — `step`·`editReturn`·`guardContext`(→ 순수 `buildGuardContext(world,derived)`)·`runGuarded`·
 >    `confirmEdit`·`resumeEdit`·`onPickStep`·`doGenerate`·`changeFacility`·`changeCeilingHeight`·`guard` 모달 상태.
 > 4. **#11 `useUndoableWorld`** (마지막, 토대) — `useUndoable`·`edit`·`editPlacements`·`editOutdoorPositions`·`sync` +
@@ -66,8 +67,9 @@
   **주인님 '뷰+서비스 엉킴' 핵심(감사 P0) 해소.** tsc·1242 그린·콘솔 0.
 - [x] `usePlanCommands`(`fb37d9e`) — 빈그룹정리→`cleanEmptyGroups`·selectOutdoorPlan+catch→`trySelectOutdoor`·
   floor-lookup→`floorOf` 중복 제거. 실외기 조합 편집 커맨드 5개+자동선정 이펙트+sync를 훅으로. App 1326→1227줄.
-- [ ] `useIndoorPlacement`(move/rotate 통합) → `useGenerationSteps`(guardContext 순수화)
-  → `useUndoableWorld`(마지막, edit가 토대 + 결정 #2 통합).
+- [x] `useIndoorPlacement`(`923980d`) — 실내기 배치 편집 커맨드 12개+좌표 어댑터를 훅으로.
+  move/rotate near-identical→`mutateUnits(label,entries,apply)` 통합. App 1227→1080줄.
+- [ ] `useGenerationSteps`(guardContext 순수화) → `useUndoableWorld`(마지막, edit가 토대 + 결정 #2 통합).
 
 **Phase E — Viewer.tsx(1076, 6모드+3서브시스템) 훅 분해:**
 - [ ] 순수 기하 이동(`unitsInRect`·`resizeRectFromCorner`·`zonesBounds`→geometry.ts) → `useDraftCommit<T>`(4곳 복붙)
