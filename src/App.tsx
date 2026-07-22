@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ROOMS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, outdoorIdxByModel, DEFAULT_FACILITY } from './data'
+import { ROOMS, CURRENT_USER, GNB_MENUS, ACTIVE_MENU, groupOfRoom, DEFAULT_FACILITY } from './data'
 import { canManageEquipment } from './domain/auth/Permission'
 import type { ModelCard, Room } from './data'
 import Viewer, { type LayerVisibility, ALL_LAYERS_ON, type ViewerHandle } from './components/Viewer'
@@ -42,6 +42,7 @@ import { shouldAutoSelectOutdoor } from './presentation/generation/autoSelectOut
 import { compatMatrixFromSeed } from './infrastructure/equipment/seed/compatMatrixFromSeed'
 import type { CompatMatrix } from './domain/equipment/CompatMatrix'
 import { useFloorView } from './presentation/generation/useFloorView'
+import { useSelectionCards } from './presentation/generation/useSelectionCards'
 import { DomainError, NotFoundError, NoCompatibleOutdoorError, UnpackableLoadError } from './domain/generation/errors'
 import { Room as DomainRoom } from './domain/generation/Room'
 import { indoorUnitId, type IndoorUnit } from './domain/generation/IndoorUnit'
@@ -145,8 +146,6 @@ export default function App({
   const [tab, setTab] = useState<'in' | 'out'>('in')
   // 카드 선택은 기본적으로 대표 실에서 '파생'(실외기=그룹 모델, 실내기=배정/추천)한다.
   // 사용자가 카드를 직접 클릭하면 pick으로 그 파생을 덮어쓰고, 실 선택이 바뀌면 초기화한다.
-  const [pick, setPick] = useState<{ in: number | null; out: number | null }>({ in: null, out: null })
-  const [prevPrimary, setPrevPrimary] = useState<string | undefined>(undefined)
   // 우측 패널 실내기 카드 — 실내기 카탈로그(장비번호 코드)에서 파생.
   const indoorCards = useMemo<ModelCard[]>(
     () =>
@@ -386,27 +385,9 @@ export default function App({
   //
   // 사라진 실(자르기·시설군 재시딩으로 없어진 id)이 선택에 남아 있으면 domainRooms[primary]가 undefined가 되고
   // aiSelectionFor(undefined)가 렌더 중 터져 화면이 통째로 죽는다(적대적 QA) → 존재하는 실만 본다.
-  const liveSelRooms = useMemo(() => selRooms.filter((id) => domainRooms[id]), [selRooms, domainRooms])
-  const primary = liveSelRooms[0]
-
-  // 실 선택이 바뀌면 수동 선택(pick)을 초기화 — 렌더 중 조정(effect·cascading 불필요).
-  if (primary !== prevPrimary) {
-    setPrevPrimary(primary)
-    setPick({ in: null, out: null })
-  }
-
-  // 카드 선택 인덱스 파생: 실외기=그룹 실제 모델, 실내기=배정값 우선·없으면 부하 근사 추천.
-  // pick(수동 클릭)이 있으면 그 값으로 덮어쓴다.
-  const grpOfPrimary = primary ? groupOfRoom(groups, primary) : null
-  const derivedOutIdx = grpOfPrimary ? outdoorIdxByModel(grpOfPrimary.model, outdoorCards) : -1
-  const appliedCode = primary ? placements[primary]?.effectiveSelection.modelCode : undefined
-  const derivedInIdx = appliedCode
-    ? Math.max(0, indoorModels.findIndex((m) => m.model === appliedCode))
-    : primary
-      ? indoorModels.findIndex((m) => m.model === aiSelectionFor(domainRooms[primary], indoorModels).modelCode)
-      : -1 // 선택 실 없으면 아무 카드도 선택 안 함
-  const effIn = pick.in ?? derivedInIdx
-  const effOut = pick.out ?? derivedOutIdx
+  const { liveSelRooms, primary, effIn, effOut, selectModel } = useSelectionCards({
+    selRooms, tab, domainRooms, groups, outdoorCards, indoorModels, placements,
+  })
 
   // 실(그 실의 모든 실내기 대수)을 대상(to = 그룹 key 또는 'pool')으로 이동. 호환 불가 시 false.
   const moveRoom = (id: string, to: string): boolean => {
@@ -485,8 +466,6 @@ export default function App({
     setSelRooms((prev) => [id, ...prev.filter((x) => x !== id)])
   }
 
-  // 장비 카드 선택(현재 탭 기준). 실 선택이 바뀌기 전까지 파생값을 덮어쓴다.
-  const selectModel = (idx: number) => setPick((p) => ({ ...p, [tab]: idx }))
 
   // '모델 적용' 클릭 → 유효성 검사 후 확인 팝업을 띄운다(일괄 적용 전 주의).
   // 팝업의 확인 = applyModel 실행, 취소 = 아무 이벤트 없이 닫힘.
