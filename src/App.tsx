@@ -43,6 +43,7 @@ import { compatMatrixFromSeed } from './infrastructure/equipment/seed/compatMatr
 import type { CompatMatrix } from './domain/equipment/CompatMatrix'
 import { useFloorView } from './presentation/generation/useFloorView'
 import { useSelectionCards } from './presentation/generation/useSelectionCards'
+import { splitPlacementAcrossChildren, mergePlacements, reshapeRoom } from './domain/generation/roomShapeEdit'
 import { DomainError, NotFoundError, NoCompatibleOutdoorError, UnpackableLoadError } from './domain/generation/errors'
 import { Room as DomainRoom } from './domain/generation/Room'
 import { indoorUnitId, type IndoorUnit } from './domain/generation/IndoorUnit'
@@ -68,13 +69,6 @@ import type { World } from './presentation/generation/world'
 import { useSelectionSync } from './presentation/generation/useSelectionSync'
 import { useScheduleSync } from './presentation/generation/useScheduleSync'
 import { useTileManifest } from './presentation/generation/useTileManifest'
-
-// 절단선 위에 정확히 놓인 심볼은 두 조각 모두에 '포함'된다 → 무게중심이 가까운 쪽으로 보낸다.
-// (어느 쪽에도 안 걸리는 경우도 여기로 온다 — 심볼은 반드시 한 실에 속해야 대수가 맞는다.)
-const nearestChild = <T extends { poly: Polygon }>(cs: T[], p: Pt): T => {
-  const d2 = (c: T) => (c.poly.centroid.x - p.x) ** 2 + (c.poly.centroid.y - p.y) ** 2
-  return cs.reduce((best, c) => (d2(c) < d2(best) ? c : best), cs[0])
-}
 
 // 목업 검출기(ROOMS)의 출력을 도메인 Room·형상으로 시딩한다.
 // 실 검출은 더 이상 별도 스텝이 아니다 — 도면을 열면 실이 이미 검출된 상태로 시작하고,
@@ -873,30 +867,10 @@ export default function App({
     const spliceIn = <T,>(src: Record<string, T>, made: [string, T][]): Record<string, T> =>
       Object.fromEntries(Object.entries(src).flatMap(([k, v]) => (k === roomId ? made : [[k, v]])))
 
-    // 실내기: 부모의 심볼을 좌표로 나눠 자식에게 준다. 조각에 심볼이 없으면 그 실은 '미배치'다
-    // (quantity >= 1 불변식을 우회하지 않는다 — 가드가 ROOMS_WITHOUT_INDOOR로 잡아준다).
-    const parentPlacement = placements[roomId]
+    // 실내기: 부모의 심볼을 좌표로 나눠 자식에게 준다(도메인 규칙 splitPlacementAcrossChildren).
+    // 자식 좌표는 도면(월드) 좌표로 옮겨 심볼 포함 판정에 쓴다.
     const worldChildren = children.map((c) => ({ id: c.room.id, poly: Polygon.of(scalePoints(c.polygon.points, scale)) }))
-    const childPlacements: Record<string, Placement> = {}
-    if (parentPlacement) {
-      const model = parentPlacement.effectiveSelection.modelCode
-      const overridden = parentPlacement.isOverridden // 사용자가 직접 고른 모델·대수인가
-      const byChild: Record<string, UnitPosition[]> = { [worldChildren[0].id]: [], [worldChildren[1].id]: [] }
-      for (const pos of parentPlacement.positions) {
-        // 절단선 위의 심볼은 두 조각 모두에 '포함'된다 → 먼저 걸리는 쪽 하나에만 넣는다.
-        const hit = worldChildren.find((c) => c.poly.contains(pos)) ?? nearestChild(worldChildren, pos)
-        byChild[hit.id].push(pos)
-      }
-      for (const c of worldChildren) {
-        const pos = byChild[c.id]
-        if (pos.length === 0) continue
-        const sel = { modelCode: model, quantity: pos.length }
-        const base = Placement.ai(c.id, sel, pos)
-        // 부모가 '수정 셀'이었다면 자식도 수정 셀이다 — 아니면 다음 AI 재배치가 사용자의 선택을
-        // 조용히 덮는다('수정 셀은 보존한다'는 명시 정책이 자르기에서만 깨졌다 — 적대적 QA).
-        childPlacements[c.id] = overridden ? base.overrideSelection(sel, pos) : base
-      }
-    }
+    const childPlacements = splitPlacementAcrossChildren(placements[roomId], worldChildren)
 
     // 자르기는 하나의 편집이다 — 실·형상·배치가 함께 바뀌고 Ctrl+Z 한 번에 함께 돌아온다.
     edit((w) => {
@@ -943,24 +917,9 @@ export default function App({
       throw e
     }
 
-    // 실내기: 두 실의 심볼을 그대로 합친다. 모델이 다르면 대수가 많은 쪽(동수면 면적이 큰 쪽)을 승계한다
-    // — 한 실은 한 모델이다(실내기_자동배치_룰 §4). 'AI 실내기 배치'로 다시 뽑을 수 있다.
-    const pa = placements[aId]
-    const pb = placements[bId]
-    const positions = [...(pa?.positions ?? []), ...(pb?.positions ?? [])]
-    let mergedPlacement: Placement | null = null
-    if (positions.length > 0) {
-      const dominant =
-        (pa?.positions.length ?? 0) === (pb?.positions.length ?? 0)
-          ? (a.areaM2 >= b.areaM2 ? pa : pb)
-          : ((pa?.positions.length ?? 0) > (pb?.positions.length ?? 0) ? pa : pb)
-      const owner = dominant ?? pa ?? pb
-      if (!owner) return // 좌표가 있는데 배치가 없을 수는 없다(방어)
-      const sel = { modelCode: owner.effectiveSelection.modelCode, quantity: positions.length }
-      const base = Placement.ai(merged.room.id, sel, positions)
-      const overridden = (pa?.isOverridden ?? false) || (pb?.isOverridden ?? false)
-      mergedPlacement = overridden ? base.overrideSelection(sel, positions) : base
-    }
+    // 실내기: 두 실의 심볼을 그대로 합친다(도메인 규칙 mergePlacements — 대수 많은 쪽·동수면 면적 큰 쪽
+    // 모델 승계, 한 실은 한 모델). 'AI 실내기 배치'로 다시 뽑을 수 있다.
+    const mergedPlacement = mergePlacements(placements[aId], placements[bId], merged.room.id, a.areaM2, b.areaM2)
 
     // 앞선 실(a) 자리에 병합 결과를 끼우고 b는 뺀다 — 선정표 행 순서를 지킨다.
     const spliceMerge = <T,>(src: Record<string, T>, value: T | undefined): Record<string, T> =>
@@ -1021,10 +980,7 @@ export default function App({
     } catch {
       return // 면적 0 등 성립하지 않는 형상 — 무시한다(뷰어가 GRID 하한으로 이미 막는다)
     }
-    const mPerUnit = Math.sqrt(room.areaM2 / prevPoly.area) // 이 실의 축척은 리사이즈로 변하지 않는다
-    const areaM2 = next.area * mPerUnit * mPerUnit
-    const { shortSide, longSide } = next.obb()
-    const shaped = room.withShape(areaM2, shortSide * mPerUnit, longSide * mPerUnit)
+    const shaped = reshapeRoom(room, prevPoly, next) // 축척 지키며 새 폴리곤에서 면적·치수 재유도(도메인 규칙)
     edit((w) => ({
       ...w,
       geom: { ...w.geom, [roomId]: next },
