@@ -102,18 +102,8 @@ export const syncPlanUnits = (plan: AssignmentPlan, desired: readonly IndoorUnit
     else desiredByRoom.set(u.roomId, [u])
   }
 
-  const groups = plan.groups.map((g) => {
-    const odu = g.outdoorUnit
-    const indoorUnits: IndoorUnit[] = []
-    for (const rid of g.roomIds) {
-      const units = desiredByRoom.get(rid)
-      if (!units) continue // 배치에서 사라진 실
-      if (!units.every((u) => odu.energySource.equals(u.energySource))) continue // 계열 변경 → 방출
-      if (indoorUnits.length + units.length > odu.maxConnections) continue // 대수 증가로 초과 → 방출
-      indoorUnits.push(...units)
-    }
-    return new OutdoorGroup({ key: g.key, label: g.label, outdoorUnit: odu, indoorUnits })
-  })
+  // 유지 규칙(계열·maxConnections)은 도메인이 소유한다 — 여기서 재구현하지 않는다.
+  const groups = plan.groups.map((g) => g.retainFrom(desiredByRoom))
 
   const assigned = new Set(groups.flatMap((g) => g.indoorUnits.map((u) => u.id)))
   const pool = desired.filter((u) => !assigned.has(u.id))

@@ -167,6 +167,20 @@ export class OutdoorGroup {
     return { group, newGroup }
   }
 
+  // 배치 동기화: 이 그룹이 배정하던 실들을 새 실내기 구성(desiredByRoom)에 맞춰
+  // "유지 가능한 만큼만" 유지한 새 그룹을 만든다. 실 순서대로 빈 그룹에 재배정하며,
+  // 계열이 바뀌었거나 대수 증가로 maxConnections를 넘기는 실·배치에서 사라진 실은 뺀다
+  // (방출된 실은 호출자가 미배정 풀로 회수). 판정은 canAssignMany 하나로 — 규칙 재구현 금지.
+  retainFrom(desiredByRoom: ReadonlyMap<string, readonly IndoorUnit[]>): OutdoorGroup {
+    let g: OutdoorGroup = this._with([])
+    for (const rid of this.roomIds) {
+      const units = desiredByRoom.get(rid)
+      if (!units || units.length === 0) continue // 배치에서 사라진 실
+      if (g.canAssignMany(units).ok) g = g.assignMany(units)
+    }
+    return g
+  }
+
   // 내부: 실내기 목록만 교체한 새 그룹 생성(메타·실외기 유지).
   private _with(indoorUnits: IndoorUnit[]): OutdoorGroup {
     return new OutdoorGroup({ key: this.key, label: this.label, outdoorUnit: this.outdoorUnit, indoorUnits })

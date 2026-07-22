@@ -210,4 +210,42 @@ describe('OutdoorGroup (실외기 조합 애그리거트)', () => {
       expect(() => twoUnitsOneRoom.split({ key: 'ODU2', label: '실외기-2' })).toThrow()
     })
   })
+
+  describe('retainFrom — 배치 동기화(canAssignMany 규칙 재사용)', () => {
+    const desired = (units: IndoorUnit[]) => {
+      const m = new Map<string, IndoorUnit[]>()
+      for (const u of units) (m.get(u.roomId) ?? m.set(u.roomId, []).get(u.roomId)!).push(u)
+      return m
+    }
+
+    it('원하는 구성이 그대로 유지되면 전 실을 유지한다(불변)', () => {
+      const g0 = group({ indoorUnits: [idu('AC_001', 5), idu('AC_002', 5)] })
+      const g1 = g0.retainFrom(desired([idu('AC_001', 5), idu('AC_002', 5)]))
+      expect(g1.roomIds).toEqual(['AC_001', 'AC_002'])
+      expect(g0.indoorUnits).toHaveLength(2) // 원본 불변
+    })
+
+    it('계열이 바뀐 실은 뺀다(교차 계열 방출)', () => {
+      const g0 = group({ indoorUnits: [idu('AC_001', 5, 'EHP'), idu('AC_002', 5, 'EHP')] })
+      const g1 = g0.retainFrom(desired([idu('AC_001', 5, 'GHP'), idu('AC_002', 5, 'EHP')]))
+      expect(g1.roomIds).toEqual(['AC_002']) // GHP로 바뀐 AC_001 방출
+    })
+
+    it('대수가 늘어 maxConnections를 넘기는 실은 뺀다', () => {
+      // maxConnections=4. AC_001 3대 + AC_002가 2대로 늘면 5대 → AC_002 방출
+      const g0 = group({ indoorUnits: [idu('AC_001', 5, 'EHP', 1), idu('AC_001', 5, 'EHP', 2), idu('AC_001', 5, 'EHP', 3), idu('AC_002', 5)] })
+      const g1 = g0.retainFrom(desired([
+        idu('AC_001', 5, 'EHP', 1), idu('AC_001', 5, 'EHP', 2), idu('AC_001', 5, 'EHP', 3),
+        idu('AC_002', 5, 'EHP', 1), idu('AC_002', 5, 'EHP', 2),
+      ]))
+      expect(g1.roomIds).toEqual(['AC_001'])
+      expect(g1.indoorUnits).toHaveLength(3)
+    })
+
+    it('배치에서 사라진 실은 뺀다', () => {
+      const g0 = group({ indoorUnits: [idu('AC_001', 5), idu('AC_002', 5)] })
+      const g1 = g0.retainFrom(desired([idu('AC_001', 5)])) // AC_002 사라짐
+      expect(g1.roomIds).toEqual(['AC_001'])
+    })
+  })
 })
