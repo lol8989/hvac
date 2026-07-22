@@ -41,6 +41,21 @@ export const judgeCombo = (ratio: number, range: ComboRange): ComboJudgement => 
 
 const judge = judgeCombo
 
+// 그룹의 실외기 셀(조합비·판정 포함) — 표 순서 첫 행과 그룹 소섹션이 같은 값을 써야 하므로
+// 한 곳에서 만든다(둘이 어긋나 다른 조합비를 보이던 위험을 없앤다).
+const buildOutdoorCell = (spec: SelectionTableInput['outdoorSpecs'][number], groupCoolWSum: number): NonNullable<SelectionRow['outdoor']> => {
+  const comboRatio = groupCoolWSum / (spec.coolKw * 1000)
+  return Object.freeze({
+    hp: spec.hp,
+    model: spec.model,
+    coolKw: spec.coolKw,
+    heatKw: spec.heatKw,
+    quantity: 1,
+    comboRatio,
+    judgement: judge(comboRatio, spec.comboRange ?? ComboRange.DEFAULT),
+  })
+}
+
 // 실 1개 → 기본 행 (실외기 정보는 이후 그룹 첫 행에 부착)
 const buildBaseRow = (
   room: Room,
@@ -124,16 +139,7 @@ export const buildSelectionTable = (input: SelectionTableInput): SelectionTable 
     const g = groupByKey.get(row.group.key)!
     const spec = specByModel.get(g.model)
     if (!spec) throw new Error(`실외기 스펙에 없는 모델입니다: ${g.model}`)
-    const comboRatio = (groupCoolW.get(g.key) ?? 0) / (spec.coolKw * 1000)
-    row.outdoor = Object.freeze({
-      hp: spec.hp,
-      model: spec.model,
-      coolKw: spec.coolKw,
-      heatKw: spec.heatKw,
-      quantity: 1,
-      comboRatio,
-      judgement: judge(comboRatio, spec.comboRange ?? ComboRange.DEFAULT),
-    })
+    row.outdoor = buildOutdoorCell(spec, groupCoolW.get(g.key) ?? 0)
     if (!outdoorAgg.has(spec.model)) outdoorAgg.set(spec.model, { hp: spec.hp, model: spec.model, quantity: 0 })
     outdoorAgg.get(spec.model)!.quantity += 1
     hpTotal += spec.hp
@@ -170,21 +176,12 @@ export const buildSelectionTable = (input: SelectionTableInput): SelectionTable 
     const groups = [...byGroup.entries()].map(([key, groupRows]) => {
       const g = groupByKey.get(key)!
       const spec = specByModel.get(g.model)!
-      const comboRatio = (groupCoolW.get(key) ?? 0) / (spec.coolKw * 1000)
       return Object.freeze({
         key,
         label: g.label,
         rows: Object.freeze(groupRows),
         subtotal: Object.freeze(sumOf(groupRows)),
-        outdoor: Object.freeze({
-          hp: spec.hp,
-          model: spec.model,
-          coolKw: spec.coolKw,
-          heatKw: spec.heatKw,
-          quantity: 1,
-          comboRatio,
-          judgement: judge(comboRatio, spec.comboRange ?? ComboRange.DEFAULT),
-        }),
+        outdoor: buildOutdoorCell(spec, groupCoolW.get(key) ?? 0),
       })
     })
 
