@@ -41,7 +41,7 @@ import { compatPredicateFromMatrix } from './presentation/generation/compatPredi
 import { shouldAutoSelectOutdoor } from './presentation/generation/autoSelectOutdoor'
 import { compatMatrixFromSeed } from './infrastructure/equipment/seed/compatMatrixFromSeed'
 import type { CompatMatrix } from './domain/equipment/CompatMatrix'
-import { floorsOf } from './presentation/generation/floors'
+import { useFloorView } from './presentation/generation/useFloorView'
 import { DomainError, NotFoundError, NoCompatibleOutdoorError, UnpackableLoadError } from './domain/generation/errors'
 import { Room as DomainRoom } from './domain/generation/Room'
 import { indoorUnitId, type IndoorUnit } from './domain/generation/IndoorUnit'
@@ -275,25 +275,6 @@ export default function App({
       Object.entries(viewRooms).map(([id, r]) => [id, { ...r, points: scalePoints(r.points, scale) }] as const),
     )
   }, [planDims, viewRooms, scale])
-
-  // ── 층 전환: 뷰어는 한 번에 한 층만 보여준다(다층 도면이 나란히 배치되므로).
-  // activeFloor는 뷰 상태다 — World(되돌리기 단위) 밖에 둔다. Ctrl+Z가 층 전환을 되돌리면 안 된다.
-  // 설계: doc/05_설계결정/층_전환_설계_v1.md
-  const floors = useMemo(() => floorsOf(domainRooms, roomGeom), [domainRooms, roomGeom])
-  const [activeFloor, setActiveFloor] = useState('')
-  // 검출·자르기로 층 목록이 바뀌면 활성 층을 유효하게 유지(사라졌으면 첫 층으로).
-  useEffect(() => {
-    if (floors.length && !floors.some((f) => f.floor === activeFloor)) setActiveFloor(floors[0].floor)
-  }, [floors, activeFloor])
-  const activeRoomIds = useMemo(
-    () => new Set(Object.keys(domainRooms).filter((id) => domainRooms[id].floor === activeFloor)),
-    [domainRooms, activeFloor],
-  )
-  // 층 탭 클릭: 활성 층 전환 + 선택 초기화(다른 층 실이 선택에 남으면 파생값·헤더가 어긋난다).
-  const switchFloor = (f: string) => {
-    setActiveFloor(f)
-    setSelRooms([])
-  }
 
   // 심볼 좌표(도면 좌표계)로 실 폴리곤을 판정할 때 쓴다.
   const worldPolyOf = (roomId: string): Polygon | null => {
@@ -846,43 +827,16 @@ export default function App({
   // CTA는 항상 활성이고, 클릭하면 도메인 가드가 낸 사유·해결법을 팝업으로 보여준다.
   const activeGroups = groups.filter((g) => g.items.length)
 
-  // ── 활성 층만 뷰어에 넘긴다(뷰어는 받은 것만 렌더 — SRP). ──
-  const floorRooms = useMemo(
-    () => Object.fromEntries(Object.entries(worldRooms).filter(([id]) => activeRoomIds.has(id))),
-    [worldRooms, activeRoomIds],
-  )
-  const floorIndoorSymbols = useMemo(
-    () => indoorSymbols.filter((s) => s.roomId != null && activeRoomIds.has(s.roomId)),
-    [indoorSymbols, activeRoomIds],
-  )
-  // 실외기 그룹의 층 = 연결된 실의 층(버킷 = 층×계열이라 한 그룹은 한 층). 그 그룹 심볼만 남긴다.
-  const activeFloorGroupKeys = useMemo(
-    () => new Set(activeGroups.filter((g) => g.items.some((rid) => activeRoomIds.has(rid))).map((g) => g.key)),
-    [activeGroups, activeRoomIds],
-  )
-  const floorOutdoorSymbols = useMemo(
-    () => outdoorSymbols.filter((s) => activeFloorGroupKeys.has(s.id)),
-    [outdoorSymbols, activeFloorGroupKeys],
-  )
-  const floorSelectedIds = useMemo(() => selRooms.filter((id) => activeRoomIds.has(id)), [selRooms, activeRoomIds])
-  const floorOutdoorGroups = useMemo(
-    () =>
-      activeGroups
-        .filter((g) => activeFloorGroupKeys.has(g.key))
-        .map((g) => ({ key: g.key, label: g.label, model: g.model, hp: hpByModel.get(g.model) })),
-    [activeGroups, activeFloorGroupKeys, hpByModel],
-  )
-  // 활성 층 실들의 bbox(뷰어 좌표계) — 뷰어가 이 범위에 맞춘다.
-  const fitBounds = useMemo(() => {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    for (const id of activeRoomIds) {
-      for (const p of floorRooms[id]?.points ?? []) {
-        minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
-        maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
-      }
-    }
-    return minX === Infinity ? undefined : { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
-  }, [floorRooms, activeRoomIds])
+  // ── 층 전환: 활성 층만 뷰어에 넘길 형태로 파생한다(뷰어는 받은 것만 렌더 — SRP). ──
+  const {
+    floors, floorNames, activeFloor, setActiveFloor,
+    floorRooms, floorIndoorSymbols, floorOutdoorSymbols, floorSelectedIds, floorOutdoorGroups, fitBounds,
+  } = useFloorView({ domainRooms, roomGeom, worldRooms, indoorSymbols, outdoorSymbols, activeGroups, selRooms, hpByModel })
+  // 층 탭 클릭: 활성 층 전환 + 선택 초기화(다른 층 실이 선택에 남으면 파생값·헤더가 어긋난다).
+  const switchFloor = (f: string) => {
+    setActiveFloor(f)
+    setSelRooms([])
+  }
 
   // 이격거리는 실치수(mm) 규칙이다. 뷰어 좌표는 정규화 단위라 mmPerUnit으로 환산한다.
   // 실도면 타일이 없으면(목업 좌표계) 실치수를 알 수 없어 검사하지 않는다.
@@ -1141,9 +1095,6 @@ export default function App({
       setSelRooms([])
     }, '시설군 변경')
 
-  // 천정고는 실이 아니라 층 단위로 받는다. 층 목록은 뷰어의 층 전환과 같은 출처를 쓴다
-  // (따로 세면 두 목록이 어긋난다).
-  const floorNames = useMemo(() => floors.map((f) => f.floor), [floors])
 
   // 천정고 변경: 4m 이상이면 특수부하 → 그 층 실들의 단위부하가 올라간다.
   // 시설군 변경과 달리 실을 재시딩하지 않는다(형상·실명·사용자 수정은 그대로) —
