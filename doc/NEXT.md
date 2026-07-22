@@ -2,6 +2,47 @@
 
 > 세션 시작 시 이 파일부터 확인한다. 완료한 항목은 지우지 말고 `[x]` + 완료일·커밋을 남기고, 새 항목은 위에 추가한다.
 
+## ▶ 2026-07-22 — 리팩터 백로그 (3-에이전트 코드 감사)
+
+> 병렬 감사 3건(App.tsx·Viewer.tsx·나머지 전체). **결론: 도메인/애플리케이션/인프라는 건강**
+> (레이어 위반 0·VO 자기검증·응집적). "뷰+서비스+예외 엉킴"은 **App.tsx·Viewer.tsx 두 god 컴포넌트**에 집중.
+> P0 없음. 안전·순수한 것부터, 큰 컴포넌트 분해는 훅 단위로 커밋.
+
+**Phase A — 안전한 순수/도메인 정리 (TDD 가능, 저위험):**
+- [ ] **실내기 대수 규칙 단일화** — `selectIndoorModel.ts:58-63`이 `placementRules.unitCountFor`를 안 쓰고
+  인라인 재구현 + **반올림 divergence**(selectIndoorModel은 load항에 round6, unitCountFor는 raw ceil).
+  `unitCountFor`는 테스트에서만 참조되는 고아. 생산 경로가 명명 규칙을 호출하게 통합.
+- [ ] **`planAdapter.syncPlanUnits` 도메인 규칙 누수** (L111-112) — 계열 일치·maxConnections를 손으로 검사(=
+  `OutdoorGroup.canAssignMany`와 중복). `OutdoorGroup.retain(desiredUnits)` 도메인 헬퍼로 소유권 일원화.
+- [ ] **W↔kW 변환 산재(primitive obsession)** — `Math.round(w/100)/10`·`*1000`/`/1000`이 6+파일 3레이어에.
+  `Capacity.fromW()`/`.w`로 단일화.
+- [ ] **`SelectionTable.ts` 실외기 셀 구성 중복**(L121-140 vs 170-189) → `buildOutdoorCell` 추출.
+
+**Phase B — 인프라:**
+- [ ] **`SqliteEquipmentAdminRepository`(459) 4책임 분리** — product / combo-policy / compat-matrix 리포지토리로
+  (테이블·액터가 다름, 주석 배너가 이미 seam 표시). status-UPDATE SQL 중복(L179-189 vs 222-234) → `applyStatus`.
+
+**Phase C — 컴포넌트 공통화:**
+- [ ] **`useToast()` + `usePagedFilter()`** — 관리자 3페이지(Equipment/ComboPolicy/CompatMatrix)의 토스트·검색·
+  페이지네이션 복붙 제거(페이지 범위 초과 버그 클래스 함께 제거).
+
+**Phase D — App.tsx(1465, ~11책임) 훅 분해 (리프부터, 커밋 1개=훅 1개):**
+- [ ] `usePersistentPanel` → `useUndoRedoShortcuts`(리바인드 경고 해소) → `useFloorView` → `useSelectionCards`
+  → `useOutputs`(downloadDrawing이 roomColors 메모 재사용) → **도메인 추출**(`splitPlacementAcrossChildren`·
+  `mergePlacements`·`reshapeRoom` — 실 형상 편집의 비즈니스 규칙이 컴포넌트에 샘) + `useRoomShapeEditing`
+  → `usePlanCommands`(빈그룹정리·selectOutdoorPlan catch 중복 제거) → `useIndoorPlacement`(move/rotate 통합)
+  → `useGenerationSteps`(guardContext 빌더 순수화) → `useUndoableWorld`(마지막, edit가 토대).
+
+**Phase E — Viewer.tsx(1076, 6모드+3서브시스템) 훅 분해:**
+- [ ] 순수 기하 이동(`unitsInRect`·`resizeRectFromCorner`·`zonesBounds`→geometry.ts) → `useDraftCommit<T>`(4곳 복붙)
+  → `usePanZoom` → `useCassetteSelectionSync` → `useSliceMode`/`useMergeMode` → 드래그 멀티플렉서(387-513) 분해
+  → `useViewerShortcuts`(정책/메커니즘 분리) → 37 prop을 indoor/outdoor/slice/merge/viewport 클러스터로.
+
+**⚠️ 주인님 결정 2건 (기계적 추출 아님, §5.7 관련):**
+- [ ] **자동 선정을 undo 히스토리에 커밋?** — combine 진입 자동선정이 `edit()`로 Ctrl+Z 항목 생성(사용자가
+  안 누른 "선정"). §5.7 "파생은 미커밋"과 상충 → `replace`로? 아니면 1급 액션으로 유지?
+- [ ] **plan↔repo↔placements 동기 이펙트 2개**(App L366·372) → "마지막 쓰기 승리" 레이스 소지 → 단일 정렬 동기로?
+
 ## ▶ 2026-07-22 — UX 수정 (유저 피드백)
 
 - [x] **＋실내기 버튼 항상 활성 + 안내** (`(이번 커밋)`) — 유저가 "실내기 배치 탭에서 ＋실내기 버튼이 비활성이라 불편"
