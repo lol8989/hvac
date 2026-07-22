@@ -12,9 +12,16 @@
     배치할 실을 클릭한 뒤 ＋실내기를 누르세요"). 배치 단계 아니면 'step' 안내. `onAddUnitUnavailable` 콜백 추가.
   - Viewer.test 갱신(기존 '선택해야 활성' 단언 → 새 동작 3건). 브라우저 실검증: AI 배치 없이 버튼 활성 →
     클릭 시 안내+존전환 → 거실 선택 → ＋실내기 → "AC_001에 실내기 1대 추가"(6.0kW). tsc·1225 그린.
-- [ ] **활성 버튼 색을 관리자단과 통일** (유저 요청 2026-07-22) — 활성화된 버튼 색깔들을 관리자 영역과 같은 색으로.
-  관리자는 LG Active Red(`#A50034`) 기반 디자인 시스템(`.adm-root`, `tokens.css`). 생성·검도는 지금 무채색.
-  → 어느 버튼(Primary CTA?)을 어디까지 통일할지 범위 확인 필요.
+- [x] **활성 버튼 색을 관리자단과 통일** (2026-07-22, 범위 B: Primary + 활성 토글) — Primary CTA·활성 토글을
+  관리자와 같은 LG Active Red(`#A50034`)로. 주인님 명확화: **POC는 화면설계서의 무채색 규칙에 매이지 않는다**(§6).
+  - `.btn.primary`·`.btn.sm.primary`(재배치·편집 확정·모델 적용·산출물 생성) → `--lg-red`(+hover `--lg-red-deep`).
+    `.btn.sm.primary`는 원래 흰색이라 거의 안 보였는데 이제 확실히 Primary로 읽힌다.
+  - 활성 토글: `.mb-tool.on`(활성 도구)·`.rp-tabs button.on`(우측 탭)·`.floor-tab.active`(층 탭) → red,
+    `.mb-edit.active`(편집 페이즈 박스) → red 테두리+`--lg-red-wash`, `.gnb nav a.on`(활성 네비) → red 밑줄.
+  - 도면 콘텐츠(방·심볼)·선택 하이라이팅(`.room.sel`·`.chip.sel`)은 무채색 유지(범위 C 제외).
+    `.mb-output.active`(산출물 활성)는 초록 유지(완료 semantic — 관리자도 게시=초록). 
+  - 토큰은 `tokens.css` `:root` 전역(main.tsx 로드)이라 생성 화면도 사용 가능. 관리자는 `.adm-root .btn.primary`가
+    더 늦게 로드돼 무영향(무회귀). 브라우저 실검증: 대상 전부 rgb(165,0,52) 렌더, 콘솔 에러 0.
 
 ## ▶ 2026-07-21 — 조합 매핑 재설계 + 2페이즈 편집 모드 (진행 중, 내일 이어서)
 

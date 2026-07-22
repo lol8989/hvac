@@ -10,8 +10,10 @@ body{font-family:'Noto Sans KR','맑은 고딕',sans-serif;background:var(--bg);
 button{font-family:inherit;cursor:pointer;}
 .btn{border:1px solid var(--line);background:#fff;color:var(--ink2);border-radius:6px;padding:7px 12px;font-size:14px;}
 .btn:hover{background:var(--hover);}
-.btn.primary{background:var(--dark);color:#fff;border-color:var(--dark);}
-.btn.primary:hover{background:#000;}
+/* Primary CTA·활성 토글은 관리자와 같은 LG Active Red로 통일(주인님 결정 2026-07-22, 범위 B).
+   POC는 화면설계서의 무채색 규칙에 매이지 않는다(§6). 도면 콘텐츠는 여전히 무채색. */
+.btn.primary{background:var(--lg-red);color:#fff;border-color:var(--lg-red);}
+.btn.primary:hover{background:var(--lg-red-deep);border-color:var(--lg-red-deep);}
 .btn.sm{padding:4px 10px;font-size:14px;}
 
 .gnb{height:48px;background:var(--gnb);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 20px;}
@@ -19,7 +21,7 @@ button{font-family:inherit;cursor:pointer;}
 .gnb .logo{font-weight:700;font-size:15px;}
 .gnb nav{display:flex;gap:20px;font-size:14px;}
 .gnb nav a{color:#BBB;text-decoration:none;}
-.gnb nav a.on{color:#fff;font-weight:700;border-bottom:2px solid #fff;padding-bottom:3px;}
+.gnb nav a.on{color:#fff;font-weight:700;border-bottom:2px solid var(--lg-red);padding-bottom:3px;}
 .gnb .r{display:flex;align-items:center;gap:16px;font-size:13px;color:#CCC;}
 
 /* 작업 바 — 되돌아가기 · 스텝퍼 · 단계 액션을 한 줄에. (구 .sub + .stepper + .report 액션 통합) */
@@ -48,14 +50,14 @@ button{font-family:inherit;cursor:pointer;}
 /* 2페이즈 모드바 — [편집: 도구 3개 자유전환] → [산출물]. */
 .modebar{display:flex;align-items:center;justify-content:center;gap:10px;}
 .mb-phase{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:3px 8px;}
-.mb-edit.active{border-color:var(--dark);background:#fafafa;}
+.mb-edit.active{border-color:var(--lg-red);background:var(--lg-red-wash);}
 .mb-plabel{font-size:12px;font-weight:700;color:#555;}
 .mb-edit.active .mb-plabel{color:#111;}
 .mb-tools{display:flex;gap:4px;}
 /* font-weight를 활성/비활성 동일하게 유지 — 굵기 변화로 pill 폭이 흔들리지 않게(정렬 안정). */
 .mb-tool{background:transparent;border:1px solid transparent;border-radius:6px;padding:3px 9px;font-size:13px;font-weight:600;color:#777;cursor:pointer;white-space:nowrap;}
 .mb-tool:hover{color:#111;background:#f0f0f0;}
-.mb-tool.on{background:var(--dark);border-color:var(--dark);color:#fff;}
+.mb-tool.on{background:var(--lg-red);border-color:var(--lg-red);color:#fff;}
 .mb-sep{color:#bbb;font-size:14px;}
 .mb-output{border:1px solid var(--line);border-radius:8px;padding:5px 12px;font-size:13px;color:#777;background:#fff;cursor:pointer;font-weight:700;white-space:nowrap;}
 .mb-output:hover{color:#111;border-color:#999;}
@@ -73,7 +75,7 @@ button{font-family:inherit;cursor:pointer;}
 .floor-tabs{display:flex;gap:4px;padding:6px 8px;background:#fff;border-bottom:1px solid #e5e5e5;overflow-x:auto;flex-shrink:0;}
 .floor-tab{border:1px solid #d5d5d5;background:#fff;color:#555;border-radius:6px;padding:5px 12px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;}
 .floor-tab:hover{background:#f2f2f2;}
-.floor-tab.active{background:#262626;color:#fff;border-color:#262626;}
+.floor-tab.active{background:var(--lg-red);color:#fff;border-color:var(--lg-red);}
 .floor-tab-n{font-weight:400;opacity:.7;font-size:11px;margin-left:2px;}
 .viewer{flex:1;position:relative;background:#F7F7F8;overflow:hidden;}
 .plan{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);width:720px;height:470px;background:#fff;border:1px solid #CFCFCF;}
@@ -101,7 +103,7 @@ button{font-family:inherit;cursor:pointer;}
 .rp-room{padding:8px 14px;background:#FAFAFA;border-bottom:1px solid var(--line2);display:flex;justify-content:space-between;font-size:14px;color:#555;}
 .rp-tabs{display:flex;padding:10px 14px 0;gap:6px;}
 .rp-tabs button{flex:1;border:1px solid var(--line);background:#fff;border-radius:6px;padding:7px;font-size:14px;color:#666;}
-.rp-tabs button.on{background:var(--dark);color:#fff;border-color:var(--dark);font-weight:700;}
+.rp-tabs button.on{background:var(--lg-red);color:#fff;border-color:var(--lg-red);font-weight:700;}
 .rp-body{flex:1;overflow-y:auto;padding:12px 14px;}
 .subttl{font-size:12px;color:#999;margin:2px 0 8px;}
 .mcard{border:1px solid var(--line);border-radius:8px;padding:10px 11px;margin-bottom:9px;position:relative;cursor:pointer;transition:.15s;}
@@ -238,7 +240,8 @@ button{font-family:inherit;cursor:pointer;}
 .ph-c{font-weight:400;opacity:.75;font-size:12px;}
 .stagebox .pbody,.pool-col .pool .pbody{flex:1;overflow-y:auto;padding:8px;}
 .poolhint{font-size:11px;color:#8a8a8a;line-height:1.5;padding:2px 2px 8px;}
-.btn.sm.primary{background:#fff;color:var(--dark);border:1px solid #fff;font-weight:700;}
+.btn.sm.primary{background:var(--lg-red);color:#fff;border:1px solid var(--lg-red);font-weight:700;}
+.btn.sm.primary:hover{background:var(--lg-red-deep);border-color:var(--lg-red-deep);}
 .btn.sm.primary:disabled{opacity:.4;cursor:not-allowed;}
 .chip{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:6px;padding:6px 9px;margin-bottom:7px;background:#fff;font-size:14px;cursor:pointer;user-select:none;}
 .chip:hover{background:#F5F5F5;}
