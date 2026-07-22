@@ -8,15 +8,14 @@
 > (레이어 위반 0·VO 자기검증·응집적). "뷰+서비스+예외 엉킴"은 **App.tsx·Viewer.tsx 두 god 컴포넌트**에 집중.
 > P0 없음. 안전·순수한 것부터, 큰 컴포넌트 분해는 훅 단위로 커밋.
 
-**Phase A — 안전한 순수/도메인 정리 (TDD 가능, 저위험):**
-- [ ] **실내기 대수 규칙 단일화** — `selectIndoorModel.ts:58-63`이 `placementRules.unitCountFor`를 안 쓰고
-  인라인 재구현 + **반올림 divergence**(selectIndoorModel은 load항에 round6, unitCountFor는 raw ceil).
-  `unitCountFor`는 테스트에서만 참조되는 고아. 생산 경로가 명명 규칙을 호출하게 통합.
-- [ ] **`planAdapter.syncPlanUnits` 도메인 규칙 누수** (L111-112) — 계열 일치·maxConnections를 손으로 검사(=
-  `OutdoorGroup.canAssignMany`와 중복). `OutdoorGroup.retain(desiredUnits)` 도메인 헬퍼로 소유권 일원화.
-- [ ] **W↔kW 변환 산재(primitive obsession)** — `Math.round(w/100)/10`·`*1000`/`/1000`이 6+파일 3레이어에.
-  `Capacity.fromW()`/`.w`로 단일화.
-- [ ] **`SelectionTable.ts` 실외기 셀 구성 중복**(L121-140 vs 170-189) → `buildOutdoorCell` 추출.
+**Phase A — 안전한 순수/도메인 정리 (완료 2026-07-22, TDD·저위험):**
+- [x] **실내기 대수 규칙 단일화** (`f2516d1`) — `selectIndoorModel`이 `unitCountFor`(정본 규칙) 호출. tolerance+round6를
+  placementRules로 이동, param `maxModelCoolW`→`modelCoolW`. **divergence 해소**(경계 3255.8÷3200=1대 테스트).
+- [x] **`syncPlanUnits` 도메인 규칙 누수 제거** (`5bc0b46`) — `OutdoorGroup.retainFrom(desiredByRoom)`(빈 그룹에서
+  `canAssignMany`로 재배정)로 계열·maxConn 규칙 일원화. 도메인 테스트 4.
+- [x] **W↔kW 변환 단일화** (`domain/shared/capacityUnits.ts`) — `wToKw`(정확)·`roundKw`(0.1)·`kwToW`(정수 W).
+  6파일 중복 제거. (SelectionTable 비율 `*1000`은 도메인 sensitive라 미변경)
+- [x] **`SelectionTable` 실외기 셀 중복** (`c95e6c8`) → `buildOutdoorCell(spec, groupCoolWSum)` 추출.
 
 **Phase B — 인프라:**
 - [ ] **`SqliteEquipmentAdminRepository`(459) 4책임 분리** — product / combo-policy / compat-matrix 리포지토리로
@@ -38,10 +37,12 @@
   → `usePanZoom` → `useCassetteSelectionSync` → `useSliceMode`/`useMergeMode` → 드래그 멀티플렉서(387-513) 분해
   → `useViewerShortcuts`(정책/메커니즘 분리) → 37 prop을 indoor/outdoor/slice/merge/viewport 클러스터로.
 
-**⚠️ 주인님 결정 2건 (기계적 추출 아님, §5.7 관련):**
-- [ ] **자동 선정을 undo 히스토리에 커밋?** — combine 진입 자동선정이 `edit()`로 Ctrl+Z 항목 생성(사용자가
-  안 누른 "선정"). §5.7 "파생은 미커밋"과 상충 → `replace`로? 아니면 1급 액션으로 유지?
-- [ ] **plan↔repo↔placements 동기 이펙트 2개**(App L366·372) → "마지막 쓰기 승리" 레이스 소지 → 단일 정렬 동기로?
+**§5.7 결정 2건 (처리 완료 2026-07-22):**
+- [x] **자동 선정 → undo 히스토리 제외** (`443c5b0`) — `runOutdoorSelection`의 `edit(commit)` → `undoable.replace`.
+  자동선정은 파생 부트스트랩. 브라우저 검증: 자동선정 후 undo 라벨이 'AI 실내기 배치' 유지, Ctrl+Z 정상(재선정 루프 없음).
+- [x] **plan↔repo↔placements 동기 → Phase D로 이관** — 재확인 결과 **실제 레이스 아님**(이펙트가 선언 순서 A→B로
+  결정적 실행, B가 A 저장분을 읽음, undo는 멱등). 결합도 냄새일 뿐이고 감사도 `useUndoableWorld` 추출에 귀속시킴.
+  단독 재작성은 undo 토대 위험만 크므로 Phase D에서 두 이펙트를 `useSyncedPlanRepo`로 통합.
 
 ## ▶ 2026-07-22 — UX 수정 (유저 피드백)
 
