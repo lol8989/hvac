@@ -39,8 +39,9 @@
 - [~] `useOutputs` — **건너뜀**(payoff 낮음): selectionTable이 dockFloors·roomColors·가드·도크에 널리 소비돼
   훅 인터페이스가 ~11입력으로 과대. 감사의 "downloadDrawing이 roomColors 재사용" dedup은 **틀림** —
   화면 roomColors는 단계 게이트(combine/outdoor), 다운로드는 output 단계라 항상-켜짐 색 필요(cb713ce에서 정리됨).
-- [ ] **도메인 추출**(`splitPlacementAcrossChildren`·`mergePlacements`·`reshapeRoom` — 실 형상 편집 비즈니스
-  규칙이 컴포넌트에 샘, 감사 P0) + `useRoomShapeEditing` ← **다음 우선(주인님 '뷰+서비스 엉킴' 핵심)**
+- [x] **도메인 추출**(`44...`? → 커밋됨) — `domain/generation/roomShapeEdit.ts`(신규): `splitPlacementAcrossChildren`·
+  `mergePlacements`·`reshapeRoom`(+nearestChild) + 단위테스트 9. App은 좌표변환·World커밋·flash만, 판단은 도메인.
+  **주인님 '뷰+서비스 엉킴' 핵심(감사 P0) 해소.** tsc·1242 그린·콘솔 0.
 - [ ] `usePlanCommands`(빈그룹정리·selectOutdoorPlan catch 중복 제거) → `useIndoorPlacement`(move/rotate 통합)
   → `useGenerationSteps`(guardContext 순수화) → `useUndoableWorld`(마지막, edit가 토대 + 결정 #2 통합).
 
