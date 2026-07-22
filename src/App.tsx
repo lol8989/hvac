@@ -1331,7 +1331,14 @@ export default function App({
             tileBase="/tiles"
             layers={layers}
             onLayersChange={setLayers}
-            canAddUnit={step === 'place' && placed}
+            canAddUnit={step === 'place'}
+            onAddUnitUnavailable={(reason) =>
+              flash(
+                reason === 'step'
+                  ? "실내기는 '실내기 배치' 단계에서 추가할 수 있습니다."
+                  : '추가할 실을 먼저 선택하세요 — 존(실) 모드로 전환했습니다. 배치할 실을 클릭한 뒤 ＋ 실내기를 누르세요.',
+              )
+            }
             canPlaceOutdoors={step === 'outdoor'}
             outdoorGroups={floorOutdoorGroups}
             // 실 자르기(V)는 실내기 배치 단계 도구다 — 검출된 실을 다듬는다.

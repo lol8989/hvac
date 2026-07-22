@@ -19,7 +19,7 @@ const TWO_UNITS: UnitSym[] = [
   { id: 'AC_001#2', roomId: 'AC_001', x: 400, y: 200, rot: 0 },
 ]
 
-function Harness({ symbols = TWO_UNITS, onUnitAdd, onUnitsMove }: { symbols?: UnitSym[]; onUnitAdd?: (r: string) => void; onUnitsMove?: (m: UnitMove[]) => void }) {
+function Harness({ symbols = TWO_UNITS, onUnitAdd, onUnitsMove, onAddUnitUnavailable, canAddUnit = true }: { symbols?: UnitSym[]; onUnitAdd?: (r: string) => void; onUnitsMove?: (m: UnitMove[]) => void; onAddUnitUnavailable?: (reason: 'step' | 'noRoom') => void; canAddUnit?: boolean }) {
   const [sel, setSel] = useState<string[]>([])
   return (
     <>
@@ -33,7 +33,8 @@ function Harness({ symbols = TWO_UNITS, onUnitAdd, onUnitsMove }: { symbols?: Un
         outdoorSymbols={[]}
         onUnitAdd={onUnitAdd}
         onUnitsMove={onUnitsMove}
-        canAddUnit
+        onAddUnitUnavailable={onAddUnitUnavailable}
+        canAddUnit={canAddUnit}
       />
     </>
   )
@@ -109,17 +110,36 @@ describe('Viewer 실내기 편집 커밋 (도면 심볼 = 대수)', () => {
     expect(onUnitsMove.mock.calls[0][0][0].id).toBe('AC_001#1')
   })
 
-  it('＋ 실내기는 실을 선택해야 활성화되고, 선택한 실 id로 onUnitAdd를 부른다', () => {
+  // 버튼은 항상 활성이다(§3 UI 정책 — 죽이지 않고 누르면 이유를 안내한다).
+  it('＋ 실내기는 실 선택 전에도 활성이고, 그냥 누르면 안내(noRoom)만 하고 onUnitAdd는 안 부른다', () => {
     const onUnitAdd = vi.fn()
-    render(<Harness onUnitAdd={onUnitAdd} />)
+    const onAddUnitUnavailable = vi.fn()
+    render(<Harness onUnitAdd={onUnitAdd} onAddUnitUnavailable={onAddUnitUnavailable} />)
 
     const btn = screen.getByRole('button', { name: '＋ 실내기' })
-    expect(btn).toBeDisabled() // 실 선택 전
-    fireEvent.click(screen.getByTestId('select-room'))
-    expect(btn).toBeEnabled()
-
+    expect(btn).toBeEnabled() // 실 선택 전에도 활성
     fireEvent.click(btn)
+    expect(onAddUnitUnavailable).toHaveBeenCalledWith('noRoom')
+    expect(onUnitAdd).not.toHaveBeenCalled()
+  })
+
+  it('실을 선택하고 ＋ 실내기를 누르면 그 실 id로 onUnitAdd를 부른다', () => {
+    const onUnitAdd = vi.fn()
+    render(<Harness onUnitAdd={onUnitAdd} />)
+    fireEvent.click(screen.getByTestId('select-room'))
+    fireEvent.click(screen.getByRole('button', { name: '＋ 실내기' }))
     expect(onUnitAdd).toHaveBeenCalledWith('AC_001')
+  })
+
+  it('실내기 배치 단계가 아니면(canAddUnit=false) 눌러도 step 안내만 한다', () => {
+    const onUnitAdd = vi.fn()
+    const onAddUnitUnavailable = vi.fn()
+    render(<Harness canAddUnit={false} onUnitAdd={onUnitAdd} onAddUnitUnavailable={onAddUnitUnavailable} />)
+    const btn = screen.getByRole('button', { name: '＋ 실내기' })
+    expect(btn).toBeEnabled() // 항상 활성
+    fireEvent.click(btn)
+    expect(onAddUnitUnavailable).toHaveBeenCalledWith('step')
+    expect(onUnitAdd).not.toHaveBeenCalled()
   })
 
   it('실내기가 없는 실이면 심볼도 없다(빈 배열 렌더)', () => {

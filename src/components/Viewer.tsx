@@ -90,6 +90,7 @@ interface ViewerProps {
   onUnitsRotate?: (rots: UnitRotate[]) => void
   onUnitsDelete?: (ids: string[]) => void
   onUnitAdd?: (roomId: string) => void // 대표 실에 1대 추가
+  onAddUnitUnavailable?: (reason: 'step' | 'noRoom') => void // ＋실내기를 못 쓰는 상황 안내(버튼은 항상 활성)
   indoorInfo?: Record<string, { model: string; kind: string }> // 실별 실내기 모델명·유형(심볼 오버레이)
   roomColors?: Record<string, GroupColor> // 실 id → 실외기 그룹 색상(방·실내기 하이라이팅). 미배정 실은 없음 → 무채색
   outdoorGroups?: OutdoorGroupInfo[] // 실외기 배치 대상 그룹(placeOutdoors)
@@ -147,7 +148,7 @@ export interface ViewerHandle {
 const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   {
     rooms, selectedIds, onSelectionChange, onEscape, tiles, tileBase,
-    indoorSymbols, onUnitsMove, onUnitsRotate, onUnitsDelete, onUnitAdd,
+    indoorSymbols, onUnitsMove, onUnitsRotate, onUnitsDelete, onUnitAdd, onAddUnitUnavailable,
     outdoorSymbols, onOutdoorsMove, onOutdoorsDelete, onOutdoorsAutoPlace,
     indoorInfo, roomColors, outdoorGroups, planW, planH, mmPerUnit, fitBounds, layers = ALL_LAYERS_ON, onLayersChange,
     canAddUnit = true, canPlaceOutdoors = false,
@@ -719,8 +720,15 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   // 예전에는 실과 무관한 '자유 심볼'(IDU_*)을 아무 데나 놓을 수 있었는데,
   // 그 심볼은 어느 실에도 속하지 않아 선정표·일람표에 실리지 않았다. 그래서 실에 귀속시킨다.
   const primaryRoom = selectedIds[0]
+  // 버튼은 항상 활성이다(§3 UI 정책) — 못 쓰는 상황이면 죽이지 않고 이유·다음 할 일을 안내한다.
   const addUnitToRoom = () => {
-    if (!primaryRoom) return
+    if (!canAddUnit) { onAddUnitUnavailable?.('step'); return } // 실내기 배치 단계가 아니다
+    if (!primaryRoom) {
+      // 추가할 실이 없다 → 존(실) 모드로 바꿔 실을 고르게 하고, 그 다음 할 일을 알린다.
+      setMode('zone')
+      onAddUnitUnavailable?.('noRoom')
+      return
+    }
     onUnitAdd?.(primaryRoom)
     setMode('cassette')
   }
@@ -830,12 +838,11 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         <button
           className="btn sm"
           onClick={addUnitToRoom}
-          disabled={!canAddUnit || !primaryRoom}
           title={
             !canAddUnit
-              ? '실내기 배치 단계에서 AI 실내기 배치 완료 후 추가할 수 있습니다'
+              ? "'실내기 배치' 단계에서 실내기를 추가할 수 있습니다"
               : !primaryRoom
-                ? '실내기를 추가할 실을 먼저 선택하세요'
+                ? '추가할 실을 먼저 선택하세요 — 존(실) 모드(단축키 Z)로 실을 클릭하세요'
                 : `${primaryRoom}에 실내기 1대를 추가합니다`
           }
         >＋ 실내기</button>
