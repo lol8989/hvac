@@ -4,7 +4,7 @@ import type { Room } from '../data'
 import ACUnit from './viewer/ACUnit'
 import ODUnit from './viewer/ODUnit'
 import ZoneRect from './viewer/ZoneRect'
-import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsRect, zoneAreaM2, unitsInRect, zonesBounds, resizeRectFromCorner } from './viewer/geometry'
+import { GRID, snap, norm, zoneBounds, zoneAreaM2, zonesBounds } from './viewer/geometry'
 import type { UnitSym, ZoneBox, Corner, Pt } from './viewer/geometry'
 import type { GroupColor } from '../presentation/generation/groupColors'
 import { useDraftCommit } from './viewer/useDraftCommit'
@@ -12,6 +12,7 @@ import { usePanZoom, type ViewBox } from './viewer/usePanZoom'
 import { useCassetteSelectionSync } from './viewer/useCassetteSelectionSync'
 import { useSliceMode } from './viewer/useSliceMode'
 import { useMergeMode } from './viewer/useMergeMode'
+import { useViewerDrag } from './viewer/useViewerDrag'
 
 export type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
 
@@ -215,12 +216,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const { view, setView, svgW, zoomPct, toSvg, zoomBy, resetView } = usePanZoom({ svgRef, planW: PLAN_W, planH: PLAN_H, fitBounds })
   // 선택된 실들 위에 뜨는 '실외기 선정' 오버레이 버튼의 화면 위치(px, .viewer 기준). 없으면 미표시.
   const [selBtnPos, setSelBtnPos] = useState<{ x: number; y: number } | null>(null)
-  const panRef = useRef<{ sx: number; sy: number; vx: number; vy: number; a: number; d: number } | null>(null)
-  const dragRef = useRef<{ startX: number; startY: number; orig: Record<string, { x: number; y: number }>; moved: boolean } | null>(null)
-  const rotRef = useRef<{ startX: number; orig: Record<string, number> } | null>(null)
-  const cornerRef = useRef<{ id: string; corner: Corner; ax: number; ay: number } | null>(null)
-  const marqRef = useRef<{ sx: number; sy: number; additive: boolean } | null>(null)
-  const oduRef = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number } | null>(null)
   const spaceRef = useRef(false)
 
   // window 리스너(1회 등록)에서 읽는 콜백. 렌더마다 갱신되는 prop을 stale closure 없이 쓴다.
@@ -289,125 +284,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
 
   const panActive = mode === 'pan' || spaceDown
 
-  // 통합 드래그 처리(팬/리사이즈/회전/이동/마퀴) — window 리스너로 화면 밖 지속.
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      const pn = panRef.current
-      if (pn) {
-        setView((v) => ({ ...v, x: pn.vx - (e.clientX - pn.sx) / pn.a, y: pn.vy - (e.clientY - pn.sy) / pn.d }))
-        return
-      }
-      const c = cornerRef.current
-      if (c) {
-        const p = toSvg(e.clientX, e.clientY); if (!p) return
-        const px = st.current.snapOn ? snap(p.x) : p.x
-        const py = st.current.snapOn ? snap(p.y) : p.y
-        const r = resizeRectFromCorner(c.corner, { x: c.ax, y: c.ay }, { x: px, y: py }, GRID)
-        const next = { id: c.id, points: rectPoints(r.x, r.y, r.w, r.h) }
-        zoneDraft.set(next)
-        return
-      }
-      const r = rotRef.current
-      if (r) {
-        const delta = (e.clientX - r.startX) * ROT_SENS
-        const next: Record<string, { rot: number }> = {}
-        for (const id of Object.keys(r.orig)) next[id] = { rot: norm(Math.round((r.orig[id] + delta) / ROT_STEP) * ROT_STEP) }
-        unitDraft.set(next)
-        return
-      }
-      const d = dragRef.current
-      if (d) {
-        const p = toSvg(e.clientX, e.clientY); if (!p) return
-        let dx = p.x - d.startX, dy = p.y - d.startY
-        if (st.current.snapOn) { dx = snap(dx); dy = snap(dy) }
-        if (Math.abs(p.x - d.startX) > 3 || Math.abs(p.y - d.startY) > 3) d.moved = true
-        const next: Record<string, { x: number; y: number }> = {}
-        for (const [id, o] of Object.entries(d.orig)) next[id] = { x: o.x + dx, y: o.y + dy }
-        unitDraft.set(next)
-        return
-      }
-      const od = oduRef.current
-      if (od) {
-        const p = toSvg(e.clientX, e.clientY); if (!p) return
-        let dx = p.x - od.startX, dy = p.y - od.startY
-        if (st.current.snapOn) { dx = snap(dx); dy = snap(dy) }
-        const next = { id: od.id, x: od.ox + dx, y: od.oy + dy }
-        oduDraft.set(next)
-        return
-      }
-      const mq = marqRef.current
-      if (mq) {
-        const p = toSvg(e.clientX, e.clientY); if (!p) return
-        setMarquee({ x: Math.min(mq.sx, p.x), y: Math.min(mq.sy, p.y), w: Math.abs(p.x - mq.sx), h: Math.abs(p.y - mq.sy) })
-      }
-    }
-    // 드래그/회전 draft를 App(Placement)에 한 번만 커밋하고 draft를 비운다.
-    const commitDraft = (kind: 'move' | 'rotate') => {
-      const d = unitDraft.ref.current
-      unitDraft.clear()
-      if (!d) return
-      if (kind === 'move') {
-        const moves = Object.entries(d)
-          .filter(([, v]) => v.x !== undefined && v.y !== undefined)
-          .map(([id, v]) => ({ id, x: v.x as number, y: v.y as number }))
-        if (moves.length) cbRef.current.onUnitsMove?.(moves)
-      } else {
-        const rots = Object.entries(d)
-          .filter(([, v]) => v.rot !== undefined)
-          .map(([id, v]) => ({ id, rot: v.rot as number }))
-        if (rots.length) cbRef.current.onUnitsRotate?.(rots)
-      }
-    }
-    const onUp = () => {
-      if (panRef.current) { panRef.current = null; setPanning(false); return }
-      if (oduRef.current) {
-        oduRef.current = null
-        const d = oduDraft.ref.current
-        oduDraft.clear()
-        if (d) cbRef.current.onOutdoorsMove?.([d])
-        return
-      }
-      if (cornerRef.current) {
-        cornerRef.current = null
-        const zd = zoneDraft.ref.current
-        zoneDraft.clear()
-        if (zd) cbRef.current.onZoneResize?.(zd.id, zd.points) // 형상은 App이 소유한다
-        return
-      }
-      if (rotRef.current) { rotRef.current = null; setRotatingId(null); commitDraft('rotate'); return }
-      if (marqRef.current) {
-        const m = marqRef.current
-        setMarquee((rect) => {
-          if (rect) {
-            const big = rect.w > 3 || rect.h > 3
-            const s = st.current
-            if (s.mode === 'zone') {
-              if (big && layerVisible('zone', s.layers)) {
-                const hits = s.zones.filter((z) => zoneHitsRect(rect, z)).map((z) => z.id)
-                onSelectionChange(Array.from(new Set([...(m.additive ? s.selectedIds : []), ...hits])))
-              } else if (!m.additive) onSelectionChange([])
-            } else if (s.mode === 'cassette') {
-              if (big && layerVisible('indoor', s.layers)) {
-                const hits = unitsInRect(s.symbols, rect)
-                const base = m.additive ? new Set(s.selUnits) : new Set<string>()
-                hits.forEach((id) => base.add(id))
-                setSelUnits(base)
-              } else if (!m.additive) setSelUnits(new Set())
-            }
-          }
-          return null
-        })
-        marqRef.current = null
-      }
-      if (dragRef.current) {
-        dragRef.current = null
-        commitDraft('move')
-      }
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-  }, [toSvg, onSelectionChange])
+  // 드래그 멀티플렉서 — 6가지 드래그(팬·리사이즈·회전·이동·실외기·마퀴)를 window 리스너로 처리(§5.8).
+  // 뷰어의 mousedown 핸들러는 선택을 처리하고 begin*로 드래그를 연다(정책/메커니즘 분리).
+  const drag = useViewerDrag({
+    st, svgRef, view, toSvg, setView, setMarquee, setPanning, setRotatingId, setSelUnits,
+    onSelectionChange, unitDraft, oduDraft, zoneDraft, cbRef,
+  })
 
   // window 키 리스너는 1회만 등록된다 → 최신 함수를 ref로 읽는다(stale closure 방지).
   const enterSliceRef = useRef(slice.enterSlice)
@@ -474,21 +356,14 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp) }
   }, [onEscape, onSelectionChange, resetView])
 
-  const startPan = (cx: number, cy: number) => {
-    const ctm = svgRef.current?.getScreenCTM(); if (!ctm) return
-    panRef.current = { sx: cx, sy: cy, vx: view.x, vy: view.y, a: ctm.a, d: ctm.d }
-    setPanning(true)
-  }
-
   const onBgDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (panActive) { startPan(e.clientX, e.clientY); return }
+    if (panActive) { drag.startPan(e.clientX, e.clientY); return }
     const p = toSvg(e.clientX, e.clientY); if (!p) return
     // 자르기 모드에서는 존 레이어가 클릭을 받지 않으므로(pointerEvents none) 여기서 히트 판정한다.
     // 마퀴보다 먼저 걸러야 한다 — 안 그러면 자르기 클릭이 영역 선택으로 먹힌다.
     if (mode === 'slice') { slice.commitAt(p); return }
     if (mode === 'merge') { merge.commitAt(p); return }
-    marqRef.current = { sx: p.x, sy: p.y, additive: e.shiftKey }
-    setMarquee({ x: p.x, y: p.y, w: 0, h: 0 })
+    drag.beginMarquee(p.x, p.y, e.shiftKey)
   }
 
   // 자르기 라인 프리뷰: 버튼을 누르지 않은 커서 추적은 window onMove(드래그 전용)가 안 잡는다.
@@ -502,7 +377,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
 
   // 실내기 심볼: 선택 + 이동 시작.
   const onUnitDown = (e: React.MouseEvent, id: string) => {
-    if (panActive) { startPan(e.clientX, e.clientY); return }
+    if (panActive) { drag.startPan(e.clientX, e.clientY); return }
     e.stopPropagation()
     let next: Set<string>
     if (e.shiftKey) {
@@ -516,7 +391,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     const p = toSvg(e.clientX, e.clientY); if (!p) return
     const orig: Record<string, { x: number; y: number }> = {}
     symbols.forEach((s) => { if (next.has(s.id)) orig[s.id] = { x: s.x, y: s.y } })
-    dragRef.current = { startX: p.x, startY: p.y, orig, moved: false }
+    drag.beginUnitDrag(orig, p)
   }
 
   const onRotateDown = (e: React.MouseEvent, id: string) => {
@@ -524,12 +399,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     const ids = selUnits.has(id) && selUnits.size > 1 ? Array.from(selUnits) : [id]
     const orig: Record<string, number> = {}
     symbols.forEach((s) => { if (ids.includes(s.id)) orig[s.id] = s.rot })
-    rotRef.current = { startX: e.clientX, orig }
+    drag.beginRotate(orig, e.clientX)
     setRotatingId(id)
   }
 
   const onZoneDown = (e: React.MouseEvent, id: string) => {
-    if (panActive) { startPan(e.clientX, e.clientY); return }
+    if (panActive) { drag.startPan(e.clientX, e.clientY); return }
     e.stopPropagation()
     if (e.shiftKey) onSelectionChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id])
     else onSelectionChange([id])
@@ -537,12 +412,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
 
   // 실외기 심볼: 선택 + 이동 시작.
   const onODUDown = (e: React.MouseEvent, id: string) => {
-    if (panActive) { startPan(e.clientX, e.clientY); return }
+    if (panActive) { drag.startPan(e.clientX, e.clientY); return }
     e.stopPropagation()
     setSelOdu(id)
     const p = toSvg(e.clientX, e.clientY); if (!p) return
     const o = outdoors.find((u) => u.id === id); if (!o) return
-    oduRef.current = { id, startX: p.x, startY: p.y, ox: o.x, oy: o.y }
+    drag.beginOduDrag(id, p, o)
   }
 
   const onCornerDown = (e: React.MouseEvent, id: string, corner: Corner) => {
@@ -554,7 +429,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     else if (corner === 'tr') { ax = b.x; ay = b.y + b.h }
     else if (corner === 'bl') { ax = b.x + b.w; ay = b.y }
     else { ax = b.x; ay = b.y }
-    cornerRef.current = { id, corner, ax, ay }
+    drag.beginZoneResize(id, corner, { x: ax, y: ay })
     onSelectionChange([id])
   }
 
