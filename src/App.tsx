@@ -14,6 +14,7 @@ import MappingDock from './components/generation/MappingDock'
 import { buildDockView } from './presentation/generation/dockView'
 import { roomColorMap } from './presentation/generation/groupColors'
 import { planConfirmFlow } from './presentation/generation/confirmEditFlow'
+import { usePersistentPanel } from './presentation/generation/usePersistentPanel'
 import ConfirmModal from './components/ConfirmModal'
 import ProjectSettings from './components/steps/ProjectSettings'
 import CeilingHeightsPanel from './components/steps/CeilingHeights'
@@ -71,15 +72,6 @@ import { useTileManifest } from './presentation/generation/useTileManifest'
 const nearestChild = <T extends { poly: Polygon }>(cs: T[], p: Pt): T => {
   const d2 = (c: T) => (c.poly.centroid.x - p.x) ** 2 + (c.poly.centroid.y - p.y) ** 2
   return cs.reduce((best, c) => (d2(c) < d2(best) ? c : best), cs[0])
-}
-
-// 우측 패널 상태 복원 헬퍼(폭은 ModelPanel의 260~560 범위로 클램프).
-function loadPanelOpen(): boolean {
-  return localStorage.getItem('poc.panel.open') !== '0'
-}
-function loadPanelW(): number {
-  const v = Number(localStorage.getItem('poc.panel.w'))
-  return Number.isFinite(v) && v > 0 ? Math.max(260, Math.min(560, v)) : 322
 }
 
 // 목업 검출기(ROOMS)의 출력을 도메인 Room·형상으로 시딩한다.
@@ -250,14 +242,7 @@ export default function App({
     [domainRooms, roomGeom],
   )
   // 우측 패널 접힘/폭은 localStorage에 유지(새로고침 후에도 복원).
-  const [panelOpen, setPanelOpen] = useState(() => loadPanelOpen())
-  const [panelW, setPanelW] = useState(() => loadPanelW())
-  useEffect(() => {
-    localStorage.setItem('poc.panel.open', panelOpen ? '1' : '0')
-  }, [panelOpen])
-  useEffect(() => {
-    localStorage.setItem('poc.panel.w', String(panelW))
-  }, [panelW])
+  const { open: panelOpen, setOpen: setPanelOpen, width: panelW, setWidth: setPanelW } = usePersistentPanel()
   // 실외기 심볼 좌표(그룹 key → 좌표). 도면에 놓였는지 여부가 곧 '배치 완료' 여부다.
   // 스텝 가드 팝업(차단/확인). null = 닫힘.
   const [guard, setGuard] = useState<{ verdict: Extract<GuardVerdict, { kind: 'BLOCK' } | { kind: 'CONFIRM' }>; proceed: () => void; confirmLabel?: string; confirms?: Extract<GuardVerdict, { kind: 'CONFIRM' }>[] } | null>(null)
