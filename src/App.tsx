@@ -32,19 +32,18 @@ import { guardAdvance, guardDestructive } from './domain/generation/StepGuard'
 import type { StepId, GuardContext, GuardVerdict } from './domain/generation/StepGuard'
 import { InMemoryPlanRepository } from './infrastructure/generation/InMemoryPlanRepository'
 import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemoryOutdoorModelCatalog'
-import type { OutdoorModelSpec } from './application/generation/ports'
 import { makeReassignRoom } from './application/generation/ReassignRoom'
 import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoorModel'
 import { makeAddGroup, makeRemoveGroup } from './application/generation/GroupCommands'
-import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, syncPlanUnits, selectOutdoorPlan, indoorUnitsFor } from './presentation/generation/planAdapter'
+import { bootstrapPlan, toViewModel, syncPlanUnits, indoorUnitsFor } from './presentation/generation/planAdapter'
 import { compatPredicateFromMatrix } from './presentation/generation/compatPredicate'
-import { shouldAutoSelectOutdoor } from './presentation/generation/autoSelectOutdoor'
+import { usePlanCommands } from './presentation/generation/usePlanCommands'
 import { compatMatrixFromSeed } from './infrastructure/equipment/seed/compatMatrixFromSeed'
 import type { CompatMatrix } from './domain/equipment/CompatMatrix'
 import { useFloorView } from './presentation/generation/useFloorView'
 import { useSelectionCards } from './presentation/generation/useSelectionCards'
 import { splitPlacementAcrossChildren, mergePlacements, reshapeRoom } from './domain/generation/roomShapeEdit'
-import { DomainError, NotFoundError, NoCompatibleOutdoorError, UnpackableLoadError } from './domain/generation/errors'
+import { DomainError } from './domain/generation/errors'
 import { Room as DomainRoom } from './domain/generation/Room'
 import { indoorUnitId, type IndoorUnit } from './domain/generation/IndoorUnit'
 import { Placement } from './domain/generation/Placement'
@@ -318,8 +317,13 @@ export default function App({
     }),
     [repo],
   )
-  // 유즈케이스가 리포지토리를 고친 뒤 그 결과를 World에 커밋한다(= 되돌릴 수 있는 편집 1건).
-  const sync = (label: string) => edit((w) => ({ ...w, plan: repo.load() }), label)
+  // 실외기 조합(AssignmentPlan) 편집 커맨드 + 자동선정 이펙트를 한 훅으로 묶는다.
+  // 선정·재배정·삭제·모델교체가 리포지토리·플랜·undo를 함께 만지던 것을 App 밖으로 낸다(§5.8).
+  const { moveRoom, removeGroup, replaceModel, selectOutdoorForSelected } = usePlanCommands({
+    repo, uc, catalog, isOutdoorCompatible, plan, domainRooms, placements,
+    unitsFrom, step, suppressAutoSelectRef,
+    edit, replace: undoable.replace, setSelRooms, flash,
+  })
 
   // 되돌리기로 플랜이 과거로 돌아가면 리포지토리도 그 시점으로 맞춘다 —
   // 유즈케이스(배정·그룹 편집)는 리포지토리를 읽으므로, 어긋나면 undo가 반쯤만 적용된다.
@@ -336,42 +340,6 @@ export default function App({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placements, domainRooms, repo])
 
-  // 실외기 선정·조합: 배치된 실내기의 정격 총용량으로 실외기를 고른다(도메인 규칙).
-  // 실외기 대수·모델은 상수가 아니라 이 계산의 결과다.
-  const runOutdoorSelection = (): boolean => {
-    const units = unitsFrom(placements)
-    if (!units.length) { flash('실내기를 먼저 배치해야 실외기를 선정할 수 있습니다'); return false }
-    try {
-      const next = selectOutdoorPlan(units, (roomId) => domainRooms[roomId]?.floor ?? '', catalog, isOutdoorCompatible)
-      repo.save(next)
-      // 자동 선정은 파생 부트스트랩이다(사용자가 누른 액션이 아니다) → 히스토리에 남기지 않는다(§5.7).
-      // commit하면 Ctrl+Z가 '사용자가 한 적 없는 선정'을 되돌리려다, 그룹이 0이 되어 이 이펙트가
-      // 즉시 재선정 → undo가 무효가 된다. replace로 현재 스냅샷만 갱신한다.
-      undoable.replace((w) => ({ ...w, plan: next }))
-      const odus = next.groups.length
-      flash(`✦ 정격 ${(units.reduce((a, u) => a + u.cool.kw, 0)).toFixed(1)}kW에 맞춰 실외기 ${odus}대를 선정했습니다`)
-      return true
-    } catch (e) {
-      if (e instanceof NoCompatibleOutdoorError || e instanceof UnpackableLoadError) { flash(e.message); return false }
-      throw e
-    }
-  }
-
-  // 실외기 단계에 처음 들어오면 선정을 1회 자동 실행한다(그룹이 아직 없을 때만).
-  // 이후 사용자가 매핑 팝업에서 조정한 결과는 덮어쓰지 않는다. 사용자가 방금 실외기를
-  // 삭제해 그룹을 비운 경우(suppressAutoSelectRef)엔 재선정하지 않는다 — 안 그러면
-  // 단일 그룹 삭제가 즉시 재선정돼 무변화로 보인다(주인님 결정 2026-07-22, b안).
-  useEffect(() => {
-    if (!shouldAutoSelectOutdoor({
-      step,
-      groupCount: plan.groups.length,
-      placementCount: Object.keys(placements).length,
-      suppressed: suppressAutoSelectRef.current,
-    })) return
-    runOutdoorSelection()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, plan, placements])
-
   // 컴포넌트가 소비하는 레거시 뷰 형태로 변환(동작 보존).
   const { groups, pool } = toViewModel(plan)
 
@@ -382,72 +350,6 @@ export default function App({
   const { liveSelRooms, primary, effIn, effOut, selectModel } = useSelectionCards({
     selRooms, tab, domainRooms, groups, outdoorCards, indoorModels, placements,
   })
-
-  // 실(그 실의 모든 실내기 대수)을 대상(to = 그룹 key 또는 'pool')으로 이동. 호환 불가 시 false.
-  const moveRoom = (id: string, to: string): boolean => {
-    try {
-      const res = uc.reassign({ roomId: id, to })
-      if (res.ok) {
-        // 실을 빼서 빈 그룹이 되면 자동 정리한다(분할·삭제 버튼을 없앤 대체 — 그룹은 선정으로만 생긴다).
-        for (const g of repo.load().groups) if (g.roomIds.length === 0) uc.remove({ key: g.key })
-        sync('실외기 배정 변경')
-      }
-      return res.ok
-    } catch (e) {
-      if (e instanceof NotFoundError) return false
-      throw e
-    }
-  }
-
-  // 실외기 카드 삭제 — 연결된 실은 미배정 풀로 돌아간다(다시 선정하면 새 그룹으로 묶인다).
-  const removeGroup = (key: string) => {
-    const g = plan.groupByKey(key)
-    if (!g) return
-    // 사용자가 명시적으로 삭제했으면 그룹이 0이 되어도 자동 선정으로 되살리지 않는다.
-    suppressAutoSelectRef.current = true
-    uc.remove({ key })
-    sync('실외기 삭제')
-    flash(`${g.label}을(를) 삭제했습니다 — 연결 실 ${g.roomIds.length}곳이 미배정으로 돌아갔습니다`)
-  }
-
-  // 실외기 모델 교체. 계열이 바뀌어 호환 안 되는 실내기는 미배정 풀로 반환.
-  const replaceModel = (key: string, spec: OutdoorModelSpec) => {
-    const g = plan.groupByKey(key)
-    if (!g) return
-    const res = uc.replace({ key, outdoorUnit: outdoorUnitFromSpec(spec) })
-    sync('실외기 모델 교체')
-    if (res.ejected.length) {
-      flash(`실외기 교체: 계열이 달라 실내기 ${res.ejected.length}개를 미배정으로 옮겼습니다`)
-    } else {
-      flash(`실외기 ${g.label} 모델을 ${spec.model}(으)로 교체했습니다`)
-    }
-  }
-
-  // ── 실외기 선정: 도면에서 선택한 실들 위에 뜨는 오버레이 버튼이 부른다(분할·삭제·선정대기 대체) ──
-  // 선택한 실들만 대상으로 실외기를 선정해 새 그룹으로 묶는다(전체 재선정이 아니다). 이미 다른
-  // 실외기에 있던 실도 이 새 그룹으로 옮겨지고, 비게 된 옛 그룹은 자동 정리된다.
-  // 도메인 선정(selectOutdoorPlan)이 층×계열 버킷·조합비로 실외기를 고른다.
-  const selectOutdoorForSelected = (roomIds: readonly string[]) => {
-    const set = new Set(roomIds)
-    const units = unitsFrom(placements).filter((u) => set.has(u.roomId))
-    if (!units.length) { flash('선정할 실을 먼저 선택하세요'); return }
-    try {
-      const sub = selectOutdoorPlan(units, (rid) => domainRooms[rid]?.floor ?? '', catalog, isOutdoorCompatible)
-      for (const g of sub.groups) {
-        const meta = nextGroupMeta(repo.load())
-        uc.add({ meta, outdoorUnit: g.outdoorUnit })
-        for (const rid of g.roomIds) uc.reassign({ roomId: rid, to: meta.key })
-      }
-      // 선택 실들이 빠져 빈 그룹이 된 옛 실외기는 정리한다.
-      for (const gg of repo.load().groups) if (gg.roomIds.length === 0) uc.remove({ key: gg.key })
-      sync('실외기 선정')
-      setSelRooms([])
-      flash(`✦ 선택한 ${units.length}대 기준 실외기 ${sub.groups.length}대를 선정했습니다`)
-    } catch (e) {
-      if (e instanceof NoCompatibleOutdoorError || e instanceof UnpackableLoadError) { flash(e.message); return }
-      throw e
-    }
-  }
 
   // 우측 패널 실내기 목록에서 실을 클릭하면 선택에 토글. 새로 켠 실은 맨 앞에 두어
   // 대표 실(selRooms[0], 헤더 표시)로 승격 → 헤더(실ID/이름/면적)가 즉시 갱신된다.
