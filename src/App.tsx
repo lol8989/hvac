@@ -384,7 +384,10 @@ export default function App({
     try {
       const next = selectOutdoorPlan(units, (roomId) => domainRooms[roomId]?.floor ?? '', catalog, isOutdoorCompatible)
       repo.save(next)
-      edit((w) => ({ ...w, plan: next }), '실외기 선정')
+      // 자동 선정은 파생 부트스트랩이다(사용자가 누른 액션이 아니다) → 히스토리에 남기지 않는다(§5.7).
+      // commit하면 Ctrl+Z가 '사용자가 한 적 없는 선정'을 되돌리려다, 그룹이 0이 되어 이 이펙트가
+      // 즉시 재선정 → undo가 무효가 된다. replace로 현재 스냅샷만 갱신한다.
+      undoable.replace((w) => ({ ...w, plan: next }))
       const odus = next.groups.length
       flash(`✦ 정격 ${(units.reduce((a, u) => a + u.cool.kw, 0)).toFixed(1)}kW에 맞춰 실외기 ${odus}대를 선정했습니다`)
       return true
