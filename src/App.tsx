@@ -35,9 +35,10 @@ import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemor
 import { makeReassignRoom } from './application/generation/ReassignRoom'
 import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoorModel'
 import { makeAddGroup, makeRemoveGroup } from './application/generation/GroupCommands'
-import { bootstrapPlan, toViewModel, syncPlanUnits, indoorUnitsFor } from './presentation/generation/planAdapter'
+import { bootstrapPlan, toViewModel, syncPlanUnits } from './presentation/generation/planAdapter'
 import { compatPredicateFromMatrix } from './presentation/generation/compatPredicate'
 import { usePlanCommands } from './presentation/generation/usePlanCommands'
+import { useIndoorPlacement } from './presentation/generation/useIndoorPlacement'
 import { compatMatrixFromSeed } from './infrastructure/equipment/seed/compatMatrixFromSeed'
 import type { CompatMatrix } from './domain/equipment/CompatMatrix'
 import { useFloorView } from './presentation/generation/useFloorView'
@@ -45,11 +46,8 @@ import { useSelectionCards } from './presentation/generation/useSelectionCards'
 import { splitPlacementAcrossChildren, mergePlacements, reshapeRoom } from './domain/generation/roomShapeEdit'
 import { DomainError } from './domain/generation/errors'
 import { Room as DomainRoom } from './domain/generation/Room'
-import { indoorUnitId, type IndoorUnit } from './domain/generation/IndoorUnit'
 import { Placement } from './domain/generation/Placement'
 import { applyAiPlacement, placementTotalsW, aiSelectionFor } from './domain/generation/recalc'
-import { layoutPositions } from './domain/generation/layoutPositions'
-import type { UnitPosition } from './domain/generation/layoutPositions'
 import { Polygon, sharedEdgeLength, NotAdjacentError } from './domain/shared/Polygon'
 import type { Pt } from './domain/shared/Polygon'
 import { sliceRoom, SliceMissedRoomError, TooThinSliceError, SliceProducesManyPiecesError } from './domain/generation/sliceRoom'
@@ -268,44 +266,20 @@ export default function App({
     )
   }, [planDims, viewRooms, scale])
 
-  // 심볼 좌표(도면 좌표계)로 실 폴리곤을 판정할 때 쓴다.
-  const worldPolyOf = (roomId: string): Polygon | null => {
-    const pts = worldRooms[roomId]?.points
-    return pts && pts.length >= 3 ? Polygon.of(pts) : null
-  }
-
   const flash = (msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(''), 2600)
   }
 
-  // 실 안에 N대를 놓을 도면 좌표. 도메인(Placement)은 "대수만큼 좌표가 있어야 한다"만 알고,
-  // 실이 도면 어디에 있는지는 이 어댑터가 안다.
-  const layoutFor = (roomId: string, count: number): UnitPosition[] => {
-    const poly = worldPolyOf(roomId)
-    if (!poly) return []
-    return layoutPositions(poly, count)
-  }
-
-  // 대수가 바뀔 때 좌표 맞추기: 이미 놓인 심볼의 자리는 지키고, 남는 건 자르고 모자라면 새로 깐다.
-  const resizePositions = (prev: readonly UnitPosition[], roomId: string, n: number): UnitPosition[] => {
-    if (prev.length === n) return [...prev]
-    if (prev.length > n) return prev.slice(0, n)
-    return [...prev, ...layoutFor(roomId, n).slice(prev.length)]
-  }
-
-  // 실내기 배치(placements) → 도메인 실내기 유닛 목록. 대수만큼 유닛이 생기고,
-  // 용량은 실 설계부하가 아니라 선정된 모델의 정격이다(조합비·maxConnections의 기준).
-  const unitsFrom = (ps: Record<string, Placement>): IndoorUnit[] => {
-    const out: IndoorUnit[] = []
-    for (const [id, p] of Object.entries(ps)) {
-      const room = domainRooms[id]
-      const model = indoorCatalog.byCode(p.effectiveSelection.modelCode)
-      if (!room || !model) continue
-      out.push(...indoorUnitsFor({ id, name: room.name }, p.effectiveSelection.quantity, model))
-    }
-    return out
-  }
+  // 실내기 배치(placements) 편집 커맨드 + 좌표 어댑터(layoutFor)·유닛 파생(unitsFrom)을 한 훅으로 묶는다.
+  // 도면 심볼 1개 = 실내기 1대 = 선정표 대수 1(불변식). 대수의 SSOT는 심볼이고 이 커맨드가 그것을 고친다(§5.8).
+  const {
+    layoutFor, unitsFrom, indoorSymbols, aiPlace,
+    moveUnits, rotateUnits, deleteUnits, addUnitToRoom, overrideIndoor, resetIndoor,
+  } = useIndoorPlacement({
+    worldRooms, domainRooms, indoorCatalog, indoorModels, placements,
+    editPlacements, flash, suppressAutoSelectRef,
+  })
 
   // 유즈케이스(포트 DI). 리포지토리가 고정이라 1회 생성.
   const uc = useMemo(
@@ -414,85 +388,6 @@ export default function App({
   }
   const applyModel = () => (tab === 'in' ? applyIndoorModel() : applyOutdoorModel())
 
-  // 'AI 실내기 배치' = 모델·대수 선정 + 좌표 생성. 도면 심볼은 그 결과를 그린다(별도 명령 없음).
-  const aiPlace = () => {
-    // 방마다 필요부하 기반으로 모델+대수 자동 선정. 사용자 수정 셀·좌표는 보존(AI값만 갱신).
-    // 플랜 동기화(미배정 풀 편입)는 placements 변경 이펙트가 맡는다. 배정은 이후 combine에서 생긴다.
-    // 재배치는 새 시작이라 삭제 억제를 해제한다(다음 combine 진입 시 1회 자동 선정 복원).
-    suppressAutoSelectRef.current = false
-    editPlacements('AI 실내기 배치', applyAiPlacement(Object.values(domainRooms), placements, indoorModels, layoutFor))
-    flash('✦ AI가 실 ' + Object.keys(domainRooms).length + '곳에 실내기를 배치·선정했습니다 (수정 셀은 보존)')
-  }
-
-  // ── 도면 심볼 = 실내기 대수 (SSOT) ──
-  // placements의 좌표를 그대로 심볼로 편다. 심볼 id는 `${roomId}#${n}`(1-based).
-  const indoorSymbols = useMemo<UnitSym[]>(
-    () =>
-      Object.entries(placements).flatMap(([roomId, p]) =>
-        p.positions.map((pos, i) => ({ id: indoorUnitId(roomId, i + 1), roomId, x: pos.x, y: pos.y, rot: pos.rot })),
-      ),
-    [placements],
-  )
-
-  // 심볼 id → (실 id, 0-based 인덱스). 파싱 실패는 무시(방어).
-  const parseUnitId = (id: string): { roomId: string; index: number } | null => {
-    const at = id.lastIndexOf('#')
-    if (at < 1) return null
-    const n = Number(id.slice(at + 1))
-    if (!Number.isInteger(n) || n < 1) return null
-    return { roomId: id.slice(0, at), index: n - 1 }
-  }
-
-  // 도면에서 심볼을 옮기면 그 실내기의 좌표가 바뀐다(대수·모델은 그대로).
-  const moveUnits = (moves: { id: string; x: number; y: number }[]) => {
-    editPlacements('실내기 이동', (prev) => {
-      const next = { ...prev }
-      for (const m of moves) {
-        const ref = parseUnitId(m.id)
-        if (!ref || !next[ref.roomId]) continue
-        next[ref.roomId] = next[ref.roomId].moveUnit(ref.index, m.x, m.y)
-      }
-      return next
-    })
-  }
-  const rotateUnits = (rots: { id: string; rot: number }[]) => {
-    editPlacements('실내기 회전', (prev) => {
-      const next = { ...prev }
-      for (const r of rots) {
-        const ref = parseUnitId(r.id)
-        if (!ref || !next[ref.roomId]) continue
-        next[ref.roomId] = next[ref.roomId].rotateUnit(ref.index, r.rot)
-      }
-      return next
-    })
-  }
-
-  // 도면에서 심볼을 지우면 그 실의 대수가 줄고, 선정표·조합비가 즉시 따라온다.
-  // 한 실의 여러 대수를 지울 때는 인덱스가 밀리지 않도록 큰 것부터 지운다.
-  const deleteUnits = (ids: string[]) => {
-    editPlacements('실내기 삭제', (prev) => {
-      const next = { ...prev }
-      const byRoom = new Map<string, number[]>()
-      for (const id of ids) {
-        const ref = parseUnitId(id)
-        if (!ref || !next[ref.roomId]) continue
-        byRoom.set(ref.roomId, [...(byRoom.get(ref.roomId) ?? []), ref.index])
-      }
-      for (const [roomId, indexes] of byRoom) {
-        let p: Placement | null = next[roomId]
-        for (const i of [...indexes].sort((a, b) => b - a)) {
-          if (!p) break
-          p = p.removeUnit(i)
-        }
-        if (p) next[roomId] = p
-        else delete next[roomId] // 마지막 한 대를 지웠다 → 그 실에는 실내기가 없다
-      }
-      return next
-    })
-    flash(`실내기 ${ids.length}대를 삭제했습니다 (선정표 대수에 반영)`)
-  }
-
-
   // ── 실외기 심볼(도면 좌표) ──
   const outdoorSymbols = useMemo<UnitSym[]>(
     () =>
@@ -527,23 +422,6 @@ export default function App({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan])
 
-  // 도면에서 실내기를 더하면 그 실의 대수가 는다. 모델은 그 실의 선정 모델을 따른다.
-  // layoutFor는 실이 너무 얇으면 도메인 에러를 던진다 → 화면을 죽이지 않고 사유를 알린다.
-  const addUnitToRoom = (roomId: string) => {
-    const room = domainRooms[roomId]
-    if (!room) return
-    try {
-      const existing = placements[roomId]
-      const next = existing
-        ? existing.addUnit(layoutFor(roomId, existing.quantity + 1)[existing.quantity] ?? { x: 0, y: 0, rot: 0 })
-        : Placement.ai(roomId, { ...aiSelectionFor(room, indoorModels), quantity: 1 }, layoutFor(roomId, 1))
-      editPlacements('실내기 추가', (prev) => ({ ...prev, [roomId]: next }))
-      flash(`${roomId}에 실내기 1대를 추가했습니다`)
-    } catch (e) {
-      flash(e instanceof DomainError ? e.message : '실내기를 추가할 수 없습니다')
-    }
-  }
-
   // ── 선정표 그리드 편집 핸들러: 상류 수정 → 하류(AI 선정·조합비) 재계산 ──
   // 편집 커맨드는 새 창(BroadcastChannel)에서도 온다 → 사라진 실(자르기·시설군 재시딩)을 가리킬 수 있다.
   // 신뢰 경계를 넘어오는 id는 반드시 존재를 확인한다(적대적 QA).
@@ -570,31 +448,6 @@ export default function App({
     try {
       updateRoom(id, (r) => r.overrideUnitLoad(new UnitLoad(coolKcal, r.effectiveUnitLoad.heatKcal)), '단위부하 수정')
     } catch { flash('단위부하는 0보다 큰 숫자여야 합니다') }
-  }
-  // 선정표에서 모델·대수를 고치면 도면 심볼 개수도 함께 바뀐다(대수 SSOT = 심볼).
-  const overrideIndoor = (id: string, modelCode: string, quantity: number) => {
-    if (!domainRooms[id]) return
-    if (!indoorCatalog.byCode(modelCode)) { flash('카탈로그에 없는 모델입니다'); return }
-    try {
-      const sel = { modelCode, quantity }
-      const positions = resizePositions(placements[id]?.positions ?? [], id, quantity)
-      const nextP = (placements[id] ?? Placement.ai(id, sel, positions)).overrideSelection(sel, positions)
-      editPlacements('실내기 대수·모델 수정', (prev) => ({ ...prev, [id]: nextP }))
-    } catch (e) {
-      flash(e instanceof DomainError ? e.message : '대수를 바꿀 수 없습니다')
-    }
-  }
-  const resetIndoor = (id: string) => {
-    if (!domainRooms[id] || !placements[id]) return
-    try {
-      // 오버라이드 해제 + 최신 부하 기준 AI 추천으로 갱신. 좌표도 AI 대수에 맞춰 다시 깐다.
-      const ai = aiSelectionFor(domainRooms[id], indoorModels)
-      const positions = layoutFor(id, ai.quantity)
-      const nextP = placements[id].clearOverride(positions).withAiSelection(ai, positions)
-      editPlacements('실내기 초기화', (prev) => ({ ...prev, [id]: nextP }))
-    } catch (e) {
-      flash(e instanceof DomainError ? e.message : '초기화할 수 없습니다')
-    }
   }
   const moveRoomFromGrid = (id: string, to: string) => {
     const cur = groupOfRoom(groups, id)?.key ?? 'pool'
