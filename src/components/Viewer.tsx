@@ -4,13 +4,14 @@ import type { Room } from '../data'
 import ACUnit from './viewer/ACUnit'
 import ODUnit from './viewer/ODUnit'
 import ZoneRect from './viewer/ZoneRect'
-import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsRect, zoneOfPoint, roomIdsForUnits, zoneAreaM2, unitsInRect, zonesBounds, resizeRectFromCorner } from './viewer/geometry'
+import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsRect, zoneOfPoint, zoneAreaM2, unitsInRect, zonesBounds, resizeRectFromCorner } from './viewer/geometry'
 import type { UnitSym, ZoneBox, Corner, Pt } from './viewer/geometry'
 import type { GroupColor } from '../presentation/generation/groupColors'
 import { useDraftCommit } from './viewer/useDraftCommit'
 import { usePanZoom, type ViewBox } from './viewer/usePanZoom'
+import { useCassetteSelectionSync } from './viewer/useCassetteSelectionSync'
 
-type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
+export type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
 
 // 자르기 라인(무한 직선): 지나는 점 + 각도(도). 도메인 CutLine과 같은 모양이다.
 export interface SliceLine { x: number; y: number; angleDeg: number }
@@ -188,7 +189,8 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       })),
     [rooms, zoneDraft.value],
   )
-  const [selUnits, setSelUnits] = useState<Set<string>>(() => new Set())
+  // 에어컨 모드 선택 양방향 동기(심볼↔실). 핑퐁 방지 refs·두 이펙트를 훅으로 뺀다.
+  const { selUnits, setSelUnits } = useCassetteSelectionSync({ mode, symbols, zones, selectedIds, onSelectionChange })
   // 실외기 심볼도 controlled. 드래그 중에는 oduDraft로 그리고 마우스를 뗄 때 커밋한다.
   const oduDraft = useDraftCommit<{ id: string; x: number; y: number }>()
   const outdoors = useMemo(
@@ -276,42 +278,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     setSelBtnPos({ x: scr.x - wr.left, y: scr.y - wr.top })
   }, [onSelectOutdoorForSelection, selectedIds, zones, view, svgW])
 
-  // C(에어컨) 모드: 선택된 실내기 심볼 → 담당 실을 패널 선택으로 반영(단일 클릭·드래그 동일 동작).
-  // 실도 함께 하이라이팅됨(selectedIds→ZoneRect). 마운트 시 초기 선택 보존, 방 밖 심볼 무시, 같은 실 다중 심볼 합침.
-  const firstSel = useRef(true)
-  // 순방향 동기화(심볼→실)가 발신한 selectedIds 변경 표식 — 역방향에서 1회 건너뛴다.
-  // 없으면 자유 심볼(IDU_) 클릭 → 실 선택 → 그 실의 바인딩 심볼까지 함께 선택되는 버그가 생긴다.
-  const selFromSymbols = useRef(false)
-  useEffect(() => {
-    if (firstSel.current) { firstSel.current = false; return }
-    if (mode !== 'cassette') return
-    const chosen = symbols.filter((s) => selUnits.has(s.id))
-    const next = roomIdsForUnits(chosen, zones)
-    const cur = st.current.selectedIds
-    // 이미 동일하면 재호출 금지(역방향 동기화와의 핑퐁 루프 차단).
-    if (next.length !== cur.length || !next.every((id) => cur.includes(id))) {
-      selFromSymbols.current = true
-      onSelectionChange(next)
-    }
-    // symbols·zones도 의존: 드래그로 심볼이 다른 실로 옮겨지면 하이라이팅이 따라간다.
-    // mode는 제외 — 모드 전환만으로 존 모드에서 만든 실 선택을 지우지 않기 위함.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selUnits, symbols, zones, onSelectionChange])
-
-  // 역방향 동기화: 패널 등에서 실 선택(selectedIds)이 바뀌면 그 실의 실내기 심볼 선택도 맞춘다.
-  //  · 선택된 장비 목록에서 체크 해제 → 해당 실의 심볼 선택도 함께 해제(하이라이트 정리)
-  //  · 이미 일치하면 prev를 그대로 반환해 setState/루프를 막는다
-  //  · 순방향(심볼 클릭)이 발신한 변경이면 스킵 — 클릭한 심볼만 선택 유지(같은 실 다른 대수 오선택 방지)
-  useEffect(() => {
-    if (selFromSymbols.current) { selFromSymbols.current = false; return }
-    setSelUnits((prev) => {
-      const desired = new Set<string>()
-      for (const s of symbols) if (s.roomId && selectedIds.includes(s.roomId)) desired.add(s.id)
-      const same = prev.size === desired.size && [...prev].every((x) => desired.has(x))
-      return same ? prev : desired
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIds])
 
   const panActive = mode === 'pan' || spaceDown
 
