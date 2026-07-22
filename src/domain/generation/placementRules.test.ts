@@ -72,34 +72,40 @@ describe('unitCountFor — 대수 결정', () => {
   // 부하 기준과 확산범위 기준 중 큰 값
   it('부하 기준: 올림(필요부하 ÷ 타입 최대모델 용량)', () => {
     // 커버면적이 넉넉하면 부하가 대수를 정한다
-    expect(unitCountFor({ requiredCoolW: 20000, areaM2: 10, type: '4WAY', maxModelCoolW: 9000 })).toBe(3)
+    expect(unitCountFor({ requiredCoolW: 20000, areaM2: 10, type: '4WAY', modelCoolW: 9000 })).toBe(3)
   })
 
   it('확산범위 기준: 올림(면적 ÷ 1대 실효 커버면적)', () => {
     // 부하는 1대로 충분하지만 면적이 넓으면 대수가 늘어난다
-    expect(unitCountFor({ requiredCoolW: 3000, areaM2: 130, type: '4WAY', maxModelCoolW: 9000 })).toBe(3) // 130 / 63.6
+    expect(unitCountFor({ requiredCoolW: 3000, areaM2: 130, type: '4WAY', modelCoolW: 9000 })).toBe(3) // 130 / 63.6
   })
 
   it('둘 중 큰 값을 채택한다', () => {
-    expect(unitCountFor({ requiredCoolW: 20000, areaM2: 130, type: '4WAY', maxModelCoolW: 9000 })).toBe(3)
-    expect(unitCountFor({ requiredCoolW: 40000, areaM2: 130, type: '4WAY', maxModelCoolW: 9000 })).toBe(5)
+    expect(unitCountFor({ requiredCoolW: 20000, areaM2: 130, type: '4WAY', modelCoolW: 9000 })).toBe(3)
+    expect(unitCountFor({ requiredCoolW: 40000, areaM2: 130, type: '4WAY', modelCoolW: 9000 })).toBe(5)
   })
 
   it('최소 1대', () => {
-    expect(unitCountFor({ requiredCoolW: 100, areaM2: 1, type: '4WAY', maxModelCoolW: 9000 })).toBe(1)
+    expect(unitCountFor({ requiredCoolW: 100, areaM2: 1, type: '4WAY', modelCoolW: 9000 })).toBe(1)
   })
 
   // "수동으로 1대당 담당면적을 지정하면 그 값이 우선한다"
   it('1대당 담당면적을 지정하면 확산범위 기준을 대체한다', () => {
-    expect(unitCountFor({ requiredCoolW: 3000, areaM2: 100, type: '4WAY', maxModelCoolW: 9000, coverageOverrideM2: 25 })).toBe(4)
+    expect(unitCountFor({ requiredCoolW: 3000, areaM2: 100, type: '4WAY', modelCoolW: 9000, coverageOverrideM2: 25 })).toBe(4)
   })
 
   it('거실(31.89㎡ · 5.6kW · 4WAY)은 1대다', () => {
-    expect(unitCountFor({ requiredCoolW: 5563, areaM2: 31.89, type: '4WAY', maxModelCoolW: 9000 })).toBe(1)
+    expect(unitCountFor({ requiredCoolW: 5563, areaM2: 31.89, type: '4WAY', modelCoolW: 9000 })).toBe(1)
+  })
+
+  // 정본 규칙은 근소 부족(3%)을 허용한다 — 허용이 없으면 경계에서 1대가 더 얹힌다.
+  it('부하 기준에 3% 부족허용을 적용한다(3255.8W ÷ 3200W = 1대)', () => {
+    // 표준 장비선정표: 3255.8W → 32C(3200W) 1대(1.72% 부족 인정). 허용 없으면 ceil(1.017)=2대가 된다.
+    expect(unitCountFor({ requiredCoolW: 3255.8, areaM2: 1, type: '4WAY', modelCoolW: 3200 })).toBe(1)
   })
 
   it('잘못된 입력은 거부한다', () => {
-    expect(() => unitCountFor({ requiredCoolW: 0, areaM2: 10, type: '4WAY', maxModelCoolW: 9000 })).toThrow()
-    expect(() => unitCountFor({ requiredCoolW: 1000, areaM2: 10, type: '4WAY', maxModelCoolW: 0 })).toThrow()
+    expect(() => unitCountFor({ requiredCoolW: 0, areaM2: 10, type: '4WAY', modelCoolW: 9000 })).toThrow()
+    expect(() => unitCountFor({ requiredCoolW: 1000, areaM2: 10, type: '4WAY', modelCoolW: 0 })).toThrow()
   })
 })
