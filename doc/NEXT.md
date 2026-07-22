@@ -4,10 +4,11 @@
 
 ## ⏭ 새 세션 이어가기 (2026-07-22 푸시 시점) — **여기부터 시작**
 
-> **상태:** `main` 브랜치. 작업트리 클린. 전체 테스트 **1249 그린**, tsc 클린.
-> App.tsx **1465 → 997줄** (Phase D 완료, −468). 다음은 아래 '리팩터 백로그'의 **Phase E**(Viewer.tsx 분해).
+> **상태:** `main` 브랜치. 작업트리 클린. 전체 테스트 **1257 그린**, tsc 클린.
+> App.tsx **1465 → 997줄** (Phase D 완료). Viewer.tsx **1076 → 1057줄** (Phase E 진행 중, 2단계 완료).
+> **#11 undo 토대 브라우저 검증 완료**(삭제→Ctrl+Z→Ctrl+Y, plan↔repo 동기 정확) — 이전 세션의 미검증 우려 해소.
 >
-> **다음 할 일 = Phase E `Viewer.tsx`(1076줄) 훅 분해 시작** (아래 백로그 참조). 이어지는 순서:
+> **다음 할 일 = Phase E 계속**(`usePanZoom`부터) (아래 백로그 참조). 이어지는 순서:
 > 1. [x] **#8 `usePlanCommands`** (`fb37d9e`) — `runOutdoorSelection`(자동선정 이펙트)·`selectOutdoorForSelected`·
 >    `moveRoom`·`removeGroup`·`replaceModel`+`sync`. 중복 제거: 빈그룹정리→`cleanEmptyGroups()` /
 >    `selectOutdoorPlan`+catch→`trySelectOutdoor` / floor-lookup→`floorOf`. App 1326→1227줄.
@@ -23,8 +24,7 @@
 >    editPlacements·editOutdoorPositions·undo/redo) + 두 repo-쓰기 이펙트를 `useSyncedPlanRepo`로 순서 고정(§5.7 결정 #2).
 >    App 1016→997줄. **Phase D 완료(1465→997).** useUndoableWorld.test 신규 3(replace 히스토리 미기록 불변식 포함).
 >    ⚠ 브라우저 실검증은 Chrome MCP가 세션 중간부터 localhost 도달 불가라 단위테스트로 대체(코드 아님·curl 200).
-> 5. **다음 = Phase E**(Viewer.tsx 1076줄 → 훅 분해, 아래 계획). **주의: 다음 세션 시작 시 Ctrl+Z/Y 브라우저
->    육안 재확인 권장**(#11이 브라우저 미검증).
+> 5. [진행 중] **Phase E**(Viewer.tsx 훅 분해) — 순수 기하·useDraftCommit 완료. #11 undo Ctrl+Z/Y 브라우저 검증 완료(우려 해소).
 >
 > **작업 방식(이 세션에서 검증됨):** 리프/저위험부터 커밋 1개=훅 1개. 각 단계 `npx tsc --noEmit` + `npx vitest run` +
 > 브라우저 실검증(콘솔 0) 후 커밋. 순수 도메인 추출은 TDD(Red→Green). dev: `npm run dev`(localhost:5173).
@@ -82,7 +82,10 @@
 **Phase E — Viewer.tsx(1076, 6모드+3서브시스템) 훅 분해:**
 - [x] 순수 기하 3함수 → geometry.ts(`361dbdd`) — `unitsInRect`·`zonesBounds`·`resizeRectFromCorner`. 인라인 로직 verbatim
   추출, TDD 8. Viewer 1076→1067줄. tsc·1257 그린. ⚠ 브라우저 미검증(Chrome MCP localhost 불가).
-- [ ] `useDraftCommit<T>`(4곳 복붙) → `usePanZoom` → `useCassetteSelectionSync` → `useSliceMode`/`useMergeMode`
+- [x] `useDraftCommit<T>`(`c3b5b3c`) — draft 3쌍(실내기·실외기·실형상) state+ref+수동동기 → `value·ref·set·clear`
+  훅으로 통합. Viewer 1067→1057줄. tsc·1257 그린. 브라우저 실검증(콘솔 0): 삭제→Ctrl+Z→Ctrl+Y.
+  **이때 #11 undo 토대 브라우저 검증도 완료**(37.2↔32.0kW·미배정 6↔5, plan↔repo 동기 정확).
+- [ ] `usePanZoom` → `useCassetteSelectionSync` → `useSliceMode`/`useMergeMode`
   → 드래그 멀티플렉서(387-513) 분해 → `useViewerShortcuts`(정책/메커니즘 분리)
   → 37 prop을 indoor/outdoor/slice/merge/viewport 클러스터로.
 
