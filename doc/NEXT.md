@@ -4,10 +4,10 @@
 
 ## ⏭ 새 세션 이어가기 (2026-07-22 푸시 시점) — **여기부터 시작**
 
-> **상태:** `main` 브랜치. 작업트리 클린. 전체 테스트 **1242 그린**, tsc 클린.
-> App.tsx **1465 → 1080줄**. 아래 '리팩터 백로그'의 **Phase D를 #10부터 이어간다**.
+> **상태:** `main` 브랜치. 작업트리 클린. 전체 테스트 **1246 그린**, tsc 클린.
+> App.tsx **1465 → 1016줄**. 아래 '리팩터 백로그'의 **Phase D를 #11(마지막)부터 이어간다**.
 >
-> **다음 할 일 = Phase D #10 `useGenerationSteps` 추출** (아래 백로그 참조). 이어지는 순서:
+> **다음 할 일 = Phase D #11 `useUndoableWorld` 추출**(Phase D 마지막) (아래 백로그 참조). 이어지는 순서:
 > 1. [x] **#8 `usePlanCommands`** (`fb37d9e`) — `runOutdoorSelection`(자동선정 이펙트)·`selectOutdoorForSelected`·
 >    `moveRoom`·`removeGroup`·`replaceModel`+`sync`. 중복 제거: 빈그룹정리→`cleanEmptyGroups()` /
 >    `selectOutdoorPlan`+catch→`trySelectOutdoor` / floor-lookup→`floorOf`. App 1326→1227줄.
@@ -15,8 +15,10 @@
 >    `aiPlace`·`moveUnits`·`rotateUnits`·`deleteUnits`·`addUnitToRoom`·`overrideIndoor`·`resetIndoor`+`worldPolyOf`.
 >    move/rotate→`mutateUnits(label,entries,apply)` 통합. App 1227→1080줄. tsc·1242 그린·브라우저 실검증(콘솔 0):
 >    AI배치 심볼, addUnitToRoom +6.0kW, 실 미선택 +실내기→존 전환.
-> 3. **#10 `useGenerationSteps`** — `step`·`editReturn`·`guardContext`(→ 순수 `buildGuardContext(world,derived)`)·`runGuarded`·
->    `confirmEdit`·`resumeEdit`·`onPickStep`·`doGenerate`·`changeFacility`·`changeCeilingHeight`·`guard` 모달 상태.
+> 3. [x] **#10 `useGenerationSteps` + 순수 `buildGuardContext`** (`069b2fb`) — `guardContext`→순수 `buildGuardContext`
+>    (TDD 4) + 훅이 `editReturn`·`generated`·`guard`·`runGuarded`·`confirmEdit`·`resumeEdit`·`onPickStep`·`doGenerate`·
+>    `changeFacility`·`changeCeilingHeight`. `step`은 App 소유(뷰 상태). App 1080→1016줄. 브라우저 실검증(콘솔 0):
+>    편집확정 가드 체인·doGenerate·편집재개.
 > 4. **#11 `useUndoableWorld`** (마지막, 토대) — `useUndoable`·`edit`·`editPlacements`·`editOutdoorPositions`·`sync` +
 >    **두 repo-쓰기 이펙트(App L366·372) 통합**(§5.7 결정 #2: `useSyncedPlanRepo`로 단일 정렬 동기).
 > 5. 그다음 **Phase E**(Viewer.tsx 1076줄 → 훅 분해, 별도 감사 계획이 아래 있음).
@@ -69,7 +71,10 @@
   floor-lookup→`floorOf` 중복 제거. 실외기 조합 편집 커맨드 5개+자동선정 이펙트+sync를 훅으로. App 1326→1227줄.
 - [x] `useIndoorPlacement`(`923980d`) — 실내기 배치 편집 커맨드 12개+좌표 어댑터를 훅으로.
   move/rotate near-identical→`mutateUnits(label,entries,apply)` 통합. App 1227→1080줄.
-- [ ] `useGenerationSteps`(guardContext 순수화) → `useUndoableWorld`(마지막, edit가 토대 + 결정 #2 통합).
+- [x] `useGenerationSteps` + 순수 `buildGuardContext`(`069b2fb`) — guardContext 순수화(TDD 4) + 스텝전환·가드모달·
+  파괴적편집을 훅으로. step은 App 소유. App 1080→1016줄.
+- [ ] `useUndoableWorld`(마지막, edit가 토대 + 결정 #2 통합) — `useUndoable`·`edit`·`editPlacements`·
+  `editOutdoorPositions`·`sync` + 두 repo-쓰기 이펙트를 `useSyncedPlanRepo`로 단일 정렬 동기.
 
 **Phase E — Viewer.tsx(1076, 6모드+3서브시스템) 훅 분해:**
 - [ ] 순수 기하 이동(`unitsInRect`·`resizeRectFromCorner`·`zonesBounds`→geometry.ts) → `useDraftCommit<T>`(4곳 복붙)
