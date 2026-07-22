@@ -102,6 +102,41 @@ export const pointInZone = (px: number, py: number, z: ZoneBox): boolean => poly
 export const zoneOfPoint = (px: number, py: number, zones: readonly ZoneBox[]): ZoneBox | null =>
   zones.find((z) => pointInZone(px, py, z)) ?? null
 
+// 사각형(x,y,w,h) 안에 중심이 든 심볼의 id 목록 — 마퀴(영역) 선택.
+export const unitsInRect = (symbols: readonly UnitSym[], rect: { x: number; y: number; w: number; h: number }): string[] =>
+  symbols
+    .filter((u) => u.x >= rect.x && u.x <= rect.x + rect.w && u.y >= rect.y && u.y <= rect.y + rect.h)
+    .map((u) => u.id)
+
+// 존 여러 개를 감싸는 바운딩박스. 비면 null. (선택 실 위에 뜨는 오버레이 버튼 위치 등)
+export const zonesBounds = (zones: readonly ZoneBox[]): { x: number; y: number; w: number; h: number } | null => {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const z of zones) for (const p of z.points) {
+    if (p.x < minX) minX = p.x
+    if (p.x > maxX) maxX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.y > maxY) maxY = p.y
+  }
+  if (!Number.isFinite(minX)) return null // 존이 없거나 정점이 없다
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+}
+
+// 존 모서리 드래그로 사각형을 다시 그린다. 고정 모서리(anchor)를 붙박고 반대편을 포인터로 끈다.
+// 최소 크기(min)로 클램프해 뒤집히거나 0이 되지 않게 한다. p는 이미 스냅된 좌표.
+export const resizeRectFromCorner = (
+  corner: Corner,
+  anchor: Pt,
+  p: Pt,
+  min: number,
+): { x: number; y: number; w: number; h: number } => {
+  const ax = anchor.x, ay = anchor.y
+  let px = p.x, py = p.y
+  if (corner === 'br') { px = Math.max(px, ax + min); py = Math.max(py, ay + min); return { x: ax, y: ay, w: px - ax, h: py - ay } }
+  if (corner === 'tl') { px = Math.min(px, ax - min); py = Math.min(py, ay - min); return { x: px, y: py, w: ax - px, h: ay - py } }
+  if (corner === 'tr') { px = Math.max(px, ax + min); py = Math.min(py, ay - min); return { x: ax, y: py, w: px - ax, h: ay - py } }
+  px = Math.min(px, ax - min); py = Math.max(py, ay + min); return { x: px, y: ay, w: ax - px, h: py - ay } // bl
+}
+
 // 선택된 실내기 심볼 → 담당 실 id 집합(중복 제거). 위치 우선:
 // 심볼이 놓인 존을 반환해 다른 실로 드래그하면 하이라이팅이 따라간다.
 // 어느 존 밖이면 심볼이 소속된 실(roomId)로 폴백한다.

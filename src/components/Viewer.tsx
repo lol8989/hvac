@@ -4,7 +4,7 @@ import type { Room } from '../data'
 import ACUnit from './viewer/ACUnit'
 import ODUnit from './viewer/ODUnit'
 import ZoneRect from './viewer/ZoneRect'
-import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsRect, zoneOfPoint, roomIdsForUnits, zoneAreaM2 } from './viewer/geometry'
+import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsRect, zoneOfPoint, roomIdsForUnits, zoneAreaM2, unitsInRect, zonesBounds, resizeRectFromCorner } from './viewer/geometry'
 import type { UnitSym, ZoneBox, Corner, Pt } from './viewer/geometry'
 import type { GroupColor } from '../presentation/generation/groupColors'
 
@@ -295,18 +295,13 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     const wrap = wrapRef.current
     if (!onSelectOutdoorForSelection || !svg || !wrap || selectedIds.length === 0) { setSelBtnPos(null); return }
     const picked = zones.filter((z) => selectedIds.includes(z.id))
-    if (!picked.length) { setSelBtnPos(null); return }
-    let minX = Infinity, maxX = -Infinity, minY = Infinity
-    for (const z of picked) for (const p of z.points) {
-      if (p.x < minX) minX = p.x
-      if (p.x > maxX) maxX = p.x
-      if (p.y < minY) minY = p.y
-    }
+    const bb = zonesBounds(picked)
+    if (!bb) { setSelBtnPos(null); return }
     const ctm = svg.getScreenCTM()
     if (!ctm) { setSelBtnPos(null); return }
     const pt = svg.createSVGPoint()
-    pt.x = (minX + maxX) / 2
-    pt.y = minY
+    pt.x = bb.x + bb.w / 2 // 선택 실 bbox 상단 중앙
+    pt.y = bb.y
     const scr = pt.matrixTransform(ctm)
     const wr = wrap.getBoundingClientRect()
     setSelBtnPos({ x: scr.x - wr.left, y: scr.y - wr.top })
@@ -394,14 +389,10 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       const c = cornerRef.current
       if (c) {
         const p = toSvg(e.clientX, e.clientY); if (!p) return
-        let px = st.current.snapOn ? snap(p.x) : p.x
-        let py = st.current.snapOn ? snap(p.y) : p.y
-        let nx: number, ny: number, nw: number, nh: number
-        if (c.corner === 'br') { px = Math.max(px, c.ax + GRID); py = Math.max(py, c.ay + GRID); nx = c.ax; ny = c.ay; nw = px - c.ax; nh = py - c.ay }
-        else if (c.corner === 'tl') { px = Math.min(px, c.ax - GRID); py = Math.min(py, c.ay - GRID); nx = px; ny = py; nw = c.ax - px; nh = c.ay - py }
-        else if (c.corner === 'tr') { px = Math.max(px, c.ax + GRID); py = Math.min(py, c.ay - GRID); nx = c.ax; ny = py; nw = px - c.ax; nh = c.ay - py }
-        else { px = Math.min(px, c.ax - GRID); py = Math.max(py, c.ay + GRID); nx = px; ny = c.ay; nw = c.ax - px; nh = py - c.ay }
-        const next = { id: c.id, points: rectPoints(nx, ny, nw, nh) }
+        const px = st.current.snapOn ? snap(p.x) : p.x
+        const py = st.current.snapOn ? snap(p.y) : p.y
+        const r = resizeRectFromCorner(c.corner, { x: c.ax, y: c.ay }, { x: px, y: py }, GRID)
+        const next = { id: c.id, points: rectPoints(r.x, r.y, r.w, r.h) }
         zoneDraftRef.current = next
         setZoneDraft(next)
         return
@@ -491,7 +482,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
               } else if (!m.additive) onSelectionChange([])
             } else if (s.mode === 'cassette') {
               if (big && layerVisible('indoor', s.layers)) {
-                const hits = s.symbols.filter((u) => u.x >= rect.x && u.x <= rect.x + rect.w && u.y >= rect.y && u.y <= rect.y + rect.h).map((u) => u.id)
+                const hits = unitsInRect(s.symbols, rect)
                 const base = m.additive ? new Set(s.selUnits) : new Set<string>()
                 hits.forEach((id) => base.add(id))
                 setSelUnits(base)

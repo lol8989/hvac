@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pointInZone, zoneOfPoint, roomIdsForUnits, zoneAreaM2, zoneHitsRect, isRectZone, zoneBounds, rectPoints } from './geometry'
+import { pointInZone, zoneOfPoint, roomIdsForUnits, zoneAreaM2, zoneHitsRect, isRectZone, zoneBounds, rectPoints, unitsInRect, zonesBounds, resizeRectFromCorner } from './geometry'
 import type { ZoneBox, UnitSym } from './geometry'
 
 const z = (id: string, x: number, y: number, w: number, h: number): ZoneBox => ({ id, name: id, points: rectPoints(x, y, w, h) })
@@ -102,5 +102,41 @@ describe('isRectZone / zoneBounds', () => {
   it('잘린 실은 사각형이 아니다(모서리 핸들이 붙지 않는다)', () => {
     expect(isRectZone(TRI)).toBe(false)
     expect(zoneBounds(TRI)).toEqual({ x: 0, y: 0, w: 100, h: 100 }) // bbox는 있다
+  })
+})
+
+describe('unitsInRect', () => {
+  const syms = [u('AC_001', 10, 10), u('AC_001', 50, 50, 2), u('AC_002', 150, 10)]
+  it('사각형 안에 중심이 든 심볼만 고른다(경계 포함)', () => {
+    expect(unitsInRect(syms, { x: 0, y: 0, w: 100, h: 100 })).toEqual(['AC_001#1', 'AC_001#2'])
+  })
+  it('경계선 위(=) 심볼도 포함한다', () => {
+    expect(unitsInRect([u('AC_001', 100, 100)], { x: 0, y: 0, w: 100, h: 100 })).toEqual(['AC_001#1'])
+  })
+  it('빈 사각형이면 아무것도 안 고른다', () => {
+    expect(unitsInRect(syms, { x: 300, y: 300, w: 10, h: 10 })).toEqual([])
+  })
+})
+
+describe('zonesBounds', () => {
+  it('여러 존을 감싸는 bbox', () => {
+    expect(zonesBounds([z('a', 0, 0, 100, 100), z('b', 100, 50, 100, 100)])).toEqual({ x: 0, y: 0, w: 200, h: 150 })
+  })
+  it('존이 없으면 null', () => {
+    expect(zonesBounds([])).toBeNull()
+  })
+})
+
+describe('resizeRectFromCorner', () => {
+  const anchor = { x: 100, y: 100 } // 고정 모서리
+  it('br: 반대편(우하)을 끌면 anchor를 좌상으로 고정', () => {
+    expect(resizeRectFromCorner('br', anchor, { x: 180, y: 160 }, 20)).toEqual({ x: 100, y: 100, w: 80, h: 60 })
+  })
+  it('tl: 반대편(좌상)을 끌면 anchor를 우하로 고정', () => {
+    expect(resizeRectFromCorner('tl', anchor, { x: 40, y: 30 }, 20)).toEqual({ x: 40, y: 30, w: 60, h: 70 })
+  })
+  it('최소 크기(min)로 클램프해 뒤집히지 않는다', () => {
+    // br에서 포인터가 anchor보다 위/왼쪽이어도 최소 min만큼 유지
+    expect(resizeRectFromCorner('br', anchor, { x: 90, y: 90 }, 20)).toEqual({ x: 100, y: 100, w: 20, h: 20 })
   })
 })
