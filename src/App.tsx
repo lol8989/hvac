@@ -35,7 +35,7 @@ import { InMemoryOutdoorModelCatalog } from './infrastructure/generation/InMemor
 import { makeReassignRoom } from './application/generation/ReassignRoom'
 import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoorModel'
 import { makeAddGroup, makeRemoveGroup } from './application/generation/GroupCommands'
-import { bootstrapPlan, toViewModel, syncPlanUnits } from './presentation/generation/planAdapter'
+import { bootstrapPlan, toViewModel } from './presentation/generation/planAdapter'
 import { compatPredicateFromMatrix } from './presentation/generation/compatPredicate'
 import { usePlanCommands } from './presentation/generation/usePlanCommands'
 import { useIndoorPlacement } from './presentation/generation/useIndoorPlacement'
@@ -61,8 +61,8 @@ import { defaultEquipmentMaster } from './infrastructure/equipment/InMemoryEquip
 import type { EquipmentMaster } from './domain/equipment/EquipmentMaster'
 import { buildSelectionTable } from './domain/generation/SelectionTable'
 import { buildSelectionCsv } from './presentation/generation/selectionCsv'
-import { useUndoable } from './presentation/generation/useUndoable'
-import type { World } from './presentation/generation/world'
+import { useUndoableWorld } from './presentation/generation/useUndoableWorld'
+import { useSyncedPlanRepo } from './presentation/generation/useSyncedPlanRepo'
 import { useSelectionSync } from './presentation/generation/useSelectionSync'
 import { useScheduleSync } from './presentation/generation/useScheduleSync'
 import { useTileManifest } from './presentation/generation/useTileManifest'
@@ -116,22 +116,15 @@ export default function App({
   //  · plan   : 실외기 조합·배정(AssignmentPlan)
   //  · facility : 시설군(단위부하의 전제)
   // 초기 화면부터 실이 검출돼 있다 — 검출 스텝을 없앴으므로 로드 시점에 실·형상을 시딩한다.
-  const undoable = useUndoable<World>(
+  // 편집 상태(World) 되돌리기 토대 + 부분 편집 헬퍼를 한 훅으로 묶는다(§5.7).
+  // 사용자의 편집 1회 = 커밋 1회(= Ctrl+Z 1회). 파생 동기화는 replace(히스토리 미기록).
+  const {
+    world, edit, replace, editPlacements, editOutdoorPositions,
+    undo, redo, canUndo, canRedo, undoLabel, redoLabel,
+  } = useUndoableWorld(
     () => ({ plan: repo.load(), ...seedDetectedRooms(DEFAULT_FACILITY), placements: {}, outdoorPositions: {}, facility: DEFAULT_FACILITY, ceilingHeights: {} }),
-    '',
   )
-  const world = undoable.present
   const { plan, rooms: domainRooms, geom: roomGeom, placements, outdoorPositions, facility, ceilingHeights } = world
-  // 사용자의 편집 1회 = 커밋 1회(= Ctrl+Z 1회). 파생 동기화는 replace를 쓴다(히스토리를 더럽히지 않는다).
-  const edit = undoable.commit
-
-  // 부분 편집 헬퍼 — 한 사용자 행동 = 한 커밋(= Ctrl+Z 한 번).
-  type Up<T> = T | ((prev: T) => T)
-  const next = <T,>(v: Up<T>, prev: T): T => (typeof v === 'function' ? (v as (p: T) => T)(prev) : v)
-  const editPlacements = (label: string, v: Up<Record<string, Placement>>) =>
-    edit((w) => ({ ...w, placements: next(v, w.placements) }), label)
-  const editOutdoorPositions = (label: string, v: Up<Record<string, { x: number; y: number }>>) =>
-    edit((w) => ({ ...w, outdoorPositions: next(v, w.outdoorPositions) }), label)
 
   const [selRooms, setSelRooms] = useState<string[]>([]) // 초기엔 선택 없음(뱃지·하이라이트 없음)
   const [tab, setTab] = useState<'in' | 'out'>('in')
@@ -292,23 +285,11 @@ export default function App({
   const { moveRoom, removeGroup, replaceModel, selectOutdoorForSelected } = usePlanCommands({
     repo, uc, catalog, isOutdoorCompatible, plan, domainRooms, placements,
     unitsFrom, step, suppressAutoSelectRef,
-    edit, replace: undoable.replace, setSelRooms, flash,
+    edit, replace, setSelRooms, flash,
   })
 
-  // 되돌리기로 플랜이 과거로 돌아가면 리포지토리도 그 시점으로 맞춘다 —
-  // 유즈케이스(배정·그룹 편집)는 리포지토리를 읽으므로, 어긋나면 undo가 반쯤만 적용된다.
-  useEffect(() => { repo.save(plan) }, [plan, repo])
-
-  // 실내기 배치(placements)가 대수·모델의 SSOT다. 바뀌면 플랜을 그에 맞춘다
-  // — 그러지 않으면 선정표에서 대수를 고쳐도 조합비·최대 연결 대수가 낡은 값을 본다.
-  // 배정은 최대한 보존된다(syncPlanUnits). 이것은 **파생 동기화**라 히스토리를 남기지 않는다
-  // (남기면 Ctrl+Z가 사용자가 한 적 없는 일을 되돌린다).
-  useEffect(() => {
-    const next = syncPlanUnits(repo.load(), unitsFrom(placements))
-    repo.save(next)
-    undoable.replace((w) => ({ ...w, plan: next }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placements, domainRooms, repo])
+  // 플랜 ↔ 리포지토리 ↔ 배치 정렬 동기(§5.7 결정 #2). 두 repo-쓰기 이펙트를 한 곳에서 순서 고정.
+  useSyncedPlanRepo({ repo, plan, placements, domainRooms, unitsFrom, replace })
 
   // 컴포넌트가 소비하는 레거시 뷰 형태로 변환(동작 보존).
   const { groups, pool } = toViewModel(plan)
@@ -410,7 +391,7 @@ export default function App({
   // 그룹이 사라지면 그 좌표도 지운다(삭제·재선정으로 key가 바뀔 수 있다).
   useEffect(() => {
     const alive = new Set(plan.groups.map((g) => g.key))
-    undoable.replace((w) => {
+    replace((w) => {
       const kept = Object.keys(w.outdoorPositions).filter((k) => alive.has(k))
       if (kept.length === Object.keys(w.outdoorPositions).length) return w
       return { ...w, outdoorPositions: Object.fromEntries(kept.map((k) => [k, w.outdoorPositions[k]])) }
@@ -739,15 +720,15 @@ export default function App({
   // 편집(World)만 되돌린다. 선택·단계 같은 '보기' 상태는 히스토리에 없다.
   // 되돌린 뒤 사라진 실이 선택에 남아 있으면 파생값이 터지므로 선택을 정리한다.
   const doUndo = () => {
-    if (!undoable.canUndo) return
-    const label = undoable.undoLabel
-    undoable.undo()
+    if (!canUndo) return
+    const label = undoLabel
+    undo()
     flash(label ? `${label}을(를) 되돌렸습니다` : '되돌렸습니다')
   }
   const doRedo = () => {
-    if (!undoable.canRedo) return
-    const label = undoable.redoLabel
-    undoable.redo()
+    if (!canRedo) return
+    const label = redoLabel
+    redo()
     flash(label ? `${label}을(를) 다시 실행했습니다` : '다시 실행했습니다')
   }
   // 되돌린 결과에 없는 실은 선택에서 뺀다(자르기 undo → 자식 id가 사라진다).
@@ -860,10 +841,10 @@ export default function App({
               step === 'combine' ? () => selectOutdoorForSelected(floorSelectedIds) : undefined
             }
             history={{
-              canUndo: undoable.canUndo,
-              canRedo: undoable.canRedo,
-              undoLabel: undoable.undoLabel,
-              redoLabel: undoable.redoLabel,
+              canUndo,
+              canRedo,
+              undoLabel,
+              redoLabel,
               onUndo: doUndo,
               onRedo: doRedo,
             }}
