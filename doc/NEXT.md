@@ -2,6 +2,27 @@
 
 > 세션 시작 시 이 파일부터 확인한다. 완료한 항목은 지우지 말고 `[x]` + 완료일·커밋을 남기고, 새 항목은 위에 추가한다.
 
+## ⏭ 새 세션 이어가기 (2026-07-22 푸시 시점) — **여기부터 시작**
+
+> **상태:** `main` 브랜치, origin(lol8989/hvac)에 푸시 완료. 작업트리 클린. 전체 테스트 **1242 그린**, tsc 클린.
+> App.tsx **1465 → 1325줄**. 아래 '리팩터 백로그'의 **Phase D를 #8부터 이어간다**.
+>
+> **다음 할 일 = Phase D #8 `usePlanCommands` 추출** (아래 백로그 참조). 이어지는 순서:
+> 1. **#8 `usePlanCommands`** — `runOutdoorSelection`·`selectOutdoorForSelected`·`moveRoom`·`removeGroup`·`replaceModel`
+>    + 자동선정 이펙트. **중복 제거**: 빈그룹 정리 루프 2곳 / `selectOutdoorPlan(...)`+catch 블록 2곳 / floor-lookup 람다.
+>    `usePlanCommands({repo, uc, catalog, isOutdoorCompatible, edit, flash, ...})`로.
+> 2. **#9 `useIndoorPlacement`** — `aiPlace`·`moveUnits`·`rotateUnits`(near-identical→`mutateUnits(kind,entries)`로 통합)·
+>    `deleteUnits`·`addUnitToRoom`·`overrideIndoor`·`resetIndoor`·`parseUnitId`·`layoutFor`·`resizePositions`·`unitsFrom`·`indoorSymbols`.
+> 3. **#10 `useGenerationSteps`** — `step`·`editReturn`·`guardContext`(→ 순수 `buildGuardContext(world,derived)`)·`runGuarded`·
+>    `confirmEdit`·`resumeEdit`·`onPickStep`·`doGenerate`·`changeFacility`·`changeCeilingHeight`·`guard` 모달 상태.
+> 4. **#11 `useUndoableWorld`** (마지막, 토대) — `useUndoable`·`edit`·`editPlacements`·`editOutdoorPositions`·`sync` +
+>    **두 repo-쓰기 이펙트(App L366·372) 통합**(§5.7 결정 #2: `useSyncedPlanRepo`로 단일 정렬 동기).
+> 5. 그다음 **Phase E**(Viewer.tsx 1076줄 → 훅 분해, 별도 감사 계획이 아래 있음).
+>
+> **작업 방식(이 세션에서 검증됨):** 리프/저위험부터 커밋 1개=훅 1개. 각 단계 `npx tsc --noEmit` + `npx vitest run` +
+> 브라우저 실검증(콘솔 0) 후 커밋. 순수 도메인 추출은 TDD(Red→Green). dev: `npm run dev`(localhost:5173).
+> 파일 헤더 주석·한글 유지, `presentation/generation/`에 훅, `domain/generation/`에 도메인 규칙.
+
 ## ▶ 2026-07-22 — 리팩터 백로그 (3-에이전트 코드 감사)
 
 > 병렬 감사 3건(App.tsx·Viewer.tsx·나머지 전체). **결론: 도메인/애플리케이션/인프라는 건강**
