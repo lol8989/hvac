@@ -15,25 +15,11 @@
 
 import { useRef, useState } from 'react'
 import type { DockFloorView, DockRoomRow } from '../../presentation/generation/dockView'
+import { assignGroupColors } from '../../presentation/generation/groupColors'
 import type { OutdoorModelSpec } from '../../application/generation/ports'
 
 const MIN_H = 220
 const MAX_H = 640
-
-// 실외기 그룹별 색상 팔레트(생성 영역 무채색 규칙 예외 — 주인님 지시 2026-07-21).
-// head=탭(헤더) 색(흰 글자 대비 확보), tint=실내기 행 영역 배경(연한 동일 색상).
-const GROUP_PALETTE: { head: string; tint: string }[] = [
-  { head: '#2f5fae', tint: '#eef3fb' }, // 블루
-  { head: '#1f8a80', tint: '#e8f5f3' }, // 틸
-  { head: '#a9720f', tint: '#fbf2e3' }, // 앰버
-  { head: '#b23a5b', tint: '#fbebf0' }, // 로즈
-  { head: '#6b4bb0', tint: '#f1edf9' }, // 바이올렛
-  { head: '#2f7d3a', tint: '#eaf5ec' }, // 그린
-  { head: '#1c7a95', tint: '#e7f3f7' }, // 시안
-  { head: '#8a5a3c', tint: '#f4ece6' }, // 브라운
-  { head: '#3f5b8a', tint: '#eef1f7' }, // 슬레이트
-  { head: '#9c3d84', tint: '#f6eaf2' }, // 마젠타
-]
 
 const judgeText = (j: string): string | null => (j === 'OVERLOADED' ? '과부하' : j === 'UNDERLOADED' ? '저부하' : null)
 
@@ -140,12 +126,8 @@ export default function MappingDock({
   const groupCount = floors.reduce((a, f) => a + f.groups.length, 0)
   const assigned = floors.reduce((a, f) => a + f.groups.reduce((b, g) => b + g.roomCount, 0), 0)
 
-  // 그룹 key → 색상. 층을 가로지르는 순서로 배정한다.
-  const groupColor = new Map<string, { head: string; tint: string }>()
-  {
-    let i = 0
-    for (const f of floors) for (const g of f.groups) { groupColor.set(g.key, GROUP_PALETTE[i % GROUP_PALETTE.length]); i++ }
-  }
+  // 그룹 key → 색상. 도면(방·실내기)과 같은 규칙을 쓴다(groupColors SSOT).
+  const groupColor = assignGroupColors(floors)
 
   const onResizeDown = (e: React.PointerEvent) => {
     e.preventDefault()

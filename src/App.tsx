@@ -12,6 +12,7 @@ import { downloadText, CSV_BOM } from './presentation/download'
 import ModelPanel from './components/ModelPanel'
 import MappingDock from './components/generation/MappingDock'
 import { buildDockView } from './presentation/generation/dockView'
+import { roomColorMap } from './presentation/generation/groupColors'
 import ConfirmModal from './components/ConfirmModal'
 import ProjectSettings from './components/steps/ProjectSettings'
 import CeilingHeightsPanel from './components/steps/CeilingHeights'
@@ -769,6 +770,12 @@ export default function App({
   // 조합 매핑 도크 뷰: 층 → 실외기 → 실(면적·칼로리·부하·모델·대수). 도메인(SelectionTable)이 이미 계산한 값을 옮긴다.
   const dockFloors = useMemo(() => buildDockView(selectionTable), [selectionTable])
   const dockUnassigned = useMemo(() => dockFloors.flatMap((f) => f.unassigned), [dockFloors])
+  // 실 id → 실외기 그룹 색상(도크 탭 색과 동일 SSOT). 그룹을 다루는 단계(조합·실외기 배치)에서만
+  // 도면 방/실내기를 색칠한다 — 실내기 배치 단계는 아직 조합이 관심사가 아니라 무채색으로 둔다.
+  const roomColors = useMemo(
+    () => (step === 'combine' || step === 'outdoor' ? roomColorMap(dockFloors) : {}),
+    [step, dockFloors],
+  )
 
   // 장비일람표 시트(계열별) — 다운로드와 '새 창' 미리보기가 같은 값을 본다.
   //
@@ -1316,6 +1323,7 @@ export default function App({
             onOutdoorsDelete={confirmed ? undefined : deleteOutdoors}
             onOutdoorsAutoPlace={autoPlaceOutdoors}
             indoorInfo={indoorInfo}
+            roomColors={roomColors}
             tiles={tiles}
             tileBase="/tiles"
             layers={layers}

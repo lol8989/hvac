@@ -6,6 +6,7 @@ import ODUnit from './viewer/ODUnit'
 import ZoneRect from './viewer/ZoneRect'
 import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsRect, zoneOfPoint, roomIdsForUnits, zoneAreaM2 } from './viewer/geometry'
 import type { UnitSym, ZoneBox, Corner, Pt } from './viewer/geometry'
+import type { GroupColor } from '../presentation/generation/groupColors'
 
 type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
 
@@ -90,6 +91,7 @@ interface ViewerProps {
   onUnitsDelete?: (ids: string[]) => void
   onUnitAdd?: (roomId: string) => void // 대표 실에 1대 추가
   indoorInfo?: Record<string, { model: string; kind: string }> // 실별 실내기 모델명·유형(심볼 오버레이)
+  roomColors?: Record<string, GroupColor> // 실 id → 실외기 그룹 색상(방·실내기 하이라이팅). 미배정 실은 없음 → 무채색
   outdoorGroups?: OutdoorGroupInfo[] // 실외기 배치 대상 그룹(placeOutdoors)
   // 실외기 심볼도 App이 소유한다 — 가드가 '몇 대 중 몇 대 배치됐는지' 알아야 하고,
   // 그 좌표가 산출 도면에 실린다.
@@ -147,7 +149,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     rooms, selectedIds, onSelectionChange, onEscape, tiles, tileBase,
     indoorSymbols, onUnitsMove, onUnitsRotate, onUnitsDelete, onUnitAdd,
     outdoorSymbols, onOutdoorsMove, onOutdoorsDelete, onOutdoorsAutoPlace,
-    indoorInfo, outdoorGroups, planW, planH, mmPerUnit, fitBounds, layers = ALL_LAYERS_ON, onLayersChange,
+    indoorInfo, roomColors, outdoorGroups, planW, planH, mmPerUnit, fitBounds, layers = ALL_LAYERS_ON, onLayersChange,
     canAddUnit = true, canPlaceOutdoors = false,
     canSliceRooms = false, onRoomSlice, onSliceUnavailable, onZoneResize,
     canMergeRooms = false, onRoomsMerge, isAdjacent, onMergeUnavailable,
@@ -882,6 +884,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
               <ZoneRect
                 key={z.id} z={z} editing={isZone && selectedIds.includes(z.id)} selected={selectedIds.includes(z.id)}
                 areaText={a != null ? `${a.toFixed(1)}㎡` : undefined}
+                color={roomColors?.[z.id]}
                 onDown={onZoneDown} onCornerDown={onCornerDown}
               />
             )
@@ -897,6 +900,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
               <ACUnit
                 key={s.id} sym={s} selected={selUnits.has(s.id)} hovered={hoveredId === s.id} rotating={rotatingId === s.id}
                 model={info?.model} kind={info?.kind ?? s.kind}
+                accent={s.roomId ? roomColors?.[s.roomId]?.head : undefined}
                 onBodyDown={onUnitDown} onRotateDown={onRotateDown}
                 onEnter={setHoveredId} onLeave={(id) => setHoveredId((h) => (h === id ? null : h))}
               />

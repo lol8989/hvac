@@ -24,9 +24,16 @@
     - `App.tsx` — `suppressAutoSelectRef`: `removeGroup`에서 true(삭제=미배정 유지), `aiPlace`(재배치)에서 false(부트스트랩 복원).
     - 브라우저 실검증: 단일 그룹 삭제 → 그룹 0·미배정 6·flash "…연결 실 6곳이 미배정으로 돌아갔습니다"(자동 선정 메시지 아님).
       재배치 후 combine 복귀 → 자동 선정 재발화(실외기 1대·6/6). 전체 1211 그린·tsc 클린·콘솔 에러 0.
-- [ ] **그룹별 색상을 도면(SVG)에도** — 지금은 도크만 컬러. 실외기 그룹색으로 도면 방/실내기 하이라이팅하면 "어느 실이 어느 실외기인지" 도면에서 즉시 보인다.
-  - **결정(주인님 2026-07-22): 매핑 표(도크) 탭 색깔과 동일하게** 한다. 도크의 그룹별 색상(탭·행·테두리) SSOT를
-    도면 방/실내기 하이라이팅에도 그대로 쓴다. → 색 배정 로직을 도크 전용에서 공용으로 끌어올려 도면도 소비하게 한다.
+- [x] **그룹별 색상을 도면(SVG)에도** (2026-07-22) — 도크 탭 색과 동일하게 도면 방/실내기를 하이라이팅.
+  - `presentation/generation/groupColors.ts`(신규·순수) — `GROUP_PALETTE`+`assignGroupColors(floors)`+`roomColorMap(floors)`.
+    도크와 도면이 **같은 배정 규칙(층→그룹 순서)** 을 쓰는 유일 SSOT. 단위테스트 6.
+  - MappingDock은 로컬 팔레트/루프를 걷어내고 `assignGroupColors` 사용(동작 동일).
+  - App: `roomColors`(실id→색) 메모, combine/outdoor 단계에서만 → Viewer. ZoneRect(방: tint fill+head 테두리,
+    선택 시 head 두꺼운 링) + ACUnit(실내기 모델 배지를 head색으로). 미배정 실은 무채색.
+  - 브라우저 실검증: 2그룹(거실·로비=블루 #2f5fae / 나머지 4실=틸 #1f8a80) → 도면 방·배지 색이 도크 탭색과 일치.
+    zone 테두리 색 == 도크 `--gcolor`. tsc·1217 그린·콘솔 에러 0.
+  - [ ] (후속 판단) 산출 SVG(`buildDrawingSvg`, 다운로드 도면.svg)에도 색을 넣을지 — 지금은 인터랙티브 뷰어만.
+    인쇄/납품 도면은 무채색이 나을 수도 있어 주인님 결정 필요.
 - [x] **죽은 코드 정리** (2026-07-22) — `Stepper.tsx` 삭제(ModeBar 대체, import 0), styles.css `.stepper`류 CSS 11줄 제거,
       `selection.css`의 고아 `.selgrid-title .hint` 제거(힌트 삭제로 미사용). tsc·1211 그린. `poolhint`·`stepIndex`는 사용 중이라 존치.
 - [ ] (검토 필요) 편집 확정 시 CONFIRM이 여러 개면 첫 개만 보여주고 진행 — 필요하면 합쳐서 안내.

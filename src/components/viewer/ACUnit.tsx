@@ -8,6 +8,7 @@ interface ACUnitProps {
   rotating: boolean
   model?: string // 배정/추천 실내기 모델명(오버레이). 자유 심볼은 없음
   kind?: string // 실내기 유형(벽걸이형 / 4WAY)
+  accent?: string // 실외기 그룹 색(head) — 모델 배지에 칠해 "이 실내기가 어느 실외기 소속인지" 표시. 없으면 무채색
   onBodyDown: (e: React.MouseEvent, id: string) => void
   onRotateDown: (e: React.MouseEvent, id: string) => void
   onEnter: (id: string) => void
@@ -16,7 +17,7 @@ interface ACUnitProps {
 
 const GRILLE = [-8, -3, 2, 7]
 
-export default function ACUnit({ sym, selected, hovered, rotating, model, kind, onBodyDown, onRotateDown, onEnter, onLeave }: ACUnitProps) {
+export default function ACUnit({ sym, selected, hovered, rotating, model, kind, accent, onBodyDown, onRotateDown, onEnter, onLeave }: ACUnitProps) {
   const showHandle = hovered || rotating
   const topLabel = kind ? `${kind} · ${sym.id}` : sym.id
   return (
@@ -50,7 +51,7 @@ export default function ACUnit({ sym, selected, hovered, rotating, model, kind, 
       </text>
       {model && (
         <g style={{ pointerEvents: 'none' }}>
-          <rect x={-40} y={46} width={80} height={13} rx={3} fill="#222222" opacity={selected ? 0.92 : 0.72} />
+          <rect x={-40} y={46} width={80} height={13} rx={3} fill={accent ?? '#222222'} opacity={selected ? 0.92 : 0.72} />
           <text x={0} y={55} textAnchor="middle" fontSize={6.8} fontWeight="700" fill="#FFFFFF">{model}</text>
         </g>
       )}

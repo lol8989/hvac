@@ -3,19 +3,21 @@
 // 개념이 없다 — 정점 편집은 백로그(실_슬라이싱_설계_v1 §8).
 import type { ZoneBox, Corner } from './geometry'
 import { zoneBounds, isRectZone, zoneCentroid } from './geometry'
+import type { GroupColor } from '../../presentation/generation/groupColors'
 
 interface ZoneRectProps {
   z: ZoneBox
   editing: boolean
   selected: boolean
   areaText?: string // 면적 표기(예: '31.9㎡') — 이름 아래 보조 라벨
+  color?: GroupColor // 실외기 그룹 색(도크 탭 색과 동일). 없으면(미배정) 무채색
   onDown: (e: React.MouseEvent, id: string) => void
   onCornerDown: (e: React.MouseEvent, id: string, corner: Corner) => void
 }
 
 const HS = 9 // 핸들 크기
 
-export default function ZoneRect({ z, editing, selected, areaText, onDown, onCornerDown }: ZoneRectProps) {
+export default function ZoneRect({ z, editing, selected, areaText, color, onDown, onCornerDown }: ZoneRectProps) {
   const b = zoneBounds(z)
   const corners: [Corner, number, number, string][] = editing && isRectZone(z)
     ? [
@@ -27,15 +29,21 @@ export default function ZoneRect({ z, editing, selected, areaText, onDown, onCor
     : []
   // 라벨은 무게중심에 둔다 — 잘린 실에서 bbox 좌상단은 실 밖으로 나간다.
   const c = zoneCentroid(z)
+  // 그룹 색이 있으면 배정된 실 — tint로 채우고 head로 테두리. 선택 시 그룹색을 잃지 않도록
+  // 더 진한 head 테두리로 선택을 표현한다. 색이 없으면(미배정) 기존 무채색 그대로.
+  const fill = color ? color.tint : selected ? '#EDEDED' : '#FCFCFC'
+  const fillOpacity = color ? (selected ? 0.95 : 0.7) : selected ? 0.7 : 0.4
+  const stroke = color ? color.head : selected ? '#222222' : '#C9C9C9'
+  const strokeWidth = selected ? (color ? 2.6 : 2) : color ? 1.6 : 1.2
   return (
     <g>
       <g onMouseDown={(e) => onDown(e, z.id)} style={{ cursor: 'pointer' }}>
         <polygon
           points={z.points.map((p) => `${p.x},${p.y}`).join(' ')}
-          fill={selected ? '#EDEDED' : '#FCFCFC'}
-          fillOpacity={selected ? 0.7 : 0.4}
-          stroke={selected ? '#222222' : '#C9C9C9'}
-          strokeWidth={selected ? 2 : 1.2}
+          fill={fill}
+          fillOpacity={fillOpacity}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
         />
         <text x={c.x} y={c.y} textAnchor="middle" fontSize={12} fontWeight="700" fill={selected ? '#222222' : '#777777'} style={{ pointerEvents: 'none' }}>
           {z.name}
