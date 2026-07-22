@@ -277,3 +277,66 @@ describe('Viewer 실 자르기(V)', () => {
     expect(screen.queryByText('실 자르기')).toBeNull() // 도구바는 그대로
   })
 })
+
+describe('Viewer 실 병합(M)', () => {
+  // 좌·우로 나란한 두 실. 클릭 x좌표로 서로 다른 실을 맞힌다.
+  const TWO_ROOMS: Record<string, Room> = {
+    AC_A: { name: '거실A', floor: '지상1층', usage: '거실', area: 10, type: '4WAY', cool: 5, shortSideM: 3, longSideM: 3, sys: 'EHP', points: rectPoints(24, 24, 300, 420) },
+    AC_B: { name: '거실B', floor: '지상1층', usage: '거실', area: 10, type: '4WAY', cool: 5, shortSideM: 3, longSideM: 3, sys: 'EHP', points: rectPoints(360, 24, 300, 420) },
+  }
+  const mergeHarness = (over: Partial<React.ComponentProps<typeof Viewer>> = {}) =>
+    render(
+      <Viewer
+        rooms={TWO_ROOMS}
+        selectedIds={[]}
+        onSelectionChange={() => {}}
+        indoorSymbols={[]}
+        outdoorSymbols={[]}
+        canMergeRooms
+        isAdjacent={() => true}
+        {...over}
+      />,
+    )
+  const svgOf = (c: HTMLElement) => c.querySelector('.plansvg')!
+
+  it('M을 누르면 도구바가 실 병합으로 바뀐다', () => {
+    mergeHarness()
+    fireEvent.keyDown(window, { key: 'm' })
+    expect(screen.getByText('실 병합 · 합칠 두 실을 차례로 클릭하세요')).toBeInTheDocument()
+  })
+
+  it('첫 클릭으로 실을 잡고 두 번째(다른 실) 클릭에서 onRoomsMerge를 부른다', () => {
+    const onRoomsMerge = vi.fn()
+    const { container } = mergeHarness({ onRoomsMerge })
+    fireEvent.keyDown(window, { key: 'm' })
+
+    fireEvent.mouseDown(svgOf(container), { clientX: 100, clientY: 100 }) // AC_A
+    expect(onRoomsMerge).not.toHaveBeenCalled() // 첫 클릭은 잡기만
+    expect(screen.getByText(/실 병합 · 거실A/)).toBeInTheDocument() // HUD가 첫 실을 표시
+
+    fireEvent.mouseDown(svgOf(container), { clientX: 480, clientY: 100 }) // AC_B
+    expect(onRoomsMerge).toHaveBeenCalledWith('AC_A', 'AC_B')
+  })
+
+  it('같은 실을 다시 누르면 선택을 해제한다(onRoomsMerge 안 부름)', () => {
+    const onRoomsMerge = vi.fn()
+    const { container } = mergeHarness({ onRoomsMerge })
+    fireEvent.keyDown(window, { key: 'm' })
+
+    fireEvent.mouseDown(svgOf(container), { clientX: 100, clientY: 100 }) // AC_A 잡기
+    fireEvent.mouseDown(svgOf(container), { clientX: 100, clientY: 100 }) // 같은 실 다시 → 해제
+
+    expect(onRoomsMerge).not.toHaveBeenCalled()
+    expect(screen.getByText('실 병합 · 합칠 두 실을 차례로 클릭하세요')).toBeInTheDocument() // 초기 문구로 복귀
+  })
+
+  it('병합이 허용되지 않는 단계면 모드로 들어가지 않고 이유를 알린다', () => {
+    const onMergeUnavailable = vi.fn()
+    mergeHarness({ canMergeRooms: false, onMergeUnavailable })
+
+    fireEvent.keyDown(window, { key: 'm' })
+
+    expect(onMergeUnavailable).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText(/실 병합 · 합칠/)).toBeNull()
+  })
+})
