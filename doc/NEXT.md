@@ -80,9 +80,11 @@
   App 1016→997줄. **Phase D 완료(App.tsx 1465→997, ~11책임 → 훅 8개+순수 2개로 분해).** 단위테스트 3(§5.7 불변식).
 
 **Phase E — Viewer.tsx(1076, 6모드+3서브시스템) 훅 분해:**
-- [ ] 순수 기하 이동(`unitsInRect`·`resizeRectFromCorner`·`zonesBounds`→geometry.ts) → `useDraftCommit<T>`(4곳 복붙)
-  → `usePanZoom` → `useCassetteSelectionSync` → `useSliceMode`/`useMergeMode` → 드래그 멀티플렉서(387-513) 분해
-  → `useViewerShortcuts`(정책/메커니즘 분리) → 37 prop을 indoor/outdoor/slice/merge/viewport 클러스터로.
+- [x] 순수 기하 3함수 → geometry.ts(`361dbdd`) — `unitsInRect`·`zonesBounds`·`resizeRectFromCorner`. 인라인 로직 verbatim
+  추출, TDD 8. Viewer 1076→1067줄. tsc·1257 그린. ⚠ 브라우저 미검증(Chrome MCP localhost 불가).
+- [ ] `useDraftCommit<T>`(4곳 복붙) → `usePanZoom` → `useCassetteSelectionSync` → `useSliceMode`/`useMergeMode`
+  → 드래그 멀티플렉서(387-513) 분해 → `useViewerShortcuts`(정책/메커니즘 분리)
+  → 37 prop을 indoor/outdoor/slice/merge/viewport 클러스터로.
 
 **§5.7 결정 2건 (처리 완료 2026-07-22):**
 - [x] **자동 선정 → undo 히스토리 제외** (`443c5b0`) — `runOutdoorSelection`의 `edit(commit)` → `undoable.replace`.
