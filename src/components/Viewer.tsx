@@ -7,6 +7,7 @@ import ZoneRect from './viewer/ZoneRect'
 import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsRect, zoneOfPoint, roomIdsForUnits, zoneAreaM2, unitsInRect, zonesBounds, resizeRectFromCorner } from './viewer/geometry'
 import type { UnitSym, ZoneBox, Corner, Pt } from './viewer/geometry'
 import type { GroupColor } from '../presentation/generation/groupColors'
+import { useDraftCommit } from './viewer/useDraftCommit'
 
 type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
 
@@ -185,31 +186,31 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const [mode, setMode] = useState<Mode>('cassette')
   // 실내기 심볼은 App(Placement)이 소유한다. 드래그·회전 중에는 여기 draft로 그리고,
   // 마우스를 뗄 때 한 번만 커밋한다(60fps마다 App을 리렌더하지 않기 위함).
-  const [draft, setDraft] = useState<Record<string, { x?: number; y?: number; rot?: number }> | null>(null)
+  const unitDraft = useDraftCommit<Record<string, { x?: number; y?: number; rot?: number }>>()
   const symbols = useMemo(
-    () => (draft ? indoorSymbols.map((s) => (draft[s.id] ? { ...s, ...draft[s.id] } : s)) : indoorSymbols),
-    [indoorSymbols, draft],
+    () => (unitDraft.value ? indoorSymbols.map((s) => (unitDraft.value![s.id] ? { ...s, ...unitDraft.value![s.id] } : s)) : indoorSymbols),
+    [indoorSymbols, unitDraft.value],
   )
   // 실(존)의 형상은 App(roomGeom)이 소유한다 — 검출·자르기 결과가 그대로 내려오고,
   // 뷰어의 모서리 리사이즈는 드래그 중에만 로컬 draft로 그린 뒤 마우스를 뗄 때 한 번 올린다.
   // (실내기 심볼과 같은 controlled 패턴. 뷰어가 형상을 쥐고 있으면 App이 자르는 도형과
   //  사용자가 보는 도형이 어긋난다.)
-  const [zoneDraft, setZoneDraft] = useState<{ id: string; points: Pt[] } | null>(null)
+  const zoneDraft = useDraftCommit<{ id: string; points: Pt[] }>()
   const zones = useMemo<ZoneBox[]>(
     () =>
       Object.entries(rooms).map(([id, r]) => ({
         id,
         name: r.name,
-        points: zoneDraft && zoneDraft.id === id ? zoneDraft.points : r.points,
+        points: zoneDraft.value && zoneDraft.value.id === id ? zoneDraft.value.points : r.points,
       })),
-    [rooms, zoneDraft],
+    [rooms, zoneDraft.value],
   )
   const [selUnits, setSelUnits] = useState<Set<string>>(() => new Set())
   // 실외기 심볼도 controlled. 드래그 중에는 oduDraft로 그리고 마우스를 뗄 때 커밋한다.
-  const [oduDraft, setOduDraft] = useState<{ id: string; x: number; y: number } | null>(null)
+  const oduDraft = useDraftCommit<{ id: string; x: number; y: number }>()
   const outdoors = useMemo(
-    () => (oduDraft ? outdoorSymbols.map((u) => (u.id === oduDraft.id ? { ...u, x: oduDraft.x, y: oduDraft.y } : u)) : outdoorSymbols),
-    [outdoorSymbols, oduDraft],
+    () => (oduDraft.value ? outdoorSymbols.map((u) => (u.id === oduDraft.value!.id ? { ...u, x: oduDraft.value!.x, y: oduDraft.value!.y } : u)) : outdoorSymbols),
+    [outdoorSymbols, oduDraft.value],
   )
   const [selOdu, setSelOdu] = useState<string | null>(null)
   // 자르기(V) 모드: 커서를 지나는 무한 직선. R을 누르면 15°씩 돈다.
@@ -240,14 +241,8 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const oduRef = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number } | null>(null)
   const spaceRef = useRef(false)
 
-  // window 리스너(1회 등록)에서 읽는 draft·콜백. 렌더마다 갱신되는 prop을 stale closure 없이 쓴다.
-  const draftRef = useRef<Record<string, { x?: number; y?: number; rot?: number }> | null>(null)
-  const applyDraft = (d: Record<string, { x?: number; y?: number; rot?: number }> | null) => {
-    draftRef.current = d
-    setDraft(d)
-  }
-  const oduDraftRef = useRef<{ id: string; x: number; y: number } | null>(null)
-  const zoneDraftRef = useRef<{ id: string; points: Pt[] } | null>(null)
+  // window 리스너(1회 등록)에서 읽는 콜백. 렌더마다 갱신되는 prop을 stale closure 없이 쓴다.
+  // draft 값들은 useDraftCommit이 ref로 노출한다(unitDraft.ref 등).
   const cbRef = useRef({ onUnitsMove, onUnitsRotate, onUnitsDelete, onOutdoorsMove, onOutdoorsDelete, onZoneResize })
   cbRef.current = { onUnitsMove, onUnitsRotate, onUnitsDelete, onOutdoorsMove, onOutdoorsDelete, onZoneResize }
 
@@ -393,8 +388,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         const py = st.current.snapOn ? snap(p.y) : p.y
         const r = resizeRectFromCorner(c.corner, { x: c.ax, y: c.ay }, { x: px, y: py }, GRID)
         const next = { id: c.id, points: rectPoints(r.x, r.y, r.w, r.h) }
-        zoneDraftRef.current = next
-        setZoneDraft(next)
+        zoneDraft.set(next)
         return
       }
       const r = rotRef.current
@@ -402,7 +396,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         const delta = (e.clientX - r.startX) * ROT_SENS
         const next: Record<string, { rot: number }> = {}
         for (const id of Object.keys(r.orig)) next[id] = { rot: norm(Math.round((r.orig[id] + delta) / ROT_STEP) * ROT_STEP) }
-        applyDraft(next)
+        unitDraft.set(next)
         return
       }
       const d = dragRef.current
@@ -413,7 +407,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         if (Math.abs(p.x - d.startX) > 3 || Math.abs(p.y - d.startY) > 3) d.moved = true
         const next: Record<string, { x: number; y: number }> = {}
         for (const [id, o] of Object.entries(d.orig)) next[id] = { x: o.x + dx, y: o.y + dy }
-        applyDraft(next)
+        unitDraft.set(next)
         return
       }
       const od = oduRef.current
@@ -422,8 +416,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         let dx = p.x - od.startX, dy = p.y - od.startY
         if (st.current.snapOn) { dx = snap(dx); dy = snap(dy) }
         const next = { id: od.id, x: od.ox + dx, y: od.oy + dy }
-        oduDraftRef.current = next
-        setOduDraft(next)
+        oduDraft.set(next)
         return
       }
       const mq = marqRef.current
@@ -434,9 +427,8 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     }
     // 드래그/회전 draft를 App(Placement)에 한 번만 커밋하고 draft를 비운다.
     const commitDraft = (kind: 'move' | 'rotate') => {
-      const d = draftRef.current
-      draftRef.current = null
-      setDraft(null)
+      const d = unitDraft.ref.current
+      unitDraft.clear()
       if (!d) return
       if (kind === 'move') {
         const moves = Object.entries(d)
@@ -454,17 +446,15 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       if (panRef.current) { panRef.current = null; setPanning(false); return }
       if (oduRef.current) {
         oduRef.current = null
-        const d = oduDraftRef.current
-        oduDraftRef.current = null
-        setOduDraft(null)
+        const d = oduDraft.ref.current
+        oduDraft.clear()
         if (d) cbRef.current.onOutdoorsMove?.([d])
         return
       }
       if (cornerRef.current) {
         cornerRef.current = null
-        const zd = zoneDraftRef.current
-        zoneDraftRef.current = null
-        setZoneDraft(null)
+        const zd = zoneDraft.ref.current
+        zoneDraft.clear()
         if (zd) cbRef.current.onZoneResize?.(zd.id, zd.points) // 형상은 App이 소유한다
         return
       }
