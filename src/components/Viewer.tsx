@@ -4,13 +4,14 @@ import type { Room } from '../data'
 import ACUnit from './viewer/ACUnit'
 import ODUnit from './viewer/ODUnit'
 import ZoneRect from './viewer/ZoneRect'
-import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsRect, zoneOfPoint, zoneAreaM2, unitsInRect, zonesBounds, resizeRectFromCorner } from './viewer/geometry'
+import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsRect, zoneAreaM2, unitsInRect, zonesBounds, resizeRectFromCorner } from './viewer/geometry'
 import type { UnitSym, ZoneBox, Corner, Pt } from './viewer/geometry'
 import type { GroupColor } from '../presentation/generation/groupColors'
 import { useDraftCommit } from './viewer/useDraftCommit'
 import { usePanZoom, type ViewBox } from './viewer/usePanZoom'
 import { useCassetteSelectionSync } from './viewer/useCassetteSelectionSync'
 import { useSliceMode } from './viewer/useSliceMode'
+import { useMergeMode } from './viewer/useMergeMode'
 
 export type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
 
@@ -199,9 +200,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     [outdoorSymbols, oduDraft.value],
   )
   const [selOdu, setSelOdu] = useState<string | null>(null)
-  // 병합(M) 모드: 첫 클릭으로 실 하나를 잡고, 두 번째 클릭으로 붙어 있는 실과 합친다.
-  const [mergeFirst, setMergeFirst] = useState<string | null>(null)
-  const [hoverZone, setHoverZone] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [rotatingId, setRotatingId] = useState<string | null>(null)
   const [spaceDown, setSpaceDown] = useState(false)
@@ -262,6 +260,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     onSliceUnavailable, onRoomSlice,
   })
   const { isSlice, sliceAngle, sliceCursor, slicePreview } = slice
+  // 실 병합(M) 모드 — 자르기와 형제. 클릭/이동은 공유 핸들러가 호출한다.
+  const merge = useMergeMode({
+    mode, setMode, zones, canMergeRooms, zoneLayerVisible: layers.zone,
+    isAdjacent, onMergeUnavailable, onRoomsMerge,
+  })
+  const { isMerge, mergePreview } = merge
 
   // '실외기 선정' 오버레이 버튼 위치: 선택된 실들의 bbox 상단 중앙을 화면 px로 변환한다.
   // view(팬·줌)·크기·선택이 바뀔 때마다 다시 계산해 선택 위를 따라다닌다.
@@ -405,30 +409,11 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
   }, [toSvg, onSelectionChange])
 
-  // 병합 모드 진입(M).
-  const enterMerge = useCallback(() => {
-    if (!canMergeRooms) { onMergeUnavailable?.(); return }
-    setMergeFirst(null)
-    setMode('merge')
-  }, [canMergeRooms, onMergeUnavailable])
-
-  // 병합이 더 이상 허용되지 않는 단계로 넘어가면 모드에서 빠져나온다(적대적 QA). (자르기는 useSliceMode가 처리)
-  useEffect(() => {
-    if (!canMergeRooms) {
-      setMode((m) => (m === 'merge' ? 'cassette' : m))
-      setMergeFirst(null)
-    }
-  }, [canMergeRooms])
-
-  // 병합 모드에서 나가면 프리뷰 상태를 버린다.
-  useEffect(() => {
-    if (mode !== 'merge') { setMergeFirst(null); setHoverZone(null) }
-  }, [mode])
   // window 키 리스너는 1회만 등록된다 → 최신 함수를 ref로 읽는다(stale closure 방지).
   const enterSliceRef = useRef(slice.enterSlice)
   enterSliceRef.current = slice.enterSlice
-  const enterMergeRef = useRef(enterMerge)
-  enterMergeRef.current = enterMerge
+  const enterMergeRef = useRef(merge.enterMerge)
+  enterMergeRef.current = merge.enterMerge
 
   // 단축키.
   useEffect(() => {
@@ -478,7 +463,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       } else if (k === 'escape') {
         // Esc는 '지금 하던 걸 취소한다'는 보편적 계약이다 — 자르기/병합 모드에서 빠져나온다.
         // (안 그러면 사용자가 취소했다고 믿은 채 클릭해 실을 자른다 — 적대적 QA)
-        setMergeFirst(null)
+        // 모드가 바뀌면 useMergeMode가 mergeFirst/hoverZone을 정리한다(렌더 감지).
         setMode((m) => (m === 'slice' || m === 'merge' ? 'cassette' : m))
         setSelUnits(new Set()); setSelOdu(null); onSelectionChange([]); setToolMenuOpen(false); onEscape?.()
       }
@@ -501,17 +486,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     // 자르기 모드에서는 존 레이어가 클릭을 받지 않으므로(pointerEvents none) 여기서 히트 판정한다.
     // 마퀴보다 먼저 걸러야 한다 — 안 그러면 자르기 클릭이 영역 선택으로 먹힌다.
     if (mode === 'slice') { slice.commitAt(p); return }
-    // 병합 모드: 첫 클릭으로 실을 잡고, 두 번째 클릭으로 '붙어 있는' 실과 합친다.
-    if (mode === 'merge') {
-      if (!layerOn('zone')) return
-      const z = zoneOfPoint(p.x, p.y, zones)
-      if (!z) { setMergeFirst(null); return }
-      if (!mergeFirst) { setMergeFirst(z.id); return }
-      if (z.id === mergeFirst) { setMergeFirst(null); return } // 같은 실을 다시 누르면 선택 해제
-      onRoomsMerge?.(mergeFirst, z.id) // 인접 여부는 App(도메인)이 최종 판정한다
-      setMergeFirst(null)
-      return
-    }
+    if (mode === 'merge') { merge.commitAt(p); return }
     marqRef.current = { sx: p.x, sy: p.y, additive: e.shiftKey }
     setMarquee({ x: p.x, y: p.y, w: 0, h: 0 })
   }
@@ -522,7 +497,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     const p = toSvg(e.clientX, e.clientY)
     if (!p) return
     if (mode === 'slice') slice.trackCursor(p)
-    else setHoverZone(zoneOfPoint(p.x, p.y, zones)?.id ?? null)
+    else merge.trackHover(p)
   }
 
   // 실내기 심볼: 선택 + 이동 시작.
@@ -629,7 +604,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const isCassette = mode === 'cassette'
   const isZone = mode === 'zone'
   const isOutdoor = mode === 'outdoor'
-  const isMerge = mode === 'merge' // isSlice·slicePreview는 useSliceMode에서 파생
+  // isSlice·slicePreview는 useSliceMode, isMerge·mergePreview는 useMergeMode에서 파생
   // 레이어 표시: 켜 둔 레이어만 그리고 편집을 받는다.
   const layerOn = (name: LayerName): boolean => layers[name]
   // '전체' 마스터 토글: 모두 켜짐/모두 꺼짐/일부만(중간)을 반영하고 한 번에 켜거나 끈다.
@@ -646,15 +621,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   }
   const modeLabel = MODE_LABEL[mode]
 
-  // 병합 프리뷰: 1차 선택 실은 굵게, 커서 아래 실은 '붙어 있으면' 강조하고 아니면 안 된다고 알린다.
-  const mergePreview = (() => {
-    if (!isMerge) return null
-    const first = mergeFirst ? zones.find((z) => z.id === mergeFirst) ?? null : null
-    const hover = hoverZone && hoverZone !== mergeFirst ? zones.find((z) => z.id === hoverZone) ?? null : null
-    // 첫 실을 고르기 전에는 '붙어 있는지'를 물을 수 없다 — 그냥 커서 아래 실을 강조한다.
-    const adjacent = !first || !hover ? true : (isAdjacent?.(first.id, hover.id) ?? true)
-    return { first, hover, adjacent }
-  })()
 
   return (
     <div className="viewer" ref={wrapRef}>
@@ -885,7 +851,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
             <button className={`figitem${isSlice ? ' active' : ''}`} onClick={() => { slice.enterSlice(); setToolMenuOpen(false) }}>
               <span className="tt"><b>실 자르기</b><span>클릭으로 절단 · R 15° 회전</span></span><span className="kk">V</span>
             </button>
-            <button className={`figitem${isMerge ? ' active' : ''}`} onClick={() => { enterMerge(); setToolMenuOpen(false) }}>
+            <button className={`figitem${isMerge ? ' active' : ''}`} onClick={() => { merge.enterMerge(); setToolMenuOpen(false) }}>
               <span className="tt"><b>실 병합</b><span>붙어 있는 두 실을 클릭</span></span><span className="kk">M</span>
             </button>
             <button className={`figitem${isOutdoor ? ' active' : ''}`} onClick={() => { setMode('outdoor'); setToolMenuOpen(false) }}>
