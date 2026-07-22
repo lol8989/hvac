@@ -34,6 +34,7 @@ import { makeReplaceOutdoorModel } from './application/generation/ReplaceOutdoor
 import { makeAddGroup, makeRemoveGroup } from './application/generation/GroupCommands'
 import { bootstrapPlan, toViewModel, outdoorUnitFromSpec, nextGroupMeta, syncPlanUnits, selectOutdoorPlan, indoorUnitsFor } from './presentation/generation/planAdapter'
 import { compatPredicateFromMatrix } from './presentation/generation/compatPredicate'
+import { shouldAutoSelectOutdoor } from './presentation/generation/autoSelectOutdoor'
 import { compatMatrixFromSeed } from './infrastructure/equipment/seed/compatMatrixFromSeed'
 import type { CompatMatrix } from './domain/equipment/CompatMatrix'
 import { floorsOf } from './presentation/generation/floors'
@@ -269,6 +270,9 @@ export default function App({
   const [step, setStep] = useState<StepId>('place') // 편집 도구(실내기/실외기 선정·조합/실외기 배치) 또는 'output'(산출물)
   const [editReturn, setEditReturn] = useState<StepId>('outdoor') // 편집 재개 시 돌아갈 편집 도구(확정 직전 도구)
   const [generated, setGenerated] = useState(false)
+  // 사용자가 실외기를 삭제해 그룹을 비웠으면 자동 선정을 억제한다(그룹 0 → 재선정 방지).
+  // 실내기를 재배치하면 새 시작이라 해제한다.
+  const suppressAutoSelectRef = useRef(false)
 
   // 실제 도면: Python(ezdxf)로 전처리한 딥줌 타일 피라미드. 좌표계 정합의 토대.
   const { tiles, planDims } = useTileManifest()
@@ -389,10 +393,16 @@ export default function App({
   }
 
   // 실외기 단계에 처음 들어오면 선정을 1회 자동 실행한다(그룹이 아직 없을 때만).
-  // 이후 사용자가 매핑 팝업에서 조정한 결과는 덮어쓰지 않는다.
+  // 이후 사용자가 매핑 팝업에서 조정한 결과는 덮어쓰지 않는다. 사용자가 방금 실외기를
+  // 삭제해 그룹을 비운 경우(suppressAutoSelectRef)엔 재선정하지 않는다 — 안 그러면
+  // 단일 그룹 삭제가 즉시 재선정돼 무변화로 보인다(주인님 결정 2026-07-22, b안).
   useEffect(() => {
-    if ((step !== 'outdoor' && step !== 'combine') || plan.groups.length > 0) return
-    if (!Object.keys(placements).length) return
+    if (!shouldAutoSelectOutdoor({
+      step,
+      groupCount: plan.groups.length,
+      placementCount: Object.keys(placements).length,
+      suppressed: suppressAutoSelectRef.current,
+    })) return
     runOutdoorSelection()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, plan, placements])
@@ -446,6 +456,8 @@ export default function App({
   const removeGroup = (key: string) => {
     const g = plan.groupByKey(key)
     if (!g) return
+    // 사용자가 명시적으로 삭제했으면 그룹이 0이 되어도 자동 선정으로 되살리지 않는다.
+    suppressAutoSelectRef.current = true
     uc.remove({ key })
     sync('실외기 삭제')
     flash(`${g.label}을(를) 삭제했습니다 — 연결 실 ${g.roomIds.length}곳이 미배정으로 돌아갔습니다`)
@@ -561,6 +573,8 @@ export default function App({
   const aiPlace = () => {
     // 방마다 필요부하 기반으로 모델+대수 자동 선정. 사용자 수정 셀·좌표는 보존(AI값만 갱신).
     // 플랜 동기화(미배정 풀 편입)는 placements 변경 이펙트가 맡는다. 배정은 이후 combine에서 생긴다.
+    // 재배치는 새 시작이라 삭제 억제를 해제한다(다음 combine 진입 시 1회 자동 선정 복원).
+    suppressAutoSelectRef.current = false
     editPlacements('AI 실내기 배치', applyAiPlacement(Object.values(domainRooms), placements, indoorModels, layoutFor))
     flash('✦ AI가 실 ' + Object.keys(domainRooms).length + '곳에 실내기를 배치·선정했습니다 (수정 셀은 보존)')
   }
