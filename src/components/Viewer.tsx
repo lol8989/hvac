@@ -8,6 +8,7 @@ import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneBounds, zoneHitsR
 import type { UnitSym, ZoneBox, Corner, Pt } from './viewer/geometry'
 import type { GroupColor } from '../presentation/generation/groupColors'
 import { useDraftCommit } from './viewer/useDraftCommit'
+import { usePanZoom, type ViewBox } from './viewer/usePanZoom'
 
 type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
 
@@ -20,7 +21,6 @@ const niceGrid = (w: number): number => {
   const pow = Math.pow(10, Math.floor(Math.log10(target)))
   return [1, 2, 5, 10].map((m) => m * pow).find((c) => c >= target) ?? 10 * pow
 }
-interface ViewBox { x: number; y: number; w: number; h: number }
 
 // 단축키 도움말(플로팅 위젯) — 단축키 하나당 한 행.
 const SHORTCUTS: readonly { key: string; desc: string }[] = [
@@ -162,27 +162,10 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   // 도면 좌표계 상수(프롭 기반). 실도면(대형 mm)이면 패딩·격자 간격을 비례 조정.
   const PLAN_W = planW ?? 720
   const PLAN_H = planH ?? 470
-  const FIT = useMemo(() => {
-    // 층 전환: 활성 층 bbox가 오면 거기에, 없으면 전체 도면에 맞춘다. 여백은 폭·높이 비례.
-    const b = fitBounds ?? { x: 0, y: 0, w: PLAN_W, h: PLAN_H }
-    const px = b.w * 0.05, py = b.h * 0.06
-    return { x: b.x - px, y: b.y - py, w: b.w + 2 * px, h: b.h + 2 * py }
-  }, [fitBounds, PLAN_W, PLAN_H])
-  const BASE_W = FIT.w
-  const MIN_W = BASE_W / 8
-  const MAX_W = BASE_W * 3
   // 격자 표시 간격: 실도면이면 딱 떨어지는 실치수(예: 2m)를 정규화 단위로 환산, 목업이면 기존 GRID.
   const gridMm = mmPerUnit ? niceGrid(PLAN_W * mmPerUnit) : null // 격자 1칸의 실 치수(mm)
   const gridStep = gridMm ? gridMm / (mmPerUnit as number) : GRID
   const gridLabel = gridMm ? (gridMm >= 1000 ? `${gridMm / 1000}m` : `${gridMm}mm`) : null
-  const clampW = useCallback((nw: number, nh: number): [number, number] => {
-    if (nw < MIN_W) { const k = MIN_W / nw; return [nw * k, nh * k] }
-    if (nw > MAX_W) { const k = MAX_W / nw; return [nw * k, nh * k] }
-    return [nw, nh]
-  }, [MIN_W, MAX_W])
-  const [view, setView] = useState<ViewBox>(FIT)
-  // 층 전환·도면 로드로 맞춤 범위(FIT)가 바뀌면 그 범위로 뷰를 다시 맞춘다.
-  useEffect(() => { setView(FIT) }, [FIT])
   const [mode, setMode] = useState<Mode>('cassette')
   // 실내기 심볼은 App(Placement)이 소유한다. 드래그·회전 중에는 여기 draft로 그리고,
   // 마우스를 뗄 때 한 번만 커밋한다(60fps마다 App을 리렌더하지 않기 위함).
@@ -225,12 +208,13 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const [panning, setPanning] = useState(false)
   const [marquee, setMarquee] = useState<ViewBox | null>(null)
   const [snapOn, setSnapOn] = useState(true)
-  const [svgW, setSvgW] = useState(1200) // 화면상 SVG 폭(px) — 타일 레벨 선택용
   const [hintOpen, setHintOpen] = useState(false) // 도면이 주인공 — 단축키 목록은 필요할 때 펼친다
   const [toolMenuOpen, setToolMenuOpen] = useState(false)
 
   const svgRef = useRef<SVGSVGElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
+  // 뷰포트 변환(팬·줌·화면맞춤) — view가 SSOT. 팬 드래그는 아래 멀티플렉서가 setView로 직접 옮긴다.
+  const { view, setView, svgW, zoomPct, toSvg, zoomBy, resetView } = usePanZoom({ svgRef, planW: PLAN_W, planH: PLAN_H, fitBounds })
   // 선택된 실들 위에 뜨는 '실외기 선정' 오버레이 버튼의 화면 위치(px, .viewer 기준). 없으면 미표시.
   const [selBtnPos, setSelBtnPos] = useState<{ x: number; y: number } | null>(null)
   const panRef = useRef<{ sx: number; sy: number; vx: number; vy: number; a: number; d: number } | null>(null)
@@ -272,16 +256,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layers } })
   const layerVisible = (name: LayerName, v: LayerVisibility): boolean => v[name]
 
-  // SVG 화면 폭(px) 추적 — 타일 레벨 선택(화면 해상도 ≒ 타일 해상도)에 사용.
-  useEffect(() => {
-    const el = svgRef.current
-    if (!el) return
-    const update = () => setSvgW(el.clientWidth || 1200)
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   // '실외기 선정' 오버레이 버튼 위치: 선택된 실들의 bbox 상단 중앙을 화면 px로 변환한다.
   // view(팬·줌)·크기·선택이 바뀔 때마다 다시 계산해 선택 위를 따라다닌다.
@@ -339,39 +313,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIds])
 
-  const zoomPct = Math.round((BASE_W / view.w) * 100)
   const panActive = mode === 'pan' || spaceDown
-
-  const toSvg = useCallback((cx: number, cy: number) => {
-    const svg = svgRef.current
-    const ctm = svg?.getScreenCTM()
-    if (!svg || !ctm) return null
-    const pt = svg.createSVGPoint()
-    pt.x = cx
-    pt.y = cy
-    return pt.matrixTransform(ctm.inverse())
-  }, [])
-
-  // 휠 확대/축소: 커서 아래 지점 고정.
-  useEffect(() => {
-    const svg = svgRef.current
-    if (!svg) return
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault()
-      const ctm = svg.getScreenCTM()
-      if (!ctm) return
-      const pt = svg.createSVGPoint()
-      pt.x = e.clientX; pt.y = e.clientY
-      const p = pt.matrixTransform(ctm.inverse())
-      const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1
-      setView((v) => {
-        const [nw, nh] = clampW(v.w * factor, v.h * factor)
-        return { x: p.x - ((p.x - v.x) / v.w) * nw, y: p.y - ((p.y - v.y) / v.h) * nh, w: nw, h: nh }
-      })
-    }
-    svg.addEventListener('wheel', onWheel, { passive: false })
-    return () => svg.removeEventListener('wheel', onWheel)
-  }, [clampW])
 
   // 통합 드래그 처리(팬/리사이즈/회전/이동/마퀴) — window 리스너로 화면 밖 지속.
   useEffect(() => {
@@ -549,7 +491,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       else if (k === 'h') setMode('pan')
       else if (k === 'v') enterSliceRef.current()
       else if (k === 'm') enterMergeRef.current()
-      else if (k === '0') setView(FIT)
+      else if (k === '0') resetView()
       else if (k === 'r') {
         // R은 모드마다 다른 일을 한다. 에어컨: 선택 실내기 90° 회전 / 자르기: 라인 15° 회전.
         if (st.current.mode === 'cassette') {
@@ -590,7 +532,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', onKeyUp)
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp) }
-  }, [onEscape, onSelectionChange, FIT])
+  }, [onEscape, onSelectionChange, resetView])
 
   const startPan = (cx: number, cy: number) => {
     const ctm = svgRef.current?.getScreenCTM(); if (!ctm) return
@@ -714,8 +656,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     setMode('cassette')
   }
 
-  const zoomButton = (factor: number) =>
-    setView((v) => { const [nw, nh] = clampW(v.w * factor, v.h * factor); return { x: v.x + (v.w - nw) / 2, y: v.y + (v.h - nh) / 2, w: nw, h: nh } })
 
   // 딥줌: 현재 줌·뷰포트에 맞는 레벨의 '보이는 타일'만 렌더.
   const tileEls: ReactElement[] | null = (() => {
@@ -1045,9 +985,9 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       </div>
 
       <div className="zoom">
-        <button onClick={() => zoomButton(1 / 1.1)} title="확대">+</button>
-        <button onClick={() => zoomButton(1.1)} title="축소">−</button>
-        <button onClick={() => setView(FIT)} title="맞춤">⤢</button>
+        <button onClick={() => zoomBy(1 / 1.1)} title="확대">+</button>
+        <button onClick={() => zoomBy(1.1)} title="축소">−</button>
+        <button onClick={resetView} title="맞춤">⤢</button>
         <div className="zoom-pct">{zoomPct}%</div>
       </div>
     </div>
