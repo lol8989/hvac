@@ -10,6 +10,8 @@ import StatusFilterChips from './StatusFilterChips'
 import SortableTh from './SortableTh'
 import { sortRows, nextSortDirection, type SortKey, type SortState } from '../../presentation/equipment/sortRows'
 import { useSubmitGuard } from './useSubmitGuard'
+import { useToast } from './useToast'
+import { usePagedFilter } from './usePagedFilter'
 import { formatDateTime } from '../../presentation/formatDateTime'
 
 // 게시 상태 라벨(무채색 뱃지). 관리 목록은 전 상태를 노출한다.
@@ -40,23 +42,16 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
   const [cat, setCat] = useState<'ALL' | 'INDOOR' | 'OUTDOOR' | 'VENT'>('ALL')
   const [status, setStatus] = useState<'ALL' | PublishStatus>('ALL')
   const [seriesCode, setSeriesCode] = useState('ALL')
-  const [qInput, setQInput] = useState('') // 입력 중인 검색어
-  const [q, setQ] = useState('') // 실제로 목록에 적용된 검색어(검색 버튼·Enter로 확정)
-  const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0])
   const [sort, setSort] = useState<SortState>(null)
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
   const [editing, setEditing] = useState<Editing>(null)
   const [uploading, setUploading] = useState(false)
-  const [toast, setToast] = useState('')
+  const { qInput, setQInput, q, setPage, submitSearch, resetQuery, resetPage, paginate } = usePagedFilter(pageSize)
+  const { toast, notify } = useToast()
   const rowGuard = useSubmitGuard() // 행 액션(게시/보관/재게시) 연타 방지
 
   const refresh = useCallback(() => setAll(admin.listProducts()), [admin])
-
-  const notify = useCallback((msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(''), 3000)
-  }, [])
 
   // 행 전이 액션: 도메인 예외는 토스트로 안내하고 목록 상태는 되돌리지 않는다(저장소가 롤백).
   const changeStatus = (row: ProductRow, next: PublishStatus, label: string) =>
@@ -84,10 +79,7 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
   // 정렬은 필터 다음, 페이지 나누기 앞이다 — 전체 결과를 기준으로 줄을 세운 뒤 잘라야 한다.
   const ordered = useMemo(() => sortRows(filtered, sort), [filtered, sort])
 
-  const pageCount = Math.max(1, Math.ceil(ordered.length / pageSize))
-  const cur = Math.min(page, pageCount - 1)
-  const rows = ordered.slice(cur * pageSize, cur * pageSize + pageSize)
-  const resetPage = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(0) }
+  const { pageCount, cur, rows } = paginate(ordered)
 
   // 정렬을 바꾸면 보고 있던 페이지의 내용이 완전히 달라진다 → 첫 페이지로.
   const onSort = (key: SortKey) => {
@@ -138,14 +130,7 @@ export default function EquipmentAdminPage({ admin }: { admin: EquipmentAdminRep
     setCat('ALL')
     setSeriesCode('ALL')
     setStatus('ALL')
-    setQInput('')
-    setQ('')
-    setPage(0)
-  }
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    setQ(qInput)
-    setPage(0)
+    resetQuery()
   }
 
   return (

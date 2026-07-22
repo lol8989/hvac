@@ -4,10 +4,11 @@
 // 실제 조합(어떤 실내기를 어느 실외기에 묶을지)·조합비는 생성 단이 이 표를 참조해 판단한다(CLAUDE.md §1).
 // 화면은 렌더·선택만 책임진다 — 값 검증·저장은 admin 포트(도메인 CompatMatrix)가 맡는다(SRP).
 
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { EquipmentAdminRepository } from '../../application/equipment/adminPorts'
 import type { CompatAxis, CompatMatrix, CompatValue } from '../../domain/equipment/CompatMatrix'
 import AdminShell from './AdminShell'
+import { useToast } from './useToast'
 
 type Axis = CompatAxis
 // 화면 선택·React 키 용도의 식별자(도메인 키가 아니다 — 표시 전용).
@@ -61,14 +62,7 @@ export default function CompatMatrixPage({ admin }: { admin: EquipmentAdminRepos
   const [selectedId, setSelectedId] = useState(() => defaultOutdoorId(matrix))
   const [q, setQ] = useState('')
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
-  const [toast, setToast] = useState('')
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const notify = (msg: string) => {
-    setToast(msg)
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => setToast(''), 2600)
-  }
+  const { toast, notify } = useToast(2600)
 
   const groups = useMemo(() => groupByEnergy(matrix.outdoorRows), [matrix])
   const needle = q.trim().toLowerCase()

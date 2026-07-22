@@ -23,9 +23,14 @@
   본체는 조합·위임(생성자·포트 동일). status-UPDATE SQL 중복 → `applyStatus` 하나로(P2 dedup). 통합 포트 그대로.
   admin 테스트 81 무변경 통과 + 브라우저 3뷰(목록·조합비·호환표) 런타임 검증·콘솔 0. tsc·lint 클린·1233 그린.
 
-**Phase C — 컴포넌트 공통화:**
-- [ ] **`useToast()` + `usePagedFilter()`** — 관리자 3페이지(Equipment/ComboPolicy/CompatMatrix)의 토스트·검색·
-  페이지네이션 복붙 제거(페이지 범위 초과 버그 클래스 함께 제거).
+**Phase C — 컴포넌트 공통화 (완료 2026-07-22):**
+- [x] **`useToast()` + `usePagedFilter()`** — 관리자 3페이지 복붙 제거.
+  - `useToast(durationMs)`: CompatMatrix의 견고한 timer-ref 버전으로 통일 → Equipment/Combo의 **연속 알림 조기소멸
+    잠재버그 해소** + 언마운트 정리.
+  - `usePagedFilter(pageSize)`: qInput/q 분리·page·submitSearch·resetQuery·resetPage HOF·paginate. 페이지별 술어는
+    각 페이지가 소유(넘겨받아 slice). Equipment(정렬·가변 pageSize)·Combo(고정 20) 둘 다 수용.
+  - 브라우저 3페이지 검증: 목록(페이지네이션·검색 리셋·페이지크기·초기화)·정책(검색 1/1·초기화 복원)·조합관리(토글 토스트·복원).
+    tsc·lint 클린·1233 그린·콘솔 0.
 
 **Phase D — App.tsx(1465, ~11책임) 훅 분해 (리프부터, 커밋 1개=훅 1개):**
 - [ ] `usePersistentPanel` → `useUndoRedoShortcuts`(리바인드 경고 해소) → `useFloorView` → `useSelectionCards`

@@ -12,26 +12,21 @@ import AdminShell from './AdminShell'
 import ComboGlobalForm from './ComboGlobalForm'
 import ComboOverrideRow from './ComboOverrideRow'
 import { useSubmitGuard } from './useSubmitGuard'
+import { useToast } from './useToast'
+import { usePagedFilter } from './usePagedFilter'
 
 const PAGE_SIZE = 20
 
 export default function ComboPolicyPage({ admin }: { admin: EquipmentAdminRepository }) {
   const [policy, setPolicy] = useState(() => admin.getComboPolicy())
   const [outdoor] = useState<ProductRow[]>(() => admin.listProducts().filter((r) => r.categoryCode === 'OUTDOOR'))
-  const [qInput, setQInput] = useState('') // 입력 중인 검색어
-  const [q, setQ] = useState('') // 검색 버튼·Enter로 확정된 검색어
   const [energy, setEnergy] = useState('ALL')
   const [seriesCode, setSeriesCode] = useState('ALL')
   const [status, setStatus] = useState<'ALL' | PublishStatus>('ALL')
   const [source, setSource] = useState<'ALL' | 'OVERRIDE' | 'GLOBAL'>('ALL')
-  const [page, setPage] = useState(0)
-  const [toast, setToast] = useState('')
+  const { qInput, setQInput, q, setPage, submitSearch, resetQuery, resetPage, paginate } = usePagedFilter(PAGE_SIZE)
+  const { toast, notify } = useToast(2600)
   const guard = useSubmitGuard()
-
-  const notify = (msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(''), 2600)
-  }
 
   const refresh = () => setPolicy(admin.getComboPolicy())
 
@@ -58,27 +53,15 @@ export default function ComboPolicyPage({ admin }: { admin: EquipmentAdminReposi
 
   const filterOn = q !== '' || qInput !== '' || energy !== 'ALL' || seriesCode !== 'ALL' || status !== 'ALL' || source !== 'ALL'
   const resetFilters = () => {
-    setQInput('')
-    setQ('')
+    resetQuery()
     setEnergy('ALL')
     setSeriesCode('ALL')
     setStatus('ALL')
     setSource('ALL')
-    setPage(0)
   }
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    setQ(qInput)
-    setPage(0)
-  }
-  const onFilter = <T,>(setter: (v: T) => void) => (v: T) => {
-    setter(v)
-    setPage(0)
-  }
+  const onFilter = resetPage
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const cur = Math.min(page, pageCount - 1)
-  const rows = filtered.slice(cur * PAGE_SIZE, cur * PAGE_SIZE + PAGE_SIZE)
+  const { pageCount, cur, rows } = paginate(filtered)
 
   const saveGlobal = (range: ComboRange) =>
     void guard.run(() => {
