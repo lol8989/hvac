@@ -32,12 +32,17 @@
   - 브라우저 3페이지 검증: 목록(페이지네이션·검색 리셋·페이지크기·초기화)·정책(검색 1/1·초기화 복원)·조합관리(토글 토스트·복원).
     tsc·lint 클린·1233 그린·콘솔 0.
 
-**Phase D — App.tsx(1465, ~11책임) 훅 분해 (리프부터, 커밋 1개=훅 1개):**
-- [ ] `usePersistentPanel` → `useUndoRedoShortcuts`(리바인드 경고 해소) → `useFloorView` → `useSelectionCards`
-  → `useOutputs`(downloadDrawing이 roomColors 메모 재사용) → **도메인 추출**(`splitPlacementAcrossChildren`·
-  `mergePlacements`·`reshapeRoom` — 실 형상 편집의 비즈니스 규칙이 컴포넌트에 샘) + `useRoomShapeEditing`
-  → `usePlanCommands`(빈그룹정리·selectOutdoorPlan catch 중복 제거) → `useIndoorPlacement`(move/rotate 통합)
-  → `useGenerationSteps`(guardContext 빌더 순수화) → `useUndoableWorld`(마지막, edit가 토대).
+**Phase D — App.tsx(1465→~1330, ~11책임) 훅 분해 (리프부터, 커밋 1개=훅 1개):**
+- [x] `usePersistentPanel`(`7da7ce4`) · `useUndoRedoShortcuts`(`bf11224`, 리바인드 경고 해소·경고 2건 제거) ·
+  `useFloorView`(`855af94`, 층 파생 11개+이펙트) · `useSelectionCards`(`3121cbb`, effIn/effOut·pick) ·
+  `requestApply`/`applyModel` 액터 분리(`0d01cb0`, 실내기/실외기). 각 tsc·1233 그린·브라우저 검증.
+- [~] `useOutputs` — **건너뜀**(payoff 낮음): selectionTable이 dockFloors·roomColors·가드·도크에 널리 소비돼
+  훅 인터페이스가 ~11입력으로 과대. 감사의 "downloadDrawing이 roomColors 재사용" dedup은 **틀림** —
+  화면 roomColors는 단계 게이트(combine/outdoor), 다운로드는 output 단계라 항상-켜짐 색 필요(cb713ce에서 정리됨).
+- [ ] **도메인 추출**(`splitPlacementAcrossChildren`·`mergePlacements`·`reshapeRoom` — 실 형상 편집 비즈니스
+  규칙이 컴포넌트에 샘, 감사 P0) + `useRoomShapeEditing` ← **다음 우선(주인님 '뷰+서비스 엉킴' 핵심)**
+- [ ] `usePlanCommands`(빈그룹정리·selectOutdoorPlan catch 중복 제거) → `useIndoorPlacement`(move/rotate 통합)
+  → `useGenerationSteps`(guardContext 순수화) → `useUndoableWorld`(마지막, edit가 토대 + 결정 #2 통합).
 
 **Phase E — Viewer.tsx(1076, 6모드+3서브시스템) 훅 분해:**
 - [ ] 순수 기하 이동(`unitsInRect`·`resizeRectFromCorner`·`zonesBounds`→geometry.ts) → `useDraftCommit<T>`(4곳 복붙)
