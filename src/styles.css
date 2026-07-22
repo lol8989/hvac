@@ -135,6 +135,13 @@ button{font-family:inherit;cursor:pointer;}
 /* 스텝 가드 팝업 — 사유(굵게)와 해결법(회색)을 나눠 보여준다. */
 .guard-reason{margin:0 0 10px;font-weight:600;color:#111;}
 .guard-remedy{margin:0;color:#555;font-size:13px;}
+/* 확인 항목이 여러 건이면 목록으로(첫 개만 보여주지 않는다). */
+.guard-list{list-style:none;margin:0;padding:0;max-height:52vh;overflow:auto;}
+.guard-item{padding:12px 0;border-top:1px solid var(--line);}
+.guard-item:first-child{border-top:none;padding-top:0;}
+.guard-item .guard-reason{margin:0 0 6px;}
+.guard-item-title{margin:0 0 4px;font-weight:700;color:#111;font-size:13.5px;}
+.guard-item-title::before{content:"⚠ ";color:#8a6d00;}
 .m-h{background:var(--dark);color:#fff;padding:13px 18px;display:flex;justify-content:space-between;align-items:center;}
 .m-h .mt{font-weight:700;font-size:15px;}
 .m-h .x{border:none;background:transparent;color:#fff;font-size:18px;}

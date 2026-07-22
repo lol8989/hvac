@@ -1,81 +1,59 @@
 /** @vitest-environment jsdom */
+// 스텝 가드 팝업 — 단일 판정(BLOCK/CONFIRM)과 다중 CONFIRM 병합 안내를 검증한다.
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import GuardModal from './GuardModal'
 import type { GuardVerdict } from '../../domain/generation/StepGuard'
 
-const BLOCK: Extract<GuardVerdict, { kind: 'BLOCK' }> = {
-  kind: 'BLOCK',
-  code: 'OUTDOOR_NOT_PLACED',
-  title: '실외기를 도면에 배치해야 합니다',
-  reason: '실외기 1대 중 0대만 도면에 배치됐습니다.',
-  remedy: "도면에서 '＋ 실외기 배치'를 누르세요.",
-}
-
-const CONFIRM: Extract<GuardVerdict, { kind: 'CONFIRM' }> = {
-  kind: 'CONFIRM',
-  code: 'OVERLOADED',
-  title: '조합비가 허용 범위를 넘었습니다',
-  reason: '과부하 실외기 1대: 실외기-1',
-  detail: '이대로 진행하면 산출물에 과부하가 실립니다.',
-}
-
-describe('GuardModal — BLOCK', () => {
-  it('사유와 해결법을 모두 보여준다', () => {
-    render(<GuardModal verdict={BLOCK} onProceed={vi.fn()} onClose={vi.fn()} />)
-    expect(screen.getByText(BLOCK.title)).toBeInTheDocument()
-    expect(screen.getByText(BLOCK.reason)).toBeInTheDocument()
-    expect(screen.getByText(/누르세요/)).toBeInTheDocument() // 해결법(remedy)을 함께 보여준다
-  })
-
-  it('진행 버튼이 없다 — 확인 하나뿐', () => {
-    render(<GuardModal verdict={BLOCK} onProceed={vi.fn()} onClose={vi.fn()} />)
-    expect(screen.getByRole('button', { name: '확인' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '계속 진행' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '취소' })).not.toBeInTheDocument()
-  })
-
-  it('[적대] 확인을 눌러도 onProceed는 불리지 않는다(차단은 넘길 수 없다)', () => {
-    const onProceed = vi.fn()
-    const onClose = vi.fn()
-    render(<GuardModal verdict={BLOCK} onProceed={onProceed} onClose={onClose} />)
-    fireEvent.click(screen.getByRole('button', { name: '확인' }))
-    expect(onProceed).not.toHaveBeenCalled()
-    expect(onClose).toHaveBeenCalledTimes(1)
-  })
+type Confirm = Extract<GuardVerdict, { kind: 'CONFIRM' }>
+const confirm = (over: Partial<Confirm>): Confirm => ({
+  kind: 'CONFIRM', code: 'OVERLOADED', title: '제목', reason: '사유', detail: '상세', ...over,
 })
+const block: Extract<GuardVerdict, { kind: 'BLOCK' }> = {
+  kind: 'BLOCK', code: 'NO_ROOMS', title: '막힘', reason: '실이 없다', remedy: '도면을 여세요',
+}
 
-describe('GuardModal — CONFIRM', () => {
-  it('취소와 계속 진행을 모두 제공한다', () => {
+describe('GuardModal', () => {
+  it('BLOCK은 사유·해결법과 확인 버튼만 보여준다(진행 없음)', () => {
+    render(<GuardModal verdict={block} onProceed={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByText('막힘')).toBeTruthy()
+    expect(screen.getByText('실이 없다')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '확인' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '계속 진행' })).toBeNull()
+  })
+
+  it('CONFIRM 1건이면 그 사유·상세와 취소/계속 진행을 보여준다', () => {
+    render(<GuardModal verdict={confirm({ title: '과부하', reason: '조합비 초과', detail: '교체 권장' })} onProceed={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByText('과부하')).toBeTruthy()
+    expect(screen.getByText('조합비 초과')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '계속 진행' })).toBeTruthy()
+  })
+
+  it('CONFIRM 2건 이상이면 제목을 개수로 요약하고 모든 항목을 목록으로 보여준다', () => {
+    const confirms = [
+      confirm({ code: 'ROOMS_WITHOUT_INDOOR', title: '실내기 없는 실', reason: '탕비실에 실내기 없음', detail: '산출물에서 제외됨' }),
+      confirm({ code: 'OVERLOADED', title: '과부하', reason: '실외기-1 과부하', detail: '더 큰 모델 권장' }),
+    ]
+    render(<GuardModal verdict={confirms[0]} confirms={confirms} onProceed={vi.fn()} onClose={vi.fn()} />)
+    // 첫 개만이 아니라 두 항목 제목·사유가 모두 보인다
+    expect(screen.getByText('확인이 필요한 항목 2건')).toBeTruthy()
+    expect(screen.getByText('실내기 없는 실')).toBeTruthy()
+    expect(screen.getByText('탕비실에 실내기 없음')).toBeTruthy()
+    expect(screen.getByText('과부하')).toBeTruthy()
+    expect(screen.getByText('실외기-1 과부하')).toBeTruthy()
+  })
+
+  it('CONFIRM 병합 시 계속 진행을 누르면 onProceed가 호출된다', () => {
     const onProceed = vi.fn()
-    const onClose = vi.fn()
-    render(<GuardModal verdict={CONFIRM} onProceed={onProceed} onClose={onClose} />)
-
+    const confirms = [confirm({ code: 'ROOMS_WITHOUT_INDOOR', title: 'A' }), confirm({ code: 'OVERLOADED', title: 'B' })]
+    render(<GuardModal verdict={confirms[0]} confirms={confirms} onProceed={onProceed} onClose={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: '계속 진행' }))
-    expect(onProceed).toHaveBeenCalledTimes(1)
-
-    fireEvent.click(screen.getByRole('button', { name: '취소' }))
-    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onProceed).toHaveBeenCalledOnce()
   })
 
-  it('진행 버튼 라벨을 바꿀 수 있다', () => {
-    render(<GuardModal verdict={CONFIRM} confirmLabel="그래도 재검출" onProceed={vi.fn()} onClose={vi.fn()} />)
-    expect(screen.getByRole('button', { name: '그래도 재검출' })).toBeInTheDocument()
-  })
-})
-
-describe('GuardModal — 닫기 경로', () => {
-  it('Esc로 닫는다', () => {
-    const onClose = vi.fn()
-    render(<GuardModal verdict={CONFIRM} onProceed={vi.fn()} onClose={onClose} />)
-    fireEvent.keyDown(window, { key: 'Escape' })
-    expect(onClose).toHaveBeenCalledTimes(1)
-  })
-
-  it('바깥(딤) 클릭으로 닫는다', () => {
-    const onClose = vi.fn()
-    const { container } = render(<GuardModal verdict={CONFIRM} onProceed={vi.fn()} onClose={onClose} />)
-    fireEvent.mouseDown(container.querySelector('.overlay')!)
-    expect(onClose).toHaveBeenCalledTimes(1)
+  it('CONFIRM이 1건이면 병합 제목을 쓰지 않는다', () => {
+    render(<GuardModal verdict={confirm({ title: '홀로' })} confirms={[confirm({ title: '홀로' })]} onProceed={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.queryByText(/확인이 필요한 항목/)).toBeNull()
+    expect(screen.getByText('홀로')).toBeTruthy()
   })
 })

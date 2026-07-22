@@ -13,6 +13,7 @@ import ModelPanel from './components/ModelPanel'
 import MappingDock from './components/generation/MappingDock'
 import { buildDockView } from './presentation/generation/dockView'
 import { roomColorMap } from './presentation/generation/groupColors'
+import { planConfirmFlow } from './presentation/generation/confirmEditFlow'
 import ConfirmModal from './components/ConfirmModal'
 import ProjectSettings from './components/steps/ProjectSettings'
 import CeilingHeightsPanel from './components/steps/CeilingHeights'
@@ -259,7 +260,7 @@ export default function App({
   }, [panelW])
   // 실외기 심볼 좌표(그룹 key → 좌표). 도면에 놓였는지 여부가 곧 '배치 완료' 여부다.
   // 스텝 가드 팝업(차단/확인). null = 닫힘.
-  const [guard, setGuard] = useState<{ verdict: Extract<GuardVerdict, { kind: 'BLOCK' } | { kind: 'CONFIRM' }>; proceed: () => void; confirmLabel?: string } | null>(null)
+  const [guard, setGuard] = useState<{ verdict: Extract<GuardVerdict, { kind: 'BLOCK' } | { kind: 'CONFIRM' }>; proceed: () => void; confirmLabel?: string; confirms?: Extract<GuardVerdict, { kind: 'CONFIRM' }>[] } | null>(null)
   const [mapOpen, setMapOpen] = useState(false)
   const [dockH, setDockH] = useState(300) // 조합 매핑 도크 높이(드래그로 조절)
   const [layers, setLayers] = useState<LayerVisibility>(ALL_LAYERS_ON) // 레이어별 표시 토글 → 뷰어
@@ -1119,10 +1120,11 @@ export default function App({
     const ctx = guardContext()
     const verdicts = (['place', 'combine', 'outdoor'] as StepId[]).map((s) => guardAdvance(s, ctx))
     const proceed = () => { setEditReturn(step); setStep('output') }
-    const firstBlock = verdicts.find((v) => v.kind === 'BLOCK')
-    if (firstBlock) { runGuarded(firstBlock, proceed); return } // BLOCK: 모달만 뜨고 진행하지 않는다
-    const firstConfirm = verdicts.find((v) => v.kind === 'CONFIRM')
-    runGuarded(firstConfirm ?? { kind: 'ALLOW' }, proceed) // CONFIRM이면 확인 후, 없으면 바로 진행
+    const flow = planConfirmFlow(verdicts)
+    if (flow.kind === 'block') { runGuarded(flow.verdict, proceed); return } // BLOCK: 모달만 뜨고 진행하지 않는다
+    if (flow.kind === 'proceed') { proceed(); return }
+    // CONFIRM: 1건이면 그대로, 2건 이상이면 한 모달에 모아 안내한다(첫 개만 보여주고 넘어가지 않는다).
+    setGuard({ verdict: flow.confirms[0], proceed, confirms: flow.confirms })
   }
   const resumeEdit = () => setStep(editReturn) // 편집 재개 — 잠금 해제하고 확정 직전 도구로 복귀
   // 인디케이터/도구 선택: 편집 도구는 자유 전환, '산출물'은 편집 확정 게이트로.
@@ -1435,6 +1437,7 @@ export default function App({
         <GuardModal
           verdict={guard.verdict}
           confirmLabel={guard.confirmLabel}
+          confirms={guard.confirms}
           onProceed={() => { const p = guard.proceed; setGuard(null); p() }}
           onClose={() => setGuard(null)}
         />

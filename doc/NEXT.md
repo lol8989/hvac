@@ -38,7 +38,15 @@
     #eef3fb·#e8f5f3, 배지 #2f5fae·#1f8a80 — **도크 탭·화면·산출 SVG 3곳 일치**. 콘솔 에러 0.
 - [x] **죽은 코드 정리** (2026-07-22) — `Stepper.tsx` 삭제(ModeBar 대체, import 0), styles.css `.stepper`류 CSS 11줄 제거,
       `selection.css`의 고아 `.selgrid-title .hint` 제거(힌트 삭제로 미사용). tsc·1211 그린. `poolhint`·`stepIndex`는 사용 중이라 존치.
-- [ ] (검토 필요) 편집 확정 시 CONFIRM이 여러 개면 첫 개만 보여주고 진행 — 필요하면 합쳐서 안내.
+- [x] **편집 확정 시 CONFIRM 여러 개면 합쳐서 안내** (2026-07-22) — 첫 개만 보여주고 넘어가던 것을 전부 목록으로.
+  - `presentation/generation/confirmEditFlow.ts`(신규·순수) — `planConfirmFlow(verdicts)`가 block 우선 / 확인 0건=바로진행 /
+    1건 이상=confirm 목록으로 결정. 정책을 App 핸들러에서 분리(§5.6 SRP) + 단위테스트 6.
+  - `GuardModal`에 `confirms?` prop — 2건 이상이면 제목을 "확인이 필요한 항목 N건"으로 요약하고 각 항목(제목·사유·상세)을
+    목록으로. 1건이면 기존 단일 렌더 그대로. `.guard-list`/`.guard-item` CSS 추가. 컴포넌트 테스트 5(testing-library, 실제 DOM).
+  - `confirmEdit`가 `planConfirmFlow` 사용. 라이브 검증: place=실내기 없는 실(탕비실) 단일 CONFIRM이 파이프라인
+    (guardAdvance→planConfirmFlow→GuardModal) 정상 통과 + 단일 건은 병합 제목 안 씀(회귀 없음). 병합(2건+) 렌더는
+    컴포넌트 테스트로 커버(2-confirm 상태는 과부하 그룹이 필요한데 HTML5 드래그/비제어 입력 커밋을 synthetic 이벤트로
+    못 만들어 라이브 재현은 비실용 → 실제 GuardModal DOM을 렌더하는 컴포넌트 테스트로 대체). tsc·콘솔 에러 0.
 
 ## ▶ 2026-07-21 — 냉방전용/냉난방 선택 노출 (아이디어, 기록만)
 
