@@ -10,6 +10,7 @@ import type { GroupColor } from '../presentation/generation/groupColors'
 import { useDraftCommit } from './viewer/useDraftCommit'
 import { usePanZoom, type ViewBox } from './viewer/usePanZoom'
 import { useCassetteSelectionSync } from './viewer/useCassetteSelectionSync'
+import { useSliceMode } from './viewer/useSliceMode'
 
 export type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
 
@@ -198,9 +199,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     [outdoorSymbols, oduDraft.value],
   )
   const [selOdu, setSelOdu] = useState<string | null>(null)
-  // 자르기(V) 모드: 커서를 지나는 무한 직선. R을 누르면 15°씩 돈다.
-  const [sliceAngle, setSliceAngle] = useState(90) // 기본은 세로선
-  const [sliceCursor, setSliceCursor] = useState<Pt | null>(null)
   // 병합(M) 모드: 첫 클릭으로 실 하나를 잡고, 두 번째 클릭으로 붙어 있는 실과 합친다.
   const [mergeFirst, setMergeFirst] = useState<string | null>(null)
   const [hoverZone, setHoverZone] = useState<string | null>(null)
@@ -258,6 +256,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layers } })
   const layerVisible = (name: LayerName, v: LayerVisibility): boolean => v[name]
 
+  // 실 자르기(V) 모드 — 각도·커서·프리뷰·진입 게이트·커밋을 훅으로. 클릭/이동/R은 공유 핸들러가 호출한다.
+  const slice = useSliceMode({
+    mode, setMode, zones, canSliceRooms, snapOn, gridStep, zoneLayerVisible: layers.zone, view,
+    onSliceUnavailable, onRoomSlice,
+  })
+  const { isSlice, sliceAngle, sliceCursor, slicePreview } = slice
 
   // '실외기 선정' 오버레이 버튼 위치: 선택된 실들의 bbox 상단 중앙을 화면 px로 변환한다.
   // view(팬·줌)·크기·선택이 바뀔 때마다 다시 계산해 선택 위를 따라다닌다.
@@ -401,12 +405,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
   }, [toSvg, onSelectionChange])
 
-  // 자르기 모드 진입(V). 허용되지 않는 단계면 모드로 들어가지 않고 App이 이유를 알린다.
-  const enterSlice = useCallback(() => {
-    if (!canSliceRooms) { onSliceUnavailable?.(); return }
-    setMode('slice')
-  }, [canSliceRooms, onSliceUnavailable])
-
   // 병합 모드 진입(M).
   const enterMerge = useCallback(() => {
     if (!canMergeRooms) { onMergeUnavailable?.(); return }
@@ -414,15 +412,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     setMode('merge')
   }, [canMergeRooms, onMergeUnavailable])
 
-  // 자르기가 더 이상 허용되지 않는 단계로 넘어가면 모드에서 빠져나온다.
-  // (게이트가 '진입 시점'에만 있으면, 단계를 넘긴 뒤에도 클릭이 실을 자른다 — 적대적 QA)
-  useEffect(() => {
-    if (!canSliceRooms) {
-      setMode((m) => (m === 'slice' ? 'cassette' : m))
-      setSliceCursor(null)
-    }
-  }, [canSliceRooms])
-
+  // 병합이 더 이상 허용되지 않는 단계로 넘어가면 모드에서 빠져나온다(적대적 QA). (자르기는 useSliceMode가 처리)
   useEffect(() => {
     if (!canMergeRooms) {
       setMode((m) => (m === 'merge' ? 'cassette' : m))
@@ -430,14 +420,13 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     }
   }, [canMergeRooms])
 
-  // 모드가 바뀌면 프리뷰 커서를 버린다 — 남아 있으면 '강조된 실'과 '잘리는 실'이 달라진다.
+  // 병합 모드에서 나가면 프리뷰 상태를 버린다.
   useEffect(() => {
-    if (mode !== 'slice') setSliceCursor(null)
     if (mode !== 'merge') { setMergeFirst(null); setHoverZone(null) }
   }, [mode])
   // window 키 리스너는 1회만 등록된다 → 최신 함수를 ref로 읽는다(stale closure 방지).
-  const enterSliceRef = useRef(enterSlice)
-  enterSliceRef.current = enterSlice
+  const enterSliceRef = useRef(slice.enterSlice)
+  enterSliceRef.current = slice.enterSlice
   const enterMergeRef = useRef(enterMerge)
   enterMergeRef.current = enterMerge
 
@@ -471,7 +460,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
           }
         } else if (st.current.mode === 'slice') {
           e.preventDefault()
-          setSliceAngle((a) => (a + ROT_STEP) % 180) // 직선은 180°면 제자리로 돌아온다
+          slice.rotate() // 직선은 180°면 제자리로 돌아온다
         }
       } else if (k === 'delete' || k === 'backspace') {
         // 숨긴 레이어는 지울 수 없다 — 안 보이는 실내기가 사라지면 대수·조합비가 조용히 틀어진다.
@@ -511,18 +500,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     const p = toSvg(e.clientX, e.clientY); if (!p) return
     // 자르기 모드에서는 존 레이어가 클릭을 받지 않으므로(pointerEvents none) 여기서 히트 판정한다.
     // 마퀴보다 먼저 걸러야 한다 — 안 그러면 자르기 클릭이 영역 선택으로 먹힌다.
-    if (mode === 'slice') {
-      if (!layerOn('zone')) return // 숨긴 실은 자를 수 없다(안 보이는 것을 편집하지 않는다)
-      // 격자 ON이면 절단선도 격자에 맞춘다 — 다른 편집(이동·리사이즈)과 같은 약속이다.
-      // 단, 스냅된 점이 실 밖으로 나가면 스냅을 포기한다(그 선은 실을 가르지 못한다).
-      const cx = snapOn ? Math.round(p.x / gridStep) * gridStep : p.x
-      const cy = snapOn ? Math.round(p.y / gridStep) * gridStep : p.y
-      const snapped = zoneOfPoint(cx, cy, zones)
-      const raw = zoneOfPoint(p.x, p.y, zones)
-      if (snapped) onRoomSlice?.(snapped.id, { x: cx, y: cy, angleDeg: sliceAngle })
-      else if (raw) onRoomSlice?.(raw.id, { x: p.x, y: p.y, angleDeg: sliceAngle })
-      return
-    }
+    if (mode === 'slice') { slice.commitAt(p); return }
     // 병합 모드: 첫 클릭으로 실을 잡고, 두 번째 클릭으로 '붙어 있는' 실과 합친다.
     if (mode === 'merge') {
       if (!layerOn('zone')) return
@@ -543,7 +521,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     if (mode !== 'slice' && mode !== 'merge') return
     const p = toSvg(e.clientX, e.clientY)
     if (!p) return
-    if (mode === 'slice') setSliceCursor({ x: p.x, y: p.y })
+    if (mode === 'slice') slice.trackCursor(p)
     else setHoverZone(zoneOfPoint(p.x, p.y, zones)?.id ?? null)
   }
 
@@ -651,8 +629,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const isCassette = mode === 'cassette'
   const isZone = mode === 'zone'
   const isOutdoor = mode === 'outdoor'
-  const isSlice = mode === 'slice'
-  const isMerge = mode === 'merge'
+  const isMerge = mode === 'merge' // isSlice·slicePreview는 useSliceMode에서 파생
   // 레이어 표시: 켜 둔 레이어만 그리고 편집을 받는다.
   const layerOn = (name: LayerName): boolean => layers[name]
   // '전체' 마스터 토글: 모두 켜짐/모두 꺼짐/일부만(중간)을 반영하고 한 번에 켜거나 끈다.
@@ -677,17 +654,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     // 첫 실을 고르기 전에는 '붙어 있는지'를 물을 수 없다 — 그냥 커서 아래 실을 강조한다.
     const adjacent = !first || !hover ? true : (isAdjacent?.(first.id, hover.id) ?? true)
     return { first, hover, adjacent }
-  })()
-
-  // 자르기 프리뷰: 커서를 지나는 무한 직선(현재 뷰를 가로지르는 길이로 그린다) + 잘릴 실 강조.
-  const slicePreview = (() => {
-    if (!isSlice || !sliceCursor) return null
-    const rad = (sliceAngle * Math.PI) / 180
-    const len = (view.w + view.h) * 2
-    const dx = Math.cos(rad) * len
-    const dy = Math.sin(rad) * len
-    const target = zoneOfPoint(sliceCursor.x, sliceCursor.y, zones)
-    return { x1: sliceCursor.x - dx, y1: sliceCursor.y - dy, x2: sliceCursor.x + dx, y2: sliceCursor.y + dy, target }
   })()
 
   return (
@@ -748,7 +714,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
         preserveAspectRatio="xMidYMid meet"
         onMouseDown={onBgDown}
         onMouseMove={onSvgMove}
-        onMouseLeave={() => isSlice && setSliceCursor(null)}
+        onMouseLeave={() => isSlice && slice.clearCursor()}
       >
         <g className="drawing-layer">
           <rect x="0" y="0" width={PLAN_W} height={PLAN_H} fill="#ffffff" stroke="#CFCFCF" />
@@ -916,7 +882,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
             <button className={`figitem${isZone ? ' active' : ''}`} onClick={() => { setMode('zone'); setToolMenuOpen(false) }}>
               <span className="tt"><b>존 (실)</b><span>선택 · 모서리 리사이즈</span></span><span className="kk">Z</span>
             </button>
-            <button className={`figitem${isSlice ? ' active' : ''}`} onClick={() => { enterSlice(); setToolMenuOpen(false) }}>
+            <button className={`figitem${isSlice ? ' active' : ''}`} onClick={() => { slice.enterSlice(); setToolMenuOpen(false) }}>
               <span className="tt"><b>실 자르기</b><span>클릭으로 절단 · R 15° 회전</span></span><span className="kk">V</span>
             </button>
             <button className={`figitem${isMerge ? ' active' : ''}`} onClick={() => { enterMerge(); setToolMenuOpen(false) }}>
