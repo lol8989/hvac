@@ -5,10 +5,10 @@
 ## ⏭ 새 세션 이어가기 (2026-07-22 푸시 시점) — **여기부터 시작**
 
 > **상태:** `main` 브랜치. 작업트리 클린. 전체 테스트 **1257 그린**, tsc 클린.
-> App.tsx **1465 → 997줄** (Phase D 완료). Viewer.tsx **1076 → 929줄** (Phase E 진행 중, 5단계 완료).
+> App.tsx **1465 → 997줄** (Phase D 완료). Viewer.tsx **1076 → 895줄** (Phase E 진행 중, 6단계 완료).
 > **브라우저 화면 테스트는 주인님 별도 지시 전까지 생략**(2026-07-22 지시) — tsc + 테스트로 검증한다.
 >
-> **다음 할 일 = Phase E 계속**(`useMergeMode`, 테스트 보강 먼저) (아래 백로그 참조). 이어지는 순서:
+> **다음 할 일 = Phase E 계속**(드래그 멀티플렉서 분해) (아래 백로그 참조). 이어지는 순서:
 > 1. [x] **#8 `usePlanCommands`** (`fb37d9e`) — `runOutdoorSelection`(자동선정 이펙트)·`selectOutdoorForSelected`·
 >    `moveRoom`·`removeGroup`·`replaceModel`+`sync`. 중복 제거: 빈그룹정리→`cleanEmptyGroups()` /
 >    `selectOutdoorPlan`+catch→`trySelectOutdoor` / floor-lookup→`floorOf`. App 1326→1227줄.
@@ -92,9 +92,10 @@
   Viewer 997→963줄. tsc·1257 그린. Viewer.test 18이 순방향·역방향·드래그 동기 커버.
 - [x] `useSliceMode`(`bffe83c`) — 실 자르기(V): 각도·커서·프리뷰·게이트·가드·커밋. 가드/정리는 렌더 감지 패턴.
   Viewer 963→929줄. tsc·1257 그린·린트 0. Viewer.test 8이 동작 커버.
-- [ ] `useMergeMode`(병합 M — **테스트 없음, 추출 전 회귀 테스트 1~2개 보강**: 첫 클릭→mergeFirst, 두번째→onRoomsMerge,
-  같은 실 재클릭→해제) → 드래그 멀티플렉서(~330-450) 분해(팬 branch·panRef 포함) → `useViewerShortcuts`(정책/메커니즘 분리)
-  → 37 prop을 indoor/outdoor/slice/merge/viewport 클러스터로.
+- [x] `useMergeMode`(`b150855`, 테스트 `84d4685`) — 실 병합(M): mergeFirst·hoverZone·프리뷰·게이트·가드·커밋·호버.
+  추출 전 병합 회귀 테스트 4 보강 후 추출. Viewer 929→895줄. tsc·1261 그린·린트 0.
+- [ ] 드래그 멀티플렉서(onMove/onUp window 리스너, ~330-420) 분해(팬 branch·panRef·dragRef·rotRef·cornerRef·marqRef·oduRef)
+  → `useViewerShortcuts`(키보드 핸들러, 정책/메커니즘 분리) → 37 prop을 indoor/outdoor/slice/merge/viewport 클러스터로.
 
 **§5.7 결정 2건 (처리 완료 2026-07-22):**
 - [x] **자동 선정 → undo 히스토리 제외** (`443c5b0`) — `runOutdoorSelection`의 `edit(commit)` → `undoable.replace`.
