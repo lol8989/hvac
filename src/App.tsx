@@ -15,6 +15,7 @@ import { buildDockView } from './presentation/generation/dockView'
 import { roomColorMap } from './presentation/generation/groupColors'
 import { planConfirmFlow } from './presentation/generation/confirmEditFlow'
 import { usePersistentPanel } from './presentation/generation/usePersistentPanel'
+import { useUndoRedoShortcuts } from './presentation/generation/useUndoRedoShortcuts'
 import ConfirmModal from './components/ConfirmModal'
 import ProjectSettings from './components/steps/ProjectSettings'
 import CeilingHeightsPanel from './components/steps/CeilingHeights'
@@ -1179,20 +1180,7 @@ export default function App({
     })
   }, [domainRooms])
 
-  useEffect(() => {
-    const typing = (t: EventTarget | null) => {
-      const el = t as HTMLElement | null
-      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || typing(e.target)) return
-      const k = e.key.toLowerCase()
-      if (k === 'z' && !e.shiftKey) { e.preventDefault(); doUndo() }
-      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); doRedo() }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
+  useUndoRedoShortcuts(doUndo, doRedo)
 
   // 작업 중 새로고침·창 닫기 이탈 방지.
   useEffect(() => {
