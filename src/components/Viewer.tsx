@@ -4,7 +4,7 @@ import type { Room } from '../data'
 import ACUnit from './viewer/ACUnit'
 import ODUnit from './viewer/ODUnit'
 import ZoneRect from './viewer/ZoneRect'
-import { GRID, snap, norm, zoneBounds, zoneAreaM2, zonesBounds } from './viewer/geometry'
+import { GRID, snap, zoneBounds, zoneAreaM2, zonesBounds } from './viewer/geometry'
 import type { UnitSym, ZoneBox, Corner, Pt } from './viewer/geometry'
 import type { GroupColor } from '../presentation/generation/groupColors'
 import { useDraftCommit } from './viewer/useDraftCommit'
@@ -13,6 +13,7 @@ import { useCassetteSelectionSync } from './viewer/useCassetteSelectionSync'
 import { useSliceMode } from './viewer/useSliceMode'
 import { useMergeMode } from './viewer/useMergeMode'
 import { useViewerDrag } from './viewer/useViewerDrag'
+import { useViewerShortcuts } from './viewer/useViewerShortcuts'
 
 export type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
 
@@ -216,7 +217,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   const { view, setView, svgW, zoomPct, toSvg, zoomBy, resetView } = usePanZoom({ svgRef, planW: PLAN_W, planH: PLAN_H, fitBounds })
   // 선택된 실들 위에 뜨는 '실외기 선정' 오버레이 버튼의 화면 위치(px, .viewer 기준). 없으면 미표시.
   const [selBtnPos, setSelBtnPos] = useState<{ x: number; y: number } | null>(null)
-  const spaceRef = useRef(false)
 
   // window 리스너(1회 등록)에서 읽는 콜백. 렌더마다 갱신되는 prop을 stale closure 없이 쓴다.
   // draft 값들은 useDraftCommit이 ref로 노출한다(unitDraft.ref 등).
@@ -247,7 +247,6 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   // layers도 싣는다 — 숨긴 레이어의 객체를 마퀴로 잡거나 Del로 지울 수 없어야 한다(적대적 QA).
   const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layers })
   useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layers } })
-  const layerVisible = (name: LayerName, v: LayerVisibility): boolean => v[name]
 
   // 실 자르기(V) 모드 — 각도·커서·프리뷰·진입 게이트·커밋을 훅으로. 클릭/이동/R은 공유 핸들러가 호출한다.
   const slice = useSliceMode({
@@ -291,70 +290,11 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     onSelectionChange, unitDraft, oduDraft, zoneDraft, cbRef,
   })
 
-  // window 키 리스너는 1회만 등록된다 → 최신 함수를 ref로 읽는다(stale closure 방지).
-  const enterSliceRef = useRef(slice.enterSlice)
-  enterSliceRef.current = slice.enterSlice
-  const enterMergeRef = useRef(merge.enterMerge)
-  enterMergeRef.current = merge.enterMerge
-
-  // 단축키.
-  useEffect(() => {
-    const typing = (t: EventTarget | null) => {
-      const el = t as HTMLElement | null
-      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (typing(e.target)) return
-      if (e.code === 'Space') { e.preventDefault(); if (!spaceRef.current) { spaceRef.current = true; setSpaceDown(true) } return }
-      const k = e.key.toLowerCase()
-      if (k === 'c') setMode('cassette')
-      else if (k === 'z') setMode('zone')
-      else if (k === 'o') setMode('outdoor')
-      else if (k === 'h') setMode('pan')
-      else if (k === 'v') enterSliceRef.current()
-      else if (k === 'm') enterMergeRef.current()
-      else if (k === '0') resetView()
-      else if (k === 'r') {
-        // R은 모드마다 다른 일을 한다. 에어컨: 선택 실내기 90° 회전 / 자르기: 라인 15° 회전.
-        if (st.current.mode === 'cassette') {
-          e.preventDefault()
-          const sel = st.current.selUnits
-          if (sel.size) {
-            const rots = st.current.symbols
-              .filter((s) => sel.has(s.id))
-              .map((s) => ({ id: s.id, rot: norm((Math.floor(s.rot / 90) + 1) * 90) }))
-            cbRef.current.onUnitsRotate?.(rots)
-          }
-        } else if (st.current.mode === 'slice') {
-          e.preventDefault()
-          slice.rotate() // 직선은 180°면 제자리로 돌아온다
-        }
-      } else if (k === 'delete' || k === 'backspace') {
-        // 숨긴 레이어는 지울 수 없다 — 안 보이는 실내기가 사라지면 대수·조합비가 조용히 틀어진다.
-        if (st.current.mode === 'cassette' && layerVisible('indoor', st.current.layers)) {
-          e.preventDefault()
-          const sel = st.current.selUnits
-          // 심볼 삭제 = 실내기 대수 감소. 선정표·조합비가 즉시 따라온다.
-          if (sel.size) { cbRef.current.onUnitsDelete?.(Array.from(sel)); setSelUnits(new Set()) }
-        } else if (st.current.mode === 'outdoor' && layerVisible('outdoor', st.current.layers)) {
-          e.preventDefault()
-          const id = st.current.selOdu
-          // 실외기 심볼 삭제 = 도면에서 뺀 것. 그룹 자체는 남는다(가드가 '미배치'로 잡는다).
-          if (id) { cbRef.current.onOutdoorsDelete?.([id]); setSelOdu(null) }
-        }
-      } else if (k === 'escape') {
-        // Esc는 '지금 하던 걸 취소한다'는 보편적 계약이다 — 자르기/병합 모드에서 빠져나온다.
-        // (안 그러면 사용자가 취소했다고 믿은 채 클릭해 실을 자른다 — 적대적 QA)
-        // 모드가 바뀌면 useMergeMode가 mergeFirst/hoverZone을 정리한다(렌더 감지).
-        setMode((m) => (m === 'slice' || m === 'merge' ? 'cassette' : m))
-        setSelUnits(new Set()); setSelOdu(null); onSelectionChange([]); setToolMenuOpen(false); onEscape?.()
-      }
-    }
-    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') { spaceRef.current = false; setSpaceDown(false) } }
-    window.addEventListener('keydown', onKey)
-    window.addEventListener('keyup', onKeyUp)
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp) }
-  }, [onEscape, onSelectionChange, resetView])
+  // 키보드 단축키(모드전환·회전·삭제·취소·화면맞춤) — window 리스너 1개. 정책은 여기, 메커니즘은 콜백.
+  useViewerShortcuts({
+    st, cbRef, setMode, setSpaceDown, setSelUnits, setSelOdu, setToolMenuOpen, resetView, onSelectionChange, onEscape,
+    enterSlice: slice.enterSlice, enterMerge: merge.enterMerge, rotateSlice: slice.rotate,
+  })
 
   const onBgDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (panActive) { drag.startPan(e.clientX, e.clientY); return }
