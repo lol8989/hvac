@@ -16,6 +16,15 @@ const dropPayload = (id: string, from: string) => ({
   },
 })
 
+// 심볼을 도면 좌표 target으로 끌어다 놓는다(jsdom의 화면↔SVG 변환은 항등 스텁).
+const dragUnitTo = (container: HTMLElement, unitId: string, target: { x: number; y: number }) => {
+  const el = container.querySelector(`[data-unit-id="${unitId}"]`)!
+  const [ox, oy] = /translate\(([-\d.]+), ([-\d.]+)\)/.exec(el.getAttribute('transform')!)!.slice(1).map(Number)
+  fireEvent.mouseDown(el.querySelector('g')!, { clientX: ox, clientY: oy })
+  fireEvent.mouseMove(window, { clientX: target.x, clientY: target.y })
+  fireEvent.mouseUp(window)
+}
+
 beforeEach(() => {
   FakeBroadcastChannel.reset()
   vi.stubGlobal('BroadcastChannel', FakeBroadcastChannel)
@@ -94,6 +103,52 @@ describe('App — 편집 모드 · 편집 확정 가드', () => {
 
     expect(screen.getByRole('alertdialog', { name: '실외기를 도면에 배치해야 합니다' })).toBeInTheDocument()
     expect(screen.getByText(/1대 중 0대/)).toBeInTheDocument()
+  })
+
+  // 위치가 소속을 정한다(주인님 결정 2026-07-23, 안 a): 심볼을 다른 실 안에 놓으면 대수가 옮겨간다.
+  it('실내기 심볼을 다른 실 안으로 끌어다 놓으면 그 실의 대수가 된다', () => {
+    const { container } = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
+
+    const count = (roomId: string) => container.querySelectorAll(`[data-unit-id^="${roomId}#"]`).length
+    const before = { a: count('AC_001'), b: count('AC_002') }
+    expect(before.a).toBeGreaterThan(0)
+
+    // 침실1(AC_002 = rect(296,24,158,135)) 중앙으로 옮긴다.
+    dragUnitTo(container, 'AC_001#1', { x: 375, y: 91 })
+
+    expect(count('AC_001')).toBe(before.a - 1) // 원래 실에서 빠지고
+    expect(count('AC_002')).toBe(before.b + 1) // 놓인 실로 들어간다
+  })
+
+  // 실 간 이동은 사용자 편집 1회다 — Ctrl+Z 한 번으로 두 실이 함께 되돌아와야 한다(§5.7 원자성).
+  it('실 간 이동은 Ctrl+Z 한 번으로 두 실이 함께 되돌아온다', () => {
+    const { container } = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
+    const count = (roomId: string) => container.querySelectorAll(`[data-unit-id^="${roomId}#"]`).length
+    const before = { a: count('AC_001'), b: count('AC_002') }
+
+    dragUnitTo(container, 'AC_001#1', { x: 375, y: 91 }) // 거실 → 침실1
+    expect(count('AC_001')).toBe(before.a - 1)
+
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true })
+    expect(count('AC_001')).toBe(before.a)
+    expect(count('AC_002')).toBe(before.b)
+  })
+
+  // 마지막 한 대까지 옮기면 그 실은 실내기가 없는 실이 된다 — 터지지 않고 그 상태가 그대로 보여야 한다.
+  it('마지막 한 대까지 옮기면 원래 실에 심볼이 남지 않는다', () => {
+    const { container } = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
+    const count = (roomId: string) => container.querySelectorAll(`[data-unit-id^="${roomId}#"]`).length
+    const moved = count('AC_006') // 탕비실
+    expect(moved).toBeGreaterThan(0)
+
+    // 탕비실(622,159,74,187) → 로비(283,159,339,187) 중앙으로 한 대씩. 옮길 때마다 id가 앞으로 밀린다.
+    for (let i = 0; i < moved; i++) dragUnitTo(container, 'AC_006#1', { x: 452, y: 252 })
+
+    expect(count('AC_006')).toBe(0)
+    expect(container.querySelector('.plansvg')!.textContent).toContain('탕비실') // 실 자체는 남는다
   })
 
   // 심볼 1개 = 실내기 1대 = 선정표 대수 1인데, 심볼을 실 밖으로 끌어내도 소속은 안 바뀐다.

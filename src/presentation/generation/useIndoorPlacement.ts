@@ -17,6 +17,8 @@ import { layoutPositions, type UnitPosition } from '../../domain/generation/layo
 import { Polygon } from '../../domain/shared/Polygon'
 import { applyAiPlacement, aiSelectionFor } from '../../domain/generation/recalc'
 import { findMisplacedUnits, describeMisplaced } from '../../domain/generation/misplacedUnits'
+import { planUnitTransfers } from '../../domain/generation/unitTransfer'
+import type { TransferPlan } from '../../domain/generation/unitTransfer'
 import { DomainError } from '../../domain/generation/errors'
 import { indoorUnitsFor } from './planAdapter'
 import type { UnitSym } from '../../components/viewer/geometry'
@@ -60,6 +62,16 @@ export function useIndoorPlacement(input: IndoorPlacementInput): IndoorPlacement
   const worldPolyOf = (roomId: string): Polygon | null => {
     const pts = worldRooms[roomId]?.points
     return pts && pts.length >= 3 ? Polygon.of(pts) : null
+  }
+
+  // 실 형상 스냅샷(도면 좌표) — 심볼이 어느 실 안에 놓였는지 판정하는 기준.
+  const shapesOf = (ids: readonly string[]): Record<string, Polygon> => {
+    const out: Record<string, Polygon> = {}
+    for (const id of ids) {
+      const poly = worldPolyOf(id)
+      if (poly) out[id] = poly
+    }
+    return out
   }
 
   // 실 안에 N대를 놓을 도면 좌표. 도메인(Placement)은 "대수만큼 좌표가 있어야 한다"만 알고,
@@ -113,11 +125,7 @@ export function useIndoorPlacement(input: IndoorPlacementInput): IndoorPlacement
   // 심볼이 자기 실을 벗어났는가(판정은 도메인). 좌표는 도면(월드) 좌표계라 worldRooms 형상과 같은 계다.
   // 형상을 모르는 실은 판정에서 빠진다 — 자르기·재시딩 중 잠깐 어긋난 것을 위반으로 만들지 않는다.
   const misplacedUnits = useMemo(() => {
-    const shapes: Record<string, Polygon> = {}
-    for (const id of Object.keys(placements)) {
-      const poly = worldPolyOf(id)
-      if (poly) shapes[id] = poly
-    }
+    const shapes = shapesOf(Object.keys(placements))
     const units = Object.entries(placements).flatMap(([roomId, p]) =>
       p.positions.map((pos, i) => ({ roomId, index: i, x: pos.x, y: pos.y })),
     )
@@ -148,9 +156,65 @@ export function useIndoorPlacement(input: IndoorPlacementInput): IndoorPlacement
       return next
     })
 
-  // 도면에서 심볼을 옮기면/돌리면 그 실내기의 좌표·회전이 바뀐다(대수·모델은 그대로).
-  const moveUnits = (moves: { id: string; x: number; y: number }[]) =>
-    mutateUnits('실내기 이동', moves, (p, i, m) => p.moveUnit(i, m.x, m.y))
+  // 이동 계획(제자리 + 실 간 이동)을 **한 커밋으로** 적용한다.
+  // 사용자 편집 1회 = 커밋 1회 = Ctrl+Z 1회(§5.7) — 실을 옮기는 이동이 섞여도 쪼개지 않는다.
+  const applyTransferPlan = (prev: PlacementMap, plan: TransferPlan): PlacementMap => {
+    const next = { ...prev }
+    // 1) 제자리 이동은 좌표만. 길이가 안 변하므로 아래 인덱스 계산에 영향이 없다.
+    for (const s of plan.stays) {
+      if (next[s.roomId]) next[s.roomId] = next[s.roomId].moveUnit(s.index, s.x, s.y)
+    }
+    // 2) 옮겨갈 대수의 회전을 먼저 읽어 둔다(제거하면 인덱스가 사라진다).
+    const carried = plan.transfers.map((t) => ({ t, rot: prev[t.from]?.positions[t.index]?.rot ?? 0 }))
+    // 3) 원래 실에서 뺀다. 같은 실에서 여러 대가 빠지면 인덱스가 밀리므로 큰 것부터.
+    const byFrom = new Map<string, number[]>()
+    for (const { t } of carried) byFrom.set(t.from, [...(byFrom.get(t.from) ?? []), t.index])
+    for (const [roomId, indexes] of byFrom) {
+      let p: Placement | null = next[roomId] ?? null
+      for (const i of [...indexes].sort((a, b) => b - a)) {
+        if (!p) break
+        p = p.removeUnit(i)
+      }
+      if (p) next[roomId] = p
+      else delete next[roomId] // 마지막 한 대가 나갔다 → 그 실에는 실내기가 없다
+    }
+    // 4) 놓인 실에 더한다. 그 실에 배치가 없으면 그 실 기준으로 새로 선정한다(모델은 대상 실의 것).
+    for (const { t, rot } of carried) {
+      const pos = { x: t.x, y: t.y, rot }
+      const existing = next[t.to]
+      if (existing) { next[t.to] = existing.addUnit(pos); continue }
+      const room = domainRooms[t.to]
+      if (!room) continue // 형상은 있는데 도메인 실이 없다 — 만들지 않는다(방어)
+      next[t.to] = Placement.ai(t.to, { ...aiSelectionFor(room, indoorModels), quantity: 1 }, [pos])
+    }
+    return next
+  }
+
+  // 도면에서 심볼을 옮기면 그 실내기의 좌표가 바뀐다. **다른 실 안에 놓으면 그 실로 옮겨간다**
+  // (위치가 소속을 정한다 — 주인님 결정 2026-07-23). 원래 실 대수 −1, 놓인 실 대수 +1.
+  const moveUnits = (moves: { id: string; x: number; y: number }[]) => {
+    const parsed = moves.flatMap((m) => {
+      const ref = parseUnitId(m.id)
+      return ref ? [{ roomId: ref.roomId, index: ref.index, x: m.x, y: m.y }] : []
+    })
+    const plan = planUnitTransfers(parsed, shapesOf(Object.keys(placements)))
+    if (plan.transfers.length === 0) {
+      mutateUnits('실내기 이동', moves, (p, i, m) => p.moveUnit(i, m.x, m.y))
+      return
+    }
+    try {
+      editPlacements('실내기 실 이동', (prev) => applyTransferPlan(prev, plan))
+      const names = (id: string): string => domainRooms[id]?.name ?? id
+      const first = plan.transfers[0]
+      flash(
+        plan.transfers.length === 1
+          ? `실내기 1대를 ${names(first.from)} → ${names(first.to)}로 옮겼습니다 (대수·조합비 재계산)`
+          : `실내기 ${plan.transfers.length}대를 다른 실로 옮겼습니다 (대수·조합비 재계산)`,
+      )
+    } catch (e) {
+      flash(e instanceof DomainError ? e.message : '실내기를 옮길 수 없습니다')
+    }
+  }
   const rotateUnits = (rots: { id: string; rot: number }[]) =>
     mutateUnits('실내기 회전', rots, (p, i, r) => p.rotateUnit(i, r.rot))
 
