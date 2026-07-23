@@ -27,6 +27,7 @@ export type GuardCode =
   | 'OVERLOADED'
   | 'EMPTY_GROUPS'
   | 'CLEARANCE'
+  | 'CLEARANCE_UNKNOWN'
   | 'REGRESS_INVALIDATES'
   | 'FACILITY_CHANGE'
   | 'ROOM_SLICE'
@@ -47,6 +48,9 @@ export interface GuardContext {
   emptyGroupCount: number // 실내기가 없는 실외기 대수
   overloadedGroups: string[] // 조합비 상한 초과 그룹 라벨
   groupsWithoutPosition: string[] // 도면에 심벌이 놓이지 않은 그룹 라벨
+  // 이격을 **실제로 쟀는가**. 도면 축척(mm)을 모르면 잴 수 없다 — 그때 위반 0건으로 읽으면
+  // 검사하지 않은 것을 합격으로 통과시킨다(false-green). 두 축을 분리해 둔다.
+  clearanceChecked: boolean
   clearanceViolations: string[] // 이격거리 위반 설명
   selectionRowCount: number // 장비선정표 행(=실) 수
 }
@@ -60,6 +64,7 @@ export const emptyGuardContext = (): GuardContext => ({
   emptyGroupCount: 0,
   overloadedGroups: [],
   groupsWithoutPosition: [],
+  clearanceChecked: false, // 아직 아무것도 재지 않았다(fail-closed)
   clearanceViolations: [],
   selectionRowCount: 0,
 })
@@ -148,6 +153,15 @@ export const guardAdvance = (from: StepId, c: GuardContext): GuardVerdict => {
           '이격거리를 확인하세요',
           `이격거리 위반 ${c.clearanceViolations.length}건: ${c.clearanceViolations.join(' · ')}`,
           '실외기 간격(측 250 · 간 200 · 후 500 · 전 900mm)이 확보되지 않으면 시공·유지보수가 어렵습니다.',
+        )
+      }
+      // 못 잰 것을 '이상 없음'으로 흘려보내지 않는다 — 막지는 않되 검사하지 못했다고 말한다.
+      if (!c.clearanceChecked) {
+        return confirm(
+          'CLEARANCE_UNKNOWN',
+          '이격거리를 검사하지 못했습니다',
+          '도면 축척(mm) 정보가 없어 실외기 간 이격거리를 재지 못했습니다.',
+          '이격은 실치수 규칙(간 200 · 전 900mm)이라 축척이 있어야 검증됩니다. 실도면을 불러오면 자동으로 검사합니다. 지금 진행하면 이격은 검증되지 않은 채로 남습니다.',
         )
       }
       return ALLOW

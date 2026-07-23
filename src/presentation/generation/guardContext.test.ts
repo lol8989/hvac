@@ -18,7 +18,7 @@ describe('buildGuardContext', () => {
       groups: [],
       activeGroups: [],
       outdoorPositions: {},
-      clearanceViolations: [],
+      clearance: { checked: true, violations: [] },
       selectionRowCount: 3,
     })
     expect(ctx.roomCount).toBe(2)
@@ -35,7 +35,7 @@ describe('buildGuardContext', () => {
       groups: [],
       activeGroups: [],
       outdoorPositions: {},
-      clearanceViolations: [],
+      clearance: { checked: true, violations: [] },
       selectionRowCount: 0,
     })
     expect(ctx.roomsWithoutIndoor).toEqual(['침실'])
@@ -51,7 +51,7 @@ describe('buildGuardContext', () => {
       groups: [active, empty],
       activeGroups: [active],
       outdoorPositions: {},
-      clearanceViolations: [],
+      clearance: { checked: true, violations: [] },
       selectionRowCount: 0,
     })
     expect(ctx.activeGroupCount).toBe(1)
@@ -68,11 +68,27 @@ describe('buildGuardContext', () => {
       groups: [overloaded, noPos],
       activeGroups: [overloaded, noPos],
       outdoorPositions: { ODU1: { x: 1, y: 1 } }, // ODU1만 배치됨
-      clearanceViolations: ['이격 위반'],
+      clearance: { checked: true, violations: ['이격 위반'] },
       selectionRowCount: 0,
     })
     expect(ctx.overloadedGroups).toEqual(['실외기-1'])
     expect(ctx.groupsWithoutPosition).toEqual(['실외기-2'])
     expect(ctx.clearanceViolations).toEqual(['이격 위반'])
+  })
+
+  // '검사했는데 깨끗함'과 '검사하지 못함'은 다른 상태다 — 가드가 둘을 다르게 다룬다.
+  it('이격을 검사하지 못했으면 clearanceChecked=false로 옮긴다', () => {
+    const ctx = buildGuardContext({
+      domainRooms: {},
+      placements: {},
+      pool: [],
+      groups: [],
+      activeGroups: [],
+      outdoorPositions: {},
+      clearance: { checked: false, violations: [] },
+      selectionRowCount: 0,
+    })
+    expect(ctx.clearanceChecked).toBe(false)
+    expect(ctx.clearanceViolations).toEqual([])
   })
 })

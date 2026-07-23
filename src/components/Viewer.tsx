@@ -3,7 +3,8 @@ import type { ReactElement } from 'react'
 import ACUnit from './viewer/ACUnit'
 import ODUnit from './viewer/ODUnit'
 import ZoneRect from './viewer/ZoneRect'
-import { GRID, snap, zoneBounds, zoneAreaM2, zonesBounds } from './viewer/geometry'
+import { zoneBounds, zoneAreaM2, zonesBounds } from './viewer/geometry'
+import { planGridOf, snapTo } from './viewer/planGrid'
 import type { ZoneBox, Corner, Pt } from './viewer/geometry'
 import { useDraftCommit } from './viewer/useDraftCommit'
 import { usePanZoom, type ViewBox } from './viewer/usePanZoom'
@@ -22,13 +23,6 @@ export type {
   UnitMove, UnitRotate, HistoryControl, ViewerHandle, ViewerProps,
   CanvasProps, IndoorProps, OutdoorProps, SliceProps, MergeProps,
 } from './viewer/props'
-
-// 도면 폭에 맞는 '딱 떨어지는' 격자 실치수(1·2·5·10 계열, ~100칸 목표). 대형 mm 좌표계용.
-const niceGrid = (w: number): number => {
-  const target = w / 100
-  const pow = Math.pow(10, Math.floor(Math.log10(target)))
-  return [1, 2, 5, 10].map((m) => m * pow).find((c) => c >= target) ?? 10 * pow
-}
 
 // 단축키 도움말(플로팅 위젯) — 단축키 하나당 한 행.
 const SHORTCUTS: readonly { key: string; desc: string }[] = [
@@ -79,10 +73,8 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   // 도면 좌표계 상수(프롭 기반). 실도면(대형 mm)이면 패딩·격자 간격을 비례 조정.
   const PLAN_W = planW ?? 720
   const PLAN_H = planH ?? 470
-  // 격자 표시 간격: 실도면이면 딱 떨어지는 실치수(예: 2m)를 정규화 단위로 환산, 목업이면 기존 GRID.
-  const gridMm = mmPerUnit ? niceGrid(PLAN_W * mmPerUnit) : null // 격자 1칸의 실 치수(mm)
-  const gridStep = gridMm ? gridMm / (mmPerUnit as number) : GRID
-  const gridLabel = gridMm ? (gridMm >= 1000 ? `${gridMm / 1000}m` : `${gridMm}mm`) : null
+  // 격자는 하나다 — 화면에 그리는 선·실 자르기·심볼 드래그가 모두 이 step에 붙는다(planGrid.ts).
+  const { step: gridStep, label: gridLabel } = planGridOf(PLAN_W, mmPerUnit)
   const [mode, setMode] = useState<Mode>('cassette')
   // 실내기 심볼은 App(Placement)이 소유한다. 드래그·회전 중에는 여기 draft로 그리고,
   // 마우스를 뗄 때 한 번만 커밋한다(60fps마다 App을 리렌더하지 않기 위함).
@@ -141,12 +133,12 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
     const gs = outdoorGroups ?? []
     const positions: Record<string, { x: number; y: number }> = {}
     gs.forEach((g, i) => {
-      positions[g.key] = { x: snap(PLAN_W * 0.12 + i * PLAN_W * 0.16), y: snap(PLAN_H + PLAN_H * 0.04) }
+      positions[g.key] = { x: snapTo(PLAN_W * 0.12 + i * PLAN_W * 0.16, gridStep), y: snapTo(PLAN_H + PLAN_H * 0.04, gridStep) }
     })
     onOutdoorsAutoPlace?.(positions)
     setMode('outdoor')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outdoorGroups, PLAN_W, PLAN_H])
+  }, [outdoorGroups, PLAN_W, PLAN_H, gridStep])
 
   // 명령형 핸들: 실외기 자동 배치(재호출 시 기본 배치로 리셋) + 화면 캡처.
   // 실내기 배치는 명령형 핸들이 아니다 — App이 Placement를 만들면 심볼이 따라온다.
@@ -157,8 +149,8 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
 
   // window 리스너(1회 등록)에서 읽는 최신 상태 스냅샷. 렌더 중이 아닌 effect에서 갱신(refs 규칙 준수).
   // layers도 싣는다 — 숨긴 레이어의 객체를 마퀴로 잡거나 Del로 지울 수 없어야 한다(적대적 QA).
-  const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layers })
-  useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn, selOdu, layers } })
+  const st = useRef({ mode, symbols, zones, selUnits, selectedIds, snapOn, gridStep, selOdu, layers })
+  useEffect(() => { st.current = { mode, symbols, zones, selUnits, selectedIds, snapOn, gridStep, selOdu, layers } })
 
   // 실 자르기(V) 모드 — 각도·커서·프리뷰·진입 게이트·커밋을 훅으로. 클릭/이동/R은 공유 핸들러가 호출한다.
   const slice = useSliceMode({
@@ -411,7 +403,7 @@ const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
       >
         <g className="drawing-layer">
           <rect x="0" y="0" width={PLAN_W} height={PLAN_H} fill="#ffffff" stroke="#CFCFCF" />
-          {/* 그리드(스냅 격자) — 스냅 ON일 때만 표시. GRID 간격, 도면 시트 위. */}
+          {/* 그리드(스냅 격자) — 스냅 ON일 때만 표시. 드래그·자르기가 붙는 격자와 같은 간격이다. */}
           {snapOn && (
             <g>
               {Array.from({ length: Math.floor(PLAN_W / gridStep) + 1 }, (_, i) => i * gridStep).map((x) => (

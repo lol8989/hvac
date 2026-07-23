@@ -308,7 +308,21 @@
 **되돌리려면**: `git checkout -- src/infrastructure/equipment/sqlite/readCompatMatrix.ts src/infrastructure/equipment/sqlite/SqliteEquipmentAdminRepository.ts src/infrastructure/equipment/seed/compatMatrixFromSeed.ts` (안내문 일반화 6a0ef8e는 유지).
 
 ### 그 밖의 열린 항목(우선순위, "생성+관리자 완성" 마감)
-- [ ] **이격거리 좌표계** — `snap()` GRID 상수가 좌표계 무관 + `mmPerUnit`(타일) 부재로 실외기 이격(200/900mm) 검증이 목업에서 미발화. 레퍼런스로선 실외기 배치 검증이 잠들어 있음. (`clearanceRules.ts`, `App.tsx:857-865`)
+- [x] **이격거리 좌표계** (2026-07-23) — 결함 2건을 각각 TDD로 잡았다.
+  - **결함 1 (격자 SSOT 위반)**: 같은 '격자' 체크박스인데 심볼 드래그·존 리사이즈는 좌표계와 무관한 `GRID=20`,
+    실 자르기는 실치수 격자(`gridStep`)에 스냅했다. 실도면(mmPerUnit≈94.8)에서 격자 1칸은 2000mm=**21.1단위**라
+    **심볼이 화면에 그려진 격자선에 안 붙었다**. → `components/viewer/planGrid.ts`(신규·순수):
+    `planGridOf(planW, mmPerUnit)` → `{step, mm, label}` + `snapTo(v, step)`. 표시·드래그·자르기·리사이즈·
+    실외기 자동배치가 모두 이 `step` 하나를 쓴다. `gridStep`을 드래그 스냅샷(`st`)에 실어 window 리스너가 읽는다.
+    `geometry.ts`의 `GRID`·`snap`은 삭제(죽은 코드). 단위테스트 8.
+  - **결함 2 (false-green)**: 축척을 몰라 이격을 **못 쟀는데** `clearanceViolations=[]`로 보고해 가드가
+    '위반 0건 → ALLOW'로 통과시켰다. → `presentation/generation/clearanceReport.ts`(신규·순수):
+    `{checked, violations}`로 "검사했는가"와 "위반이 있는가"를 분리. `GuardContext.clearanceChecked` 추가
+    (`emptyGuardContext`는 **false**로 fail-closed), outdoor 가드가 미검사면 `CLEARANCE_UNKNOWN` **CONFIRM**
+    (막지 않고 알린다 — §3 CTA 정책). 위반이 있으면 위반을 먼저 알린다. 단위테스트 5+3.
+  - **남은 사실**: 실도면에서 격자 ON이면 최소 이동 단위가 2m라 나란한 두 대는 위반이 안 난다(760mm 여유).
+    위반은 **겹쳐 놓거나 격자를 끄면** 잡힌다. 목업(타일 없음)에선 여전히 못 재지만 이제 **침묵하지 않는다**.
+  - tsc 클린·**1278 그린**·린트 신규 0(App.tsx 기존 2건만). 브라우저 검증은 지시대로 생략.
 - [ ] QA 잔여: 심볼 실 밖 드래그 검증 없음 / 산출 도면 실 라벨 centroid 겹침.
 - [x] **생성 파이프라인 스텝1~4 end-to-end 검증** (2026-07-16) — 배치→선정(6/6·조합비0.81)→실외기 자동배치(1/1)→산출물. 선정표(23컬럼·집계 정상)·일람표(SQLite 롱테일 실측값, '-'는 스펙시트 부재분만)·도면 SVG 모두 정상. 앱 콘솔 에러 0.
 

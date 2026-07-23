@@ -54,7 +54,7 @@ import { sliceRoom, SliceMissedRoomError, TooThinSliceError, SliceProducesManyPi
 import { mergeRooms } from './domain/generation/mergeRooms'
 import type { SliceLine } from './components/Viewer'
 import { planScaleOf, scalePoints, worldLineToBase } from './presentation/generation/planScale'
-import { checkClearances } from './domain/generation/clearanceRules'
+import { buildClearanceReport } from './presentation/generation/clearanceReport'
 import { UnitLoad } from './domain/shared/UnitLoad'
 import { InMemoryIndoorModelCatalog } from './infrastructure/generation/InMemoryIndoorModelCatalog'
 import { defaultEquipmentMaster } from './infrastructure/equipment/InMemoryEquipmentMaster'
@@ -542,20 +542,17 @@ export default function App({
   }
 
   // 이격거리는 실치수(mm) 규칙이다. 뷰어 좌표는 정규화 단위라 mmPerUnit으로 환산한다.
-  // 실도면 타일이 없으면(목업 좌표계) 실치수를 알 수 없어 검사하지 않는다.
-  const clearanceViolations = useMemo(() => {
-    const mmPerUnit = planDims?.mmPerUnit
-    if (!mmPerUnit) return []
-    const placed = activeGroups
-      .filter((g) => outdoorPositions[g.key])
-      .map((g) => ({ key: g.key, label: g.label, x: outdoorPositions[g.key].x * mmPerUnit, y: outdoorPositions[g.key].y * mmPerUnit }))
-    return checkClearances(placed).map((v) => v.message)
+  // 축척을 모르면(목업 좌표계) 검사할 수 없고, 그 사실을 checked=false로 들고 간다 — 못 잰 것을
+  // '위반 0건'으로 흘리면 가드가 통과시킨다(false-green).
+  const clearance = useMemo(
+    () => buildClearanceReport({ groups: activeGroups, positions: outdoorPositions, mmPerUnit: planDims?.mmPerUnit }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planDims, outdoorPositions, plan])
+    [planDims, outdoorPositions, plan],
+  )
   // 스텝 가드 문맥(순수 조립) — 현재 상태를 세어 도메인 가드에 넘길 요약을 만든다(무엇을 세는가만).
   const guardCtx = buildGuardContext({
     domainRooms, placements, pool, groups, activeGroups, outdoorPositions,
-    clearanceViolations, selectionRowCount: selectionTable.bom.indoor.length,
+    clearance, selectionRowCount: selectionTable.bom.indoor.length,
   })
 
   // 스텝 전환 + 가드/확인 모달 + 파괴적 편집(시설군·천정고)을 한 훅으로 묶는다(§5.8).
@@ -956,7 +953,7 @@ export default function App({
               <OutdoorPanel
                 groups={activeGroups}
                 placedKeys={new Set(Object.keys(outdoorPositions))}
-                violations={clearanceViolations}
+                violations={clearance.violations}
                 onAutoPlace={() => viewerRef.current?.placeOutdoors()}
               />
             )}

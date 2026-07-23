@@ -20,6 +20,7 @@ const healthy = (over: Partial<GuardContext> = {}): GuardContext =>
     overloadedGroups: [],
     emptyGroupCount: 0,
     groupsWithoutPosition: [],
+    clearanceChecked: true,
     clearanceViolations: [],
     selectionRowCount: 3,
     ...over,
@@ -117,6 +118,23 @@ describe('guardAdvance — outdoor(실외기 배치)', () => {
 
   it('전부 배치됐으면 통과', () => {
     expect(guardAdvance('outdoor', healthy()).kind).toBe('ALLOW')
+  })
+
+  // 검사하지 못한 것을 '위반 0건'으로 읽으면 안 된다(false-green).
+  // 축척(mm)을 모르는 도면이면 이격을 잴 수 없다 — 막지는 않되 못 쟀다고 알린다.
+  it('이격을 검사하지 못했으면 통과시키지 않고 확인을 받는다', () => {
+    const v = guardAdvance('outdoor', healthy({ clearanceChecked: false }))
+    expect(v.kind).toBe('CONFIRM')
+    if (v.kind === 'CONFIRM') {
+      expect(v.code).toBe('CLEARANCE_UNKNOWN')
+      expect(v.reason).toContain('축척')
+    }
+  })
+
+  it('위반이 있으면 미검사 안내보다 위반을 먼저 알린다', () => {
+    const v = guardAdvance('outdoor', healthy({ clearanceChecked: false, clearanceViolations: ['실외기-1 ↔ 실외기-2'] }))
+    expect(v.kind).toBe('CONFIRM')
+    if (v.kind === 'CONFIRM') expect(v.code).toBe('CLEARANCE')
   })
 })
 

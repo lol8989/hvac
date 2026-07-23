@@ -6,11 +6,10 @@ import type { Pt } from '../../domain/shared/Polygon'
 
 export type { Pt }
 
-export const GRID = 20
 export const ROT_STEP = 15 // 회전 핸들 스텝(도) · 자르기 라인 회전 스텝
 export const ROT_SENS = 0.8 // 회전 드래그 감도
 
-export const snap = (v: number): number => Math.round(v / GRID) * GRID
+// 격자·스냅은 좌표계에 따라 달라지므로 planGrid.ts가 소유한다(GRID/snap 상수는 여기서 걷어냈다).
 export const norm = (deg: number): number => ((Math.round(deg) % 360) + 360) % 360
 
 // 심볼: 좌표 + 회전.

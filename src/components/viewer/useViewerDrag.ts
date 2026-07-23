@@ -5,7 +5,8 @@
 // 뷰어의 mousedown 핸들러는 '선택'을 처리하고 여기 begin* 메서드로 드래그를 연다(정책/메커니즘 분리).
 import { useEffect, useRef } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneHitsRect, unitsInRect, resizeRectFromCorner } from './geometry'
+import { ROT_STEP, ROT_SENS, norm, rectPoints, zoneHitsRect, unitsInRect, resizeRectFromCorner } from './geometry'
+import { snapTo } from './planGrid'
 import type { Corner, Pt, UnitSym, ZoneBox } from './geometry'
 import type { ViewBox } from './usePanZoom'
 import type { Draft } from './useDraftCommit'
@@ -19,6 +20,7 @@ export interface DragStateSnapshot {
   selUnits: Set<string>
   selectedIds: string[]
   snapOn: boolean
+  gridStep: number // 격자 간격(정규화 단위) — 표시 격자와 같은 값(planGrid.ts). 좌표계마다 다르므로 스냅도 여기 붙는다
   selOdu: string | null
   layers: LayerVisibility
 }
@@ -81,9 +83,10 @@ export function useViewerDrag(input: ViewerDragInput): ViewerDrag {
       const c = cornerRef.current
       if (c) {
         const p = toSvg(e.clientX, e.clientY); if (!p) return
-        const px = st.current!.snapOn ? snap(p.x) : p.x
-        const py = st.current!.snapOn ? snap(p.y) : p.y
-        const r = resizeRectFromCorner(c.corner, { x: c.ax, y: c.ay }, { x: px, y: py }, GRID)
+        const g = st.current!.gridStep
+        const px = st.current!.snapOn ? snapTo(p.x, g) : p.x
+        const py = st.current!.snapOn ? snapTo(p.y, g) : p.y
+        const r = resizeRectFromCorner(c.corner, { x: c.ax, y: c.ay }, { x: px, y: py }, g)
         zoneDraft.set({ id: c.id, points: rectPoints(r.x, r.y, r.w, r.h) })
         return
       }
@@ -99,7 +102,7 @@ export function useViewerDrag(input: ViewerDragInput): ViewerDrag {
       if (d) {
         const p = toSvg(e.clientX, e.clientY); if (!p) return
         let dx = p.x - d.startX, dy = p.y - d.startY
-        if (st.current!.snapOn) { dx = snap(dx); dy = snap(dy) }
+        if (st.current!.snapOn) { dx = snapTo(dx, st.current!.gridStep); dy = snapTo(dy, st.current!.gridStep) }
         if (Math.abs(p.x - d.startX) > 3 || Math.abs(p.y - d.startY) > 3) d.moved = true
         const next: Record<string, { x: number; y: number }> = {}
         for (const [id, o] of Object.entries(d.orig)) next[id] = { x: o.x + dx, y: o.y + dy }
@@ -110,7 +113,7 @@ export function useViewerDrag(input: ViewerDragInput): ViewerDrag {
       if (od) {
         const p = toSvg(e.clientX, e.clientY); if (!p) return
         let dx = p.x - od.startX, dy = p.y - od.startY
-        if (st.current!.snapOn) { dx = snap(dx); dy = snap(dy) }
+        if (st.current!.snapOn) { dx = snapTo(dx, st.current!.gridStep); dy = snapTo(dy, st.current!.gridStep) }
         oduDraft.set({ id: od.id, x: od.ox + dx, y: od.oy + dy })
         return
       }

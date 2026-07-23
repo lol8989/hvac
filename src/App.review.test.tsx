@@ -30,10 +30,12 @@ const progressToCombine = () => {
 }
 
 // 조합 → 실외기 배치(도면에 심벌) → 편집 확정 → 산출물.
+// jsdom에는 타일(도면 축척)이 없어 이격거리를 잴 수 없다 → '검사하지 못했다' 확인을 한 번 받는다.
 const progressToOutput = () => {
   fireEvent.click(screen.getByRole('button', { name: '실외기 배치' })) // 실외기 배치 도구로 전환
   fireEvent.click(screen.getByRole('button', { name: '＋ 실외기 배치' }))
   fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' })) // 편집 확정 → 산출물
+  fireEvent.click(screen.getByRole('button', { name: '계속 진행' }))
 }
 
 describe('App — 초기 상태 (실 검출 완료)', () => {
@@ -92,6 +94,21 @@ describe('App — 편집 모드 · 편집 확정 가드', () => {
 
     expect(screen.getByRole('alertdialog', { name: '실외기를 도면에 배치해야 합니다' })).toBeInTheDocument()
     expect(screen.getByText(/1대 중 0대/)).toBeInTheDocument()
+  })
+
+  // 검사하지 못한 것을 '이상 없음'으로 통과시키면 안 된다(false-green).
+  it('도면 축척을 몰라 이격을 못 쟀으면 통과시키지 않고 확인을 받는다', () => {
+    render(<App />)
+    progressToCombine()
+    fireEvent.click(screen.getByRole('button', { name: '실외기 배치' }))
+    fireEvent.click(screen.getByRole('button', { name: '＋ 실외기 배치' }))
+    fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' }))
+
+    expect(screen.getByRole('alertdialog', { name: '이격거리를 검사하지 못했습니다' })).toBeInTheDocument()
+    expect(screen.getByText(/도면 축척\(mm\) 정보가 없어/)).toBeInTheDocument()
+    // 막지는 않는다 — 확인하면 산출물로 넘어간다(§3 CTA 정책).
+    fireEvent.click(screen.getByRole('button', { name: '계속 진행' }))
+    expect(screen.getByRole('button', { name: /장비선정표·도면 생성/ })).toBeInTheDocument()
   })
 
   it('배치 후 시설군을 바꾸면 무엇을 잃는지 확인을 받는다', () => {

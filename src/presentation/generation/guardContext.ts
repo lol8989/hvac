@@ -5,6 +5,7 @@
 // 이 함수는 파생값(그룹·풀·선정표)을 받아 세기만 한다 — React·이펙트를 모른다(렌더 밖에서 테스트 가능).
 import type { GuardContext } from '../../domain/generation/StepGuard'
 import type { GroupView } from './planAdapter'
+import type { ClearanceReport } from './clearanceReport'
 
 export interface GuardContextInput {
   domainRooms: Record<string, { name: string }>
@@ -13,13 +14,14 @@ export interface GuardContextInput {
   groups: readonly GroupView[]
   activeGroups: readonly GroupView[]
   outdoorPositions: Record<string, unknown>
-  clearanceViolations: readonly string[]
+  // 이격은 '검사했는가'와 '위반이 있는가'가 다른 축이다(clearanceReport 참조).
+  clearance: ClearanceReport
   // 선정표 행 = 실. BOM만 있고 행이 없으면 산출물이 빈 표가 된다.
   selectionRowCount: number
 }
 
 export function buildGuardContext(input: GuardContextInput): GuardContext {
-  const { domainRooms, placements, pool, groups, activeGroups, outdoorPositions, clearanceViolations, selectionRowCount } = input
+  const { domainRooms, placements, pool, groups, activeGroups, outdoorPositions, clearance, selectionRowCount } = input
   return {
     roomCount: Object.keys(domainRooms).length,
     placedRoomCount: Object.keys(placements).length,
@@ -29,7 +31,8 @@ export function buildGuardContext(input: GuardContextInput): GuardContext {
     emptyGroupCount: groups.length - activeGroups.length,
     overloadedGroups: activeGroups.filter((g) => g.judgement === 'OVERLOADED').map((g) => g.label),
     groupsWithoutPosition: activeGroups.filter((g) => !outdoorPositions[g.key]).map((g) => g.label),
-    clearanceViolations: [...clearanceViolations],
+    clearanceChecked: clearance.checked,
+    clearanceViolations: [...clearance.violations],
     selectionRowCount,
   }
 }
