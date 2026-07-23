@@ -287,25 +287,21 @@
 
 상세: [조합확인표 문서 §6·§7](05_설계결정/실내외기_조합_확인표_현업회신_반영_2026-07-16.md)
 
-## ▶ (낡음) 월요일(2026-07-20) 이어서 — 조합관리 "카탈로그-파생 축" 미완 WIP
+## ▶ 조합관리 "카탈로그-파생 축" — **완료** (2026-07-20 커밋됨, 절 정리 2026-07-23)
 
-> 상태: **미커밋 WIP 3파일**. tsc 클린이지만 **테스트 미갱신 → 실패 예상**. 목표: 조합관리 매트릭스가
-> 게시 카탈로그(product_series)에서 축을 파생 → 장비마스터에 **새 시리즈가 생기면 조합관리에 자동 등장**.
-> (주인님 승인 2026-07-16. 배경: 목록관리→조합비정책은 이미 자동 연결, 조합관리만 축이 시드 고정이었다.)
+> 조합관리 매트릭스가 게시 카탈로그(product_series)에서 축을 파생한다 → 장비마스터에 **새 시리즈가
+> 생기면 조합관리에 자동 등장**한다. (주인님 승인 2026-07-16. 배경: 목록관리→조합비정책은 이미 자동
+> 연결이었고 조합관리만 축이 시드 고정이었다.)
+>
+> **이 절은 2026-07-23까지 "미커밋 WIP 3파일 · 테스트 미갱신"이라 적혀 있었는데 사실이 아니었다.**
+> 작업은 `e38606c` 계열로 커밋됐고 테스트도 갱신됐다. 실제 완료 내역은 위
+> 「2026-07-20 — 조합관리 축 + FCU 제외 + 현업 회신 전량 반영 **완료**」 절이 정본이다.
+> 재확인(2026-07-23): `compat.test.ts` 13건이 고정 개수(35×39) 대신 의미 단언(GHP Super III ×
+> 대공간덕트 = O 등)을 쓰고, '테스트 신규 시리즈' 자동 등장 회귀도 들어 있다.
 
-**한 것(미커밋):**
-- `infrastructure/equipment/sqlite/readCompatMatrix.ts` — 재작성. 축=카탈로그(OUTDOOR 행·INDOOR 열, `AXES_SQL` GROUP BY 중분류·시리즈). 값 = override ?? `compatDefaultValue`(=시드 ?? 'X'). 카탈로그 비면 `compatMatrixFromSeed` 폴백. `compatAxisExists`·`compatDefaultValue` export 추가.
-- `SqliteEquipmentAdminRepository.ts` — `setCompatCell` 축 검증을 시드→**카탈로그**(`compatAxisExists`)로, 삭제 판정을 시드값→**실효 기본값**(`compatDefaultValue`)으로. import 정리(seedValueAt 제거).
-- `compatMatrixFromSeed.ts` — `seedValueAt`가 시드 라벨의 현업 주석을 떼고 조회(`cleanSeedLabel`): "Multi V S(주거)->..." → "Multi V S(주거)", "천장형(확인요망)" → "천장형" 등 5개. 정당한 괄호((고급형) 등)는 보존.
-
-**남은 것 (월요일):**
-1. [ ] `SqliteEquipmentAdminRepository.compat.test.ts` 갱신 — 현재 35×39 고정 단언이 깨진다. 카탈로그-파생 기준으로: 정확한 개수 대신 **GHP Super III × 대공간덕트=O**·GHP×4WAY=false·수냉칠러 전부 false 등 의미 단언으로. delete-on-equal은 실효 기본값(compatDefaultValue) 기준.
-2. [ ] **신규 시리즈 자동 등장** 회귀 테스트 — 테스트 DB에 새 product_series(OUTDOOR) 1개 INSERT → `getCompatMatrix().outdoorRows`에 등장 + 기본값 X 확인.
-3. [ ] `cleanSeedLabel` 정규화가 5개 주석 라벨을 카탈로그 실제 이름과 맞추는지 확인(실제 카탈로그 series명 조회해 대조). 안 맞으면 override 시드로 보정하거나 매핑.
-4. [ ] 전체 스위트·tsc·build 그린 확인 → 브라우저에서 조합관리 렌더(카탈로그 축, GHP 예외 유지) 재검증 → 커밋.
-5. [ ] (선택) 성능 — seedValueAt이 카탈로그 셀마다 findIndex×2. 축이 커지면 시드 룩업 맵 프리컴퓨트 고려.
-
-**되돌리려면**: `git checkout -- src/infrastructure/equipment/sqlite/readCompatMatrix.ts src/infrastructure/equipment/sqlite/SqliteEquipmentAdminRepository.ts src/infrastructure/equipment/seed/compatMatrixFromSeed.ts` (안내문 일반화 6a0ef8e는 유지).
+- [ ] **(선택·유일한 잔여) 성능** — `seedValueAt`이 카탈로그 셀마다 `findIndex`를 두 번 돈다
+  (`compatMatrixFromSeed.ts`). 지금 축 크기에서는 문제 없으나, 축이 커지면 시드 룩업 맵을
+  미리 만들어 두는 편이 낫다.
 
 ### 그 밖의 열린 항목(우선순위, "생성+관리자 완성" 마감)
 - [x] **이격거리 좌표계** (2026-07-23) — 결함 2건을 각각 TDD로 잡았다.
