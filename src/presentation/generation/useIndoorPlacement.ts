@@ -16,6 +16,7 @@ import { Placement } from '../../domain/generation/Placement'
 import { layoutPositions, type UnitPosition } from '../../domain/generation/layoutPositions'
 import { Polygon } from '../../domain/shared/Polygon'
 import { applyAiPlacement, aiSelectionFor } from '../../domain/generation/recalc'
+import { findMisplacedUnits, describeMisplaced } from '../../domain/generation/misplacedUnits'
 import { DomainError } from '../../domain/generation/errors'
 import { indoorUnitsFor } from './planAdapter'
 import type { UnitSym } from '../../components/viewer/geometry'
@@ -41,6 +42,8 @@ export interface IndoorPlacement {
   layoutFor: (roomId: string, count: number) => UnitPosition[]
   unitsFrom: (ps: PlacementMap) => IndoorUnit[]
   indoorSymbols: UnitSym[]
+  // 소속 실 밖(또는 남의 실 위)으로 나간 심볼 설명 — 편집 확정 가드가 사용자에게 알린다.
+  misplacedUnits: string[]
   aiPlace: () => void
   moveUnits: (moves: { id: string; x: number; y: number }[]) => void
   rotateUnits: (rots: { id: string; rot: number }[]) => void
@@ -106,6 +109,22 @@ export function useIndoorPlacement(input: IndoorPlacementInput): IndoorPlacement
       ),
     [placements],
   )
+
+  // 심볼이 자기 실을 벗어났는가(판정은 도메인). 좌표는 도면(월드) 좌표계라 worldRooms 형상과 같은 계다.
+  // 형상을 모르는 실은 판정에서 빠진다 — 자르기·재시딩 중 잠깐 어긋난 것을 위반으로 만들지 않는다.
+  const misplacedUnits = useMemo(() => {
+    const shapes: Record<string, Polygon> = {}
+    for (const id of Object.keys(placements)) {
+      const poly = worldPolyOf(id)
+      if (poly) shapes[id] = poly
+    }
+    const units = Object.entries(placements).flatMap(([roomId, p]) =>
+      p.positions.map((pos, i) => ({ roomId, index: i, x: pos.x, y: pos.y })),
+    )
+    const names = Object.fromEntries(Object.entries(domainRooms).map(([id, r]) => [id, r.name]))
+    return findMisplacedUnits({ units, shapes, names }).map(describeMisplaced)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placements, worldRooms, domainRooms])
 
   // 심볼 id → (실 id, 0-based 인덱스). 파싱 실패는 무시(방어).
   const parseUnitId = (id: string): { roomId: string; index: number } | null => {
@@ -203,5 +222,5 @@ export function useIndoorPlacement(input: IndoorPlacementInput): IndoorPlacement
     }
   }
 
-  return { layoutFor, unitsFrom, indoorSymbols, aiPlace, moveUnits, rotateUnits, deleteUnits, addUnitToRoom, overrideIndoor, resetIndoor }
+  return { layoutFor, unitsFrom, indoorSymbols, misplacedUnits, aiPlace, moveUnits, rotateUnits, deleteUnits, addUnitToRoom, overrideIndoor, resetIndoor }
 }

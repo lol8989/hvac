@@ -20,6 +20,7 @@ export const STEP_ORDER: readonly StepId[] = ['place', 'combine', 'outdoor', 'ou
 export type GuardCode =
   | 'NO_ROOMS'
   | 'ROOMS_WITHOUT_INDOOR'
+  | 'MISPLACED_UNITS'
   | 'UNASSIGNED_ROOMS'
   | 'NO_OUTDOOR'
   | 'OUTDOOR_NOT_PLACED'
@@ -43,6 +44,9 @@ export interface GuardContext {
   roomCount: number // 검출된 실
   placedRoomCount: number // 실내기가 1대 이상 놓인 실
   roomsWithoutIndoor: string[] // 실내기가 없는 실 이름
+  // 소속 실 밖(또는 남의 실 위)에 놓인 심볼 설명. 심볼 좌표가 산출 도면에 실리므로
+  // 표(대수)와 도면(위치)이 어긋난 상태다 — misplacedUnits.ts가 판정한다.
+  misplacedUnits: string[]
   unassignedRoomCount: number // 실외기에 배정되지 않은 실
   activeGroupCount: number // 실내기가 연결된 실외기 대수
   emptyGroupCount: number // 실내기가 없는 실외기 대수
@@ -59,6 +63,7 @@ export const emptyGuardContext = (): GuardContext => ({
   roomCount: 0,
   placedRoomCount: 0,
   roomsWithoutIndoor: [],
+  misplacedUnits: [],
   unassignedRoomCount: 0,
   activeGroupCount: 0,
   emptyGroupCount: 0,
@@ -102,6 +107,15 @@ export const guardAdvance = (from: StepId, c: GuardContext): GuardVerdict => {
           `실 ${c.roomsWithoutIndoor.length}곳(${c.roomsWithoutIndoor.join(' · ')})에 실내기가 없습니다.`,
           '이대로 진행하면 그 실은 실외기 선정·조합과 산출물(장비선정표·장비일람표)에서 제외됩니다. ' +
             "나중에 실내기 배치로 돌아와 '＋ 실내기'로 추가할 수 있습니다.",
+        )
+      }
+      if (c.misplacedUnits.length > 0) {
+        return confirm(
+          'MISPLACED_UNITS',
+          '실 밖에 놓인 실내기가 있습니다',
+          `실내기 ${c.misplacedUnits.length}대가 소속 실을 벗어났습니다: ${c.misplacedUnits.join(' · ')}`,
+          '심볼 좌표는 산출 도면에 그대로 실립니다. 대수는 원래 실에 남아 있으므로 장비선정표와 도면이 서로 다른 위치를 말하게 됩니다. ' +
+            '심볼을 소속 실 안으로 끌어다 놓으세요.',
         )
       }
       return ALLOW

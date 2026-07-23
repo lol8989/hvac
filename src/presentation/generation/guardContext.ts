@@ -16,16 +16,18 @@ export interface GuardContextInput {
   outdoorPositions: Record<string, unknown>
   // 이격은 '검사했는가'와 '위반이 있는가'가 다른 축이다(clearanceReport 참조).
   clearance: ClearanceReport
+  misplacedUnits: readonly string[] // 소속 실 밖으로 나간 심볼 설명(misplacedUnits.ts 판정 결과)
   // 선정표 행 = 실. BOM만 있고 행이 없으면 산출물이 빈 표가 된다.
   selectionRowCount: number
 }
 
 export function buildGuardContext(input: GuardContextInput): GuardContext {
-  const { domainRooms, placements, pool, groups, activeGroups, outdoorPositions, clearance, selectionRowCount } = input
+  const { domainRooms, placements, pool, groups, activeGroups, outdoorPositions, clearance, misplacedUnits, selectionRowCount } = input
   return {
     roomCount: Object.keys(domainRooms).length,
     placedRoomCount: Object.keys(placements).length,
     roomsWithoutIndoor: Object.keys(domainRooms).filter((id) => !placements[id]).map((id) => domainRooms[id].name),
+    misplacedUnits: [...misplacedUnits],
     unassignedRoomCount: pool.length,
     activeGroupCount: activeGroups.length,
     emptyGroupCount: groups.length - activeGroups.length,

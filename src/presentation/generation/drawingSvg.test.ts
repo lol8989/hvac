@@ -33,6 +33,20 @@ describe('buildDrawingSvg (도면 좌표 → 독립 SVG 도면)', () => {
     expect(svg).toContain('침실')
   })
 
+  // 실 라벨과 실내기 심볼이 둘 다 무게중심에 놓여, 나중에 그리는 심볼의 흰 본체가 실명을 덮었다.
+  it('[회귀] 실 라벨이 실 중앙(실내기 심볼 자리)에 놓이지 않는다', () => {
+    // 실 AC_001 = rect(24,24,200,120) → 중앙 (124, 84). 1대면 심볼도 여기 온다.
+    const svg = buildDrawingSvg(input({ indoorSymbols: [{ id: 'AC_001#1', roomId: 'AC_001', x: 124, y: 84, rot: 0 }] }))
+    const label = /<text x="([\d.]+)" y="([\d.]+)" font-size="10"[^>]*>AC_001 거실/.exec(svg)
+    expect(label).not.toBeNull()
+    const [lx, ly] = [Number(label![1]), Number(label![2])]
+    expect(lx).toBeCloseTo(124, 1) // 가로는 중앙 유지
+    // 심볼 본체는 y 84±14, 모델 배지는 +32까지 차지한다 — 라벨이 그 띠 밖에 있어야 읽힌다.
+    expect(ly).toBeLessThan(84 - 14)
+    // 그러면서도 실 안(24..144)에 있어야 한다.
+    expect(ly).toBeGreaterThan(24)
+  })
+
   it('실내기를 화면에서 놓인 좌표 그대로 그린다 (실 중심 고정이 아니다)', () => {
     const svg = buildDrawingSvg(
       input({

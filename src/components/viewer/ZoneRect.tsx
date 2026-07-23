@@ -2,7 +2,8 @@
 // 리사이즈 핸들은 축정렬 사각형 실에만 붙는다. 잘린 실(사선·삼각형)에는 '반대편 고정 모서리'라는
 // 개념이 없다 — 정점 편집은 백로그(실_슬라이싱_설계_v1 §8).
 import type { ZoneBox, Corner } from './geometry'
-import { zoneBounds, isRectZone, zoneCentroid } from './geometry'
+import { zoneBounds, isRectZone } from './geometry'
+import { roomLabelAnchor } from '../../presentation/generation/roomLabelAnchor'
 import type { GroupColor } from '../../presentation/generation/groupColors'
 
 interface ZoneRectProps {
@@ -27,8 +28,9 @@ export default function ZoneRect({ z, editing, selected, areaText, color, onDown
         ['br', b.x + b.w, b.y + b.h, 'nwse-resize'],
       ]
     : []
-  // 라벨은 무게중심에 둔다 — 잘린 실에서 bbox 좌상단은 실 밖으로 나간다.
-  const c = zoneCentroid(z)
+  // 라벨은 실 위쪽 안에 둔다(산출 도면과 같은 규칙 — roomLabelAnchor).
+  // 무게중심에 두면 같은 자리에 놓이는 실내기 심볼과 겹친다.
+  const c = roomLabelAnchor(z.points)
   // 그룹 색이 있으면 배정된 실 — tint로 채우고 head로 테두리. 선택 시 그룹색을 잃지 않도록
   // 더 진한 head 테두리로 선택을 표현한다. 색이 없으면(미배정) 기존 무채색 그대로.
   const fill = color ? color.tint : selected ? '#EDEDED' : '#FCFCFC'

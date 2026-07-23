@@ -96,6 +96,27 @@ describe('App — 편집 모드 · 편집 확정 가드', () => {
     expect(screen.getByText(/1대 중 0대/)).toBeInTheDocument()
   })
 
+  // 심볼 1개 = 실내기 1대 = 선정표 대수 1인데, 심볼을 실 밖으로 끌어내도 소속은 안 바뀐다.
+  // 표는 '거실 N대'라 말하고 도면은 거실 밖에 찍는다 — 확정 전에 알려야 한다.
+  it('실내기 심볼을 실 밖으로 끌어내면 편집 확정 때 알린다', () => {
+    const { container } = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
+
+    // 거실(AC_001, y 24~159) 심볼을 아래로 400 끌어내려 어느 실에도 없는 곳에 놓는다.
+    const body = container.querySelector('[data-unit-id="AC_001#1"] > g')!
+    fireEvent.mouseDown(body, { clientX: 0, clientY: 0 })
+    fireEvent.mouseMove(window, { clientX: 0, clientY: 400 })
+    fireEvent.mouseUp(window)
+
+    // 조합·배치 전제를 채운 뒤 확정 → 실 밖 심볼이 확인 항목으로 올라온다.
+    fireEvent.click(screen.getByRole('button', { name: '실외기 선정·조합' }))
+    fireEvent.click(screen.getByRole('button', { name: '실외기 배치' }))
+    fireEvent.click(screen.getByRole('button', { name: '＋ 실외기 배치' }))
+    fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' }))
+
+    expect(screen.getByText(/거실 1번째 대수가 실 밖에 있습니다/)).toBeInTheDocument()
+  })
+
   // 검사하지 못한 것을 '이상 없음'으로 통과시키면 안 된다(false-green).
   it('도면 축척을 몰라 이격을 못 쟀으면 통과시키지 않고 확인을 받는다', () => {
     render(<App />)

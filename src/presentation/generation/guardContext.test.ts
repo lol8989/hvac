@@ -18,6 +18,7 @@ describe('buildGuardContext', () => {
       groups: [],
       activeGroups: [],
       outdoorPositions: {},
+      misplacedUnits: [],
       clearance: { checked: true, violations: [] },
       selectionRowCount: 3,
     })
@@ -35,6 +36,7 @@ describe('buildGuardContext', () => {
       groups: [],
       activeGroups: [],
       outdoorPositions: {},
+      misplacedUnits: [],
       clearance: { checked: true, violations: [] },
       selectionRowCount: 0,
     })
@@ -51,6 +53,7 @@ describe('buildGuardContext', () => {
       groups: [active, empty],
       activeGroups: [active],
       outdoorPositions: {},
+      misplacedUnits: [],
       clearance: { checked: true, violations: [] },
       selectionRowCount: 0,
     })
@@ -68,6 +71,7 @@ describe('buildGuardContext', () => {
       groups: [overloaded, noPos],
       activeGroups: [overloaded, noPos],
       outdoorPositions: { ODU1: { x: 1, y: 1 } }, // ODU1만 배치됨
+      misplacedUnits: [],
       clearance: { checked: true, violations: ['이격 위반'] },
       selectionRowCount: 0,
     })
@@ -85,6 +89,7 @@ describe('buildGuardContext', () => {
       groups: [],
       activeGroups: [],
       outdoorPositions: {},
+      misplacedUnits: [],
       clearance: { checked: false, violations: [] },
       selectionRowCount: 0,
     })

@@ -7,8 +7,7 @@
 
 import type { Room } from '../../data'
 import type { UnitSym } from '../../components/viewer/geometry'
-import { Polygon } from '../../domain/shared/Polygon'
-import type { Pt } from '../../domain/shared/Polygon'
+import { roomLabelAnchor } from './roomLabelAnchor'
 import type { GroupColor } from './groupColors'
 
 export interface OutdoorGroupSummary {
@@ -32,12 +31,6 @@ const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;'
 
 const round = (v: number): number => Math.round(v * 10) / 10
 
-// 라벨은 무게중심에 둔다 — 잘린 실에서 bbox 좌상단 인셋은 실 밖으로 나간다.
-const labelAnchor = (points: readonly Pt[]): Pt => {
-  const c = Polygon.of(points).centroid
-  return { x: c.x, y: c.y }
-}
-
 const PAD = 24
 const ODU_W = 120
 const ODU_H = 44
@@ -49,7 +42,7 @@ export const buildDrawingSvg = ({ rooms, indoorSymbols, indoorModelByRoom, group
   // 화면에서 자른 모양이 그대로 산출 도면에 실려야 한다. 배정된 실은 실외기 그룹 색(화면과 동일).
   const roomEls = rs.map(([id, r]) => {
     const pts = r.points.map((p) => `${round(p.x)},${round(p.y)}`).join(' ')
-    const label = labelAnchor(r.points)
+    const label = roomLabelAnchor(r.points) // 실 위쪽 안 — 중앙은 실내기 심볼 자리다
     const color = roomColors?.[id]
     const poly = color
       ? `<polygon points="${pts}" fill="${color.tint}" fill-opacity="0.7" stroke="${color.head}" stroke-width="1.5"/>`

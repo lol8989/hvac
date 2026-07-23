@@ -15,6 +15,7 @@ const healthy = (over: Partial<GuardContext> = {}): GuardContext =>
     roomCount: 3,
     placedRoomCount: 3,
     roomsWithoutIndoor: [],
+    misplacedUnits: [],
     unassignedRoomCount: 0,
     activeGroupCount: 1,
     overloadedGroups: [],
@@ -53,6 +54,25 @@ describe('guardAdvance — place(실내기 배치)', () => {
 
   it('전 실에 실내기가 있으면 통과', () => {
     expect(guardAdvance('place', healthy()).kind).toBe('ALLOW')
+  })
+})
+
+// 심볼 1개 = 실내기 1대 = 선정표 대수 1인데, 심볼을 실 밖으로 끌어내도 소속은 안 바뀐다.
+// 표는 '거실 1대'라 말하고 도면은 거실 밖에 찍는다 — 조용히 넘기면 안 된다.
+describe('guardAdvance — place(실 밖으로 나간 심볼)', () => {
+  it('실 밖에 있는 심볼이 있으면 막지 않고 확인을 받는다', () => {
+    const v = guardAdvance('place', healthy({ misplacedUnits: ['거실 2번째 대수가 실 밖에 있습니다'] }))
+    expect(v.kind).toBe('CONFIRM')
+    if (v.kind === 'CONFIRM') {
+      expect(v.code).toBe('MISPLACED_UNITS')
+      expect(v.reason).toContain('거실 2번째 대수')
+    }
+  })
+
+  it('실내기 없는 실이 함께 있으면 그쪽을 먼저 알린다(더 근본적인 결함)', () => {
+    const v = guardAdvance('place', healthy({ roomsWithoutIndoor: ['로비'], misplacedUnits: ['거실 2번째 대수가 실 밖에 있습니다'] }))
+    expect(v.kind).toBe('CONFIRM')
+    if (v.kind === 'CONFIRM') expect(v.code).toBe('ROOMS_WITHOUT_INDOOR')
   })
 })
 

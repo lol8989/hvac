@@ -263,7 +263,7 @@ export default function App({
   // 실내기 배치(placements) 편집 커맨드 + 좌표 어댑터(layoutFor)·유닛 파생(unitsFrom)을 한 훅으로 묶는다.
   // 도면 심볼 1개 = 실내기 1대 = 선정표 대수 1(불변식). 대수의 SSOT는 심볼이고 이 커맨드가 그것을 고친다(§5.8).
   const {
-    layoutFor, unitsFrom, indoorSymbols, aiPlace,
+    layoutFor, unitsFrom, indoorSymbols, misplacedUnits, aiPlace,
     moveUnits, rotateUnits, deleteUnits, addUnitToRoom, overrideIndoor, resetIndoor,
   } = useIndoorPlacement({
     worldRooms, domainRooms, indoorCatalog, indoorModels, placements,
@@ -552,7 +552,7 @@ export default function App({
   // 스텝 가드 문맥(순수 조립) — 현재 상태를 세어 도메인 가드에 넘길 요약을 만든다(무엇을 세는가만).
   const guardCtx = buildGuardContext({
     domainRooms, placements, pool, groups, activeGroups, outdoorPositions,
-    clearance, selectionRowCount: selectionTable.bom.indoor.length,
+    clearance, misplacedUnits, selectionRowCount: selectionTable.bom.indoor.length,
   })
 
   // 스텝 전환 + 가드/확인 모달 + 파괴적 편집(시설군·천정고)을 한 훅으로 묶는다(§5.8).
