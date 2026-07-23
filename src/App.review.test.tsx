@@ -172,6 +172,28 @@ describe('App — 편집 모드 · 편집 확정 가드', () => {
     expect(screen.getByText(/거실 1번째 대수가 실 밖에 있습니다/)).toBeInTheDocument()
   })
 
+  // 예전엔 한 스텝이 판정을 하나만 돌려줘서, 같은 스텝의 두 번째 확인이 첫 번째에 가렸다.
+  // 사용자는 하나를 고치고 다시 눌러야 나머지를 알았다.
+  it('같은 스텝의 확인이 둘이면 한 모달에 함께 나온다', () => {
+    const { container } = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '✦ AI 실내기 배치' }))
+    const count = (roomId: string) => container.querySelectorAll(`[data-unit-id^="${roomId}#"]`).length
+
+    // ① 탕비실 대수를 전부 로비로 옮긴다 → 탕비실이 '실내기 없는 실'이 된다.
+    for (let i = count('AC_006'); i > 0; i--) dragUnitTo(container, 'AC_006#1', { x: 452, y: 252 })
+    // ② 거실 심볼 하나를 어느 실도 아닌 곳으로 끌어낸다 → '실 밖 심볼'.
+    dragUnitTo(container, 'AC_001#1', { x: 360, y: 420 })
+
+    fireEvent.click(screen.getByRole('button', { name: '실외기 선정·조합' }))
+    fireEvent.click(screen.getByRole('button', { name: '실외기 배치' }))
+    fireEvent.click(screen.getByRole('button', { name: '＋ 실외기 배치' }))
+    fireEvent.click(screen.getByRole('button', { name: '✓ 편집 확정' }))
+
+    // 두 확인이 한 모달에 함께 실린다(place 스텝 안 병합).
+    expect(screen.getByText('실내기가 없는 실이 있습니다')).toBeInTheDocument()
+    expect(screen.getByText('실 밖에 놓인 실내기가 있습니다')).toBeInTheDocument()
+  })
+
   // 검사하지 못한 것을 '이상 없음'으로 통과시키면 안 된다(false-green).
   it('도면 축척을 몰라 이격을 못 쟀으면 통과시키지 않고 확인을 받는다', () => {
     render(<App />)

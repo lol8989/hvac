@@ -61,10 +61,19 @@ export function useGenerationSteps(input: GenerationStepsInput): GenerationSteps
   // 편집 확정: 산출물 단계 진입 = 확정. 확정되면 편집을 잠가 산출물을 고정한다('편집 재개'로 되열 수 있다).
   const confirmed = step === 'output'
 
-  // 판정을 실행한다. ALLOW면 즉시 진행, BLOCK/CONFIRM이면 팝업을 띄운다.
+  // 단건 판정(파괴적 편집)을 실행한다. ALLOW면 즉시 진행, 아니면 팝업을 띄운다.
   const runGuarded = (verdict: GuardVerdict, proceed: () => void, confirmLabel?: string) => {
     if (verdict.kind === 'ALLOW') { proceed(); return }
     setGuard({ verdict, proceed, confirmLabel })
+  }
+
+  // 문제 **목록**을 실행한다. 없으면 즉시 진행, BLOCK이면 막고, CONFIRM은 전부 모아 한 모달로.
+  // 결정은 planConfirmFlow(순수)가 하고 여기는 그 결정을 화면 상태로 옮기기만 한다(§5.6).
+  const runGuardedAll = (problems: readonly GuardVerdict[], proceed: () => void) => {
+    const flow = planConfirmFlow(problems)
+    if (flow.kind === 'proceed') { proceed(); return }
+    if (flow.kind === 'block') { setGuard({ verdict: flow.verdict, proceed }); return } // 모달만 뜨고 진행하지 않는다
+    setGuard({ verdict: flow.confirms[0], proceed, confirms: flow.confirms })
   }
   const acceptGuard = () => {
     if (!guard) return
@@ -77,20 +86,16 @@ export function useGenerationSteps(input: GenerationStepsInput): GenerationSteps
   // 편집 확정: 세 편집 단계의 전제를 한 번에 검사한다(place→combine→outdoor 순). BLOCK이면 막고,
   // CONFIRM이면 확인 후 산출물로. 확정되면 편집이 잠긴다(Viewer 콜백 차단). '편집 재개'로 되열 수 있다.
   const confirmEdit = () => {
-    const verdicts = (['place', 'combine', 'outdoor'] as StepId[]).map((s) => guardAdvance(s, guardCtx))
-    const proceed = () => { setEditReturn(step); setStep('output') }
-    const flow = planConfirmFlow(verdicts)
-    if (flow.kind === 'block') { runGuarded(flow.verdict, proceed); return } // BLOCK: 모달만 뜨고 진행하지 않는다
-    if (flow.kind === 'proceed') { proceed(); return }
-    // CONFIRM: 1건이면 그대로, 2건 이상이면 한 모달에 모아 안내한다(첫 개만 보여주고 넘어가지 않는다).
-    setGuard({ verdict: flow.confirms[0], proceed, confirms: flow.confirms })
+    // 세 단계의 문제를 전부 모은다. 한 단계가 확인 2건을 내도 그대로 실린다(스텝 안·밖 모두 병합).
+    const problems = (['place', 'combine', 'outdoor'] as StepId[]).flatMap((s) => guardAdvance(s, guardCtx))
+    runGuardedAll(problems, () => { setEditReturn(step); setStep('output') })
   }
   const resumeEdit = () => setStep(editReturn) // 편집 재개 — 잠금 해제하고 확정 직전 도구로 복귀
   // 인디케이터/도구 선택: 편집 도구는 자유 전환, '산출물'은 편집 확정 게이트로.
   const onPickStep = (to: StepId) => { if (to === 'output') confirmEdit(); else setStep(to) }
 
   const doGenerate = () =>
-    runGuarded(guardAdvance('output', guardCtx), () => {
+    runGuardedAll(guardAdvance('output', guardCtx), () => {
       setGenerated(true)
       flash('장비선정표·장비일람표·도면 산출물을 생성했습니다')
     })

@@ -40,6 +40,9 @@ export type GuardVerdict =
   | { kind: 'BLOCK'; code: GuardCode; title: string; reason: string; remedy: string }
   | { kind: 'CONFIRM'; code: GuardCode; title: string; reason: string; detail: string }
 
+// 가드가 보고하는 '문제' — 통과(ALLOW)는 문제가 아니라 문제가 **없는** 것이라 목록에서 빠진다.
+export type GuardProblem = Exclude<GuardVerdict, { kind: 'ALLOW' }>
+
 export interface GuardContext {
   roomCount: number // 검출된 실
   placedRoomCount: number // 실내기가 1대 이상 놓인 실
@@ -74,8 +77,11 @@ export const emptyGuardContext = (): GuardContext => ({
   selectionRowCount: 0,
 })
 
-const block = (code: GuardCode, title: string, reason: string, remedy: string): GuardVerdict => ({ kind: 'BLOCK', code, title, reason, remedy })
-const confirm = (code: GuardCode, title: string, reason: string, detail: string): GuardVerdict => ({ kind: 'CONFIRM', code, title, reason, detail })
+// 팩토리는 '문제'만 만든다 — 목록에 담기려면 kind가 좁혀져 있어야 한다.
+const block = (code: GuardCode, title: string, reason: string, remedy: string): Extract<GuardProblem, { kind: 'BLOCK' }> =>
+  ({ kind: 'BLOCK', code, title, reason, remedy })
+const confirm = (code: GuardCode, title: string, reason: string, detail: string): Extract<GuardProblem, { kind: 'CONFIRM' }> =>
+  ({ kind: 'CONFIRM', code, title, reason, detail })
 const ALLOW: GuardVerdict = { kind: 'ALLOW' }
 
 const NO_ROOMS = block(
@@ -92,104 +98,111 @@ const noOutdoor = block(
   '실외기 선정을 실행하거나, 조합 매핑에서 실외기를 추가하세요.',
 )
 
-// 현재 단계에서 다음 단계로 넘어가도 되는가.
-// 차단 사유가 확인 사유보다 앞선다 — 못 가는 걸 먼저 알려야 한다.
-export const guardAdvance = (from: StepId, c: GuardContext): GuardVerdict => {
+// 이 단계의 **문제 목록**. 빈 배열 = 통과.
+//
+// 차단이 확인보다 앞선다 — 못 가는 걸 먼저 알려야 하고, 막힌 김에 뒤따르는 확인은 의미가 없다.
+// 확인은 **모은다**: 한 단계에 확인할 것이 둘이면 둘 다 알린다. 예전엔 판정을 하나만 돌려줘서
+// 앞의 확인이 뒤의 확인을 가렸고, 사용자는 하나를 고치고 다시 눌러야 나머지를 알았다.
+// (스텝 사이 병합은 planConfirmFlow가 한다 — 이건 스텝 안 병합이다.)
+export const guardAdvance = (from: StepId, c: GuardContext): GuardProblem[] => {
   switch (from) {
     case 'place': {
-      if (c.roomCount === 0) return NO_ROOMS
+      if (c.roomCount === 0) return [NO_ROOMS]
+      const out: GuardProblem[] = []
       if (c.roomsWithoutIndoor.length > 0) {
         // 주의만 하고 넘어갈 수 있다(주인님 지시 2026-07-16): 실내기 없는 실은 부하가 없어
         // 실외기 선정·조합에 기여하지 않을 뿐, 나머지 실로 산출물은 정상적으로 나온다.
-        return confirm(
+        out.push(confirm(
           'ROOMS_WITHOUT_INDOOR',
           '실내기가 없는 실이 있습니다',
           `실 ${c.roomsWithoutIndoor.length}곳(${c.roomsWithoutIndoor.join(' · ')})에 실내기가 없습니다.`,
           '이대로 진행하면 그 실은 실외기 선정·조합과 산출물(장비선정표·장비일람표)에서 제외됩니다. ' +
             "나중에 실내기 배치로 돌아와 '＋ 실내기'로 추가할 수 있습니다.",
-        )
+        ))
       }
       if (c.misplacedUnits.length > 0) {
-        return confirm(
+        out.push(confirm(
           'MISPLACED_UNITS',
           '실 밖에 놓인 실내기가 있습니다',
           `실내기 ${c.misplacedUnits.length}대가 소속 실을 벗어났습니다: ${c.misplacedUnits.join(' · ')}`,
           '심볼 좌표는 산출 도면에 그대로 실립니다. 대수는 원래 실에 남아 있으므로 장비선정표와 도면이 서로 다른 위치를 말하게 됩니다. ' +
             '심볼을 소속 실 안으로 끌어다 놓으세요.',
-        )
+        ))
       }
-      return ALLOW
+      return out
     }
 
     case 'combine': {
       if (c.unassignedRoomCount > 0) {
-        return block(
+        return [block(
           'UNASSIGNED_ROOMS',
           '배정되지 않은 실이 있습니다',
           `실 ${c.unassignedRoomCount}곳이 어느 실외기에도 연결되지 않았습니다. 산출물에서 빠집니다.`,
           "'실외기 조합 매핑'에서 미배정 실을 실외기 카드로 드래그하세요.",
-        )
+        )]
       }
-      if (c.activeGroupCount === 0) return noOutdoor
+      if (c.activeGroupCount === 0) return [noOutdoor]
+      const out: GuardProblem[] = []
       if (c.overloadedGroups.length > 0) {
-        return confirm(
+        out.push(confirm(
           'OVERLOADED',
           '조합비가 허용 범위를 넘었습니다',
           `과부하 실외기 ${c.overloadedGroups.length}대: ${c.overloadedGroups.join(' · ')}`,
           '이대로 진행하면 산출물에 과부하 상태가 그대로 실립니다. 실외기를 더 큰 모델로 교체하거나 그룹을 분할하는 편이 좋습니다.',
-        )
+        ))
       }
       if (c.emptyGroupCount > 0) {
-        return confirm(
+        out.push(confirm(
           'EMPTY_GROUPS',
           '비어 있는 실외기가 있습니다',
           `연결된 실내기가 없는 실외기 ${c.emptyGroupCount}대가 있습니다.`,
           '빈 실외기는 장비선정표·장비일람표에서 제외됩니다.',
-        )
+        ))
       }
-      return ALLOW
+      return out
     }
 
     case 'outdoor': {
-      if (c.activeGroupCount === 0) return noOutdoor
+      if (c.activeGroupCount === 0) return [noOutdoor]
       if (c.groupsWithoutPosition.length > 0) {
         const placed = c.activeGroupCount - c.groupsWithoutPosition.length
-        return block(
+        return [block(
           'OUTDOOR_NOT_PLACED',
           '실외기를 도면에 배치해야 합니다',
           `실외기 ${c.activeGroupCount}대 중 ${placed}대만 도면에 배치됐습니다. 미배치: ${c.groupsWithoutPosition.join(' · ')}`,
           "도면에서 '＋ 실외기 배치'를 누르거나, 실외기 심벌을 건물 외부로 끌어다 놓으세요.",
-        )
+        )]
       }
+      // 위반과 미검사는 같이 날 수 없다(위반이 있다는 건 쟀다는 뜻) — 위반을 먼저 본다.
       if (c.clearanceViolations.length > 0) {
-        return confirm(
+        return [confirm(
           'CLEARANCE',
           '이격거리를 확인하세요',
           `이격거리 위반 ${c.clearanceViolations.length}건: ${c.clearanceViolations.join(' · ')}`,
           '실외기 간격(측 250 · 간 200 · 후 500 · 전 900mm)이 확보되지 않으면 시공·유지보수가 어렵습니다.',
-        )
+        )]
       }
       // 못 잰 것을 '이상 없음'으로 흘려보내지 않는다 — 막지는 않되 검사하지 못했다고 말한다.
       if (!c.clearanceChecked) {
-        return confirm(
+        return [confirm(
           'CLEARANCE_UNKNOWN',
           '이격거리를 검사하지 못했습니다',
           '도면 축척(mm) 정보가 없어 실외기 간 이격거리를 재지 못했습니다.',
           '이격은 실치수 규칙(간 200 · 전 900mm)이라 축척이 있어야 검증됩니다. 실도면을 불러오면 자동으로 검사합니다. 지금 진행하면 이격은 검증되지 않은 채로 남습니다.',
-        )
+        )]
       }
-      return ALLOW
+      return []
     }
 
     case 'output':
       return c.selectionRowCount === 0
-        ? block(
+        ? [block(
             'EMPTY_SELECTION',
             '생성할 산출물이 없습니다',
             '장비선정표에 행이 없습니다.',
             '실내기 배치를 먼저 완료하세요.',
-          )
-        : ALLOW
+          )]
+        : []
   }
 }
 
