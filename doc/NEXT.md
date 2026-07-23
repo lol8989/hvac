@@ -4,11 +4,12 @@
 
 ## ⏭ 새 세션 이어가기 (2026-07-22 푸시 시점) — **여기부터 시작**
 
-> **상태:** `main` 브랜치. 작업트리 클린. 전체 테스트 **1257 그린**, tsc 클린.
-> App.tsx **1465 → 997줄** (Phase D 완료). Viewer.tsx **1076 → 710줄** (Phase E 진행 중, 8단계 완료·origin 푸시됨).
+> **상태(2026-07-23):** `main` 브랜치. 전체 테스트 **1261 그린**, tsc 클린.
+> App.tsx **1465 → 997줄** (Phase D 완료). Viewer.tsx **1076 → 622줄** (**Phase E 완료** — 훅 8개 + props.ts).
 > **브라우저 화면 테스트는 주인님 별도 지시 전까지 생략**(2026-07-22 지시) — tsc + 테스트로 검증한다.
 >
-> **다음 할 일 = Phase E 마지막**(37 prop 클러스터링, 아래 백로그) — Viewer 훅 분해는 8단계로 사실상 완료.
+> **다음 할 일** = 아래 「그 밖의 열린 항목」(이격거리 좌표계 / QA 잔여) 또는 주인님 지시.
+> (예전 항목) Phase E 마지막 37 prop 클러스터링은 2026-07-23 완료.
 > 훅 8개 추출: geometry·useDraftCommit·usePanZoom·useCassetteSelectionSync·useSliceMode·useMergeMode·useViewerDrag·useViewerShortcuts.
 > 1. [x] **#8 `usePlanCommands`** (`fb37d9e`) — `runOutdoorSelection`(자동선정 이펙트)·`selectOutdoorForSelected`·
 >    `moveRoom`·`removeGroup`·`replaceModel`+`sync`. 중복 제거: 빈그룹정리→`cleanEmptyGroups()` /
@@ -99,8 +100,16 @@
   뷰어 mousedown은 선택만·begin*로 드래그 시작. Viewer 895→770줄. tsc·1261 그린·린트 0. verbatim 이동.
 - [x] `useViewerShortcuts`(`b7f0002`) — 키보드 window 리스너(C/Z/V/M/O/H·Space·R·Del·Esc·0). 정책/메커니즘 분리.
   Viewer 770→710줄. tsc·1261 그린·린트 0. Viewer.test 22가 커버.
-- [ ] (남은 Phase E) 37 prop을 indoor/outdoor/slice/merge/viewport 클러스터로 그룹화(props 객체 분리).
-  이건 순수 인터페이스 정리라 저위험 — Viewer 본문 분해가 대부분 끝나면 마지막에.
+- [x] **프롭 클러스터링 + `viewer/props.ts` 분리**(`(이번 커밋)`) — 프롭 37 → **16**(클러스터 5 + 평면 10 + ref).
+  `canvas`(planW·planH·mmPerUnit·fitBounds·tiles·tileBase) / `indoor`(심볼·정보·canAdd·onMove·onRotate·onDelete·
+  onAdd·onAddUnavailable) / `outdoor`(심볼·groups·canPlace·onMove·onDelete·onAutoPlace) / `slice`(enabled·onSlice·
+  onUnavailable) / `merge`(enabled·onMerge·isAdjacent·onUnavailable). 묶는 축은 **변경 이유**(§5.6).
+  공개 인터페이스(Mode·SliceLine·Layer*·TileManifest·UnitMove/Rotate·HistoryControl·ViewerHandle·프롭 계약)를
+  `viewer/props.ts`로 옮기고 Viewer.tsx는 재수출만 — 훅 5개가 타입 때문에 `../Viewer`를 되짚던 **순환도 해소**.
+  본문은 클러스터를 지역명으로 펴서(destructuring alias) verbatim 유지. Viewer 710→**622줄**.
+  tsc 클린·1261 그린(전체 병렬 실행 시 SQLite 2건 5s 타임아웃은 부하 탓 — 격리 재실행 94/94 통과)·
+  린트 에러 5건은 기존과 동일, **react-refresh 경고 2건 해소**(상수가 컴포넌트 파일에서 빠져나감).
+  **Phase E 완료(Viewer.tsx 1076→622, 훅 8개 + props.ts).** 브라우저 검증은 주인님 지시대로 생략.
 
 **§5.7 결정 2건 (처리 완료 2026-07-22):**
 - [x] **자동 선정 → undo 히스토리 제외** (`443c5b0`) — `runOutdoorSelection`의 `edit(commit)` → `undoable.replace`.

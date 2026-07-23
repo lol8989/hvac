@@ -6,7 +6,7 @@
 import { useEffect, useRef } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { norm } from './geometry'
-import type { Mode } from '../Viewer'
+import type { Mode } from './props'
 import type { DragStateSnapshot } from './useViewerDrag'
 
 type ShortcutCallbacks = {

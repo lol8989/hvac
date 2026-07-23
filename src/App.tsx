@@ -830,10 +830,14 @@ export default function App({
             key={planDims ? 'dxf' : 'mock'}
             ref={viewerRef}
             rooms={floorRooms}
-            planW={planDims?.w}
-            planH={planDims?.h}
-            mmPerUnit={planDims?.mmPerUnit}
-            fitBounds={fitBounds}
+            canvas={{
+              planW: planDims?.w,
+              planH: planDims?.h,
+              mmPerUnit: planDims?.mmPerUnit,
+              fitBounds,
+              tiles,
+              tileBase: '/tiles',
+            }}
             selectedIds={floorSelectedIds}
             onSelectionChange={setSelRooms}
             onEscape={() => setMapOpen(false)}
@@ -848,52 +852,55 @@ export default function App({
               onUndo: doUndo,
               onRedo: doRedo,
             }}
-            indoorSymbols={floorIndoorSymbols}
-            onUnitsMove={confirmed ? undefined : moveUnits}
-            onUnitsRotate={confirmed ? undefined : rotateUnits}
-            onUnitsDelete={confirmed ? undefined : deleteUnits}
-            onUnitAdd={confirmed ? undefined : addUnitToRoom}
-            outdoorSymbols={floorOutdoorSymbols}
-            onOutdoorsMove={confirmed ? undefined : moveOutdoors}
-            onOutdoorsDelete={confirmed ? undefined : deleteOutdoors}
-            onOutdoorsAutoPlace={autoPlaceOutdoors}
-            indoorInfo={indoorInfo}
+            indoor={{
+              symbols: floorIndoorSymbols,
+              info: indoorInfo,
+              canAdd: step === 'place',
+              onMove: confirmed ? undefined : moveUnits,
+              onRotate: confirmed ? undefined : rotateUnits,
+              onDelete: confirmed ? undefined : deleteUnits,
+              onAdd: confirmed ? undefined : addUnitToRoom,
+              onAddUnavailable: (reason) =>
+                flash(
+                  reason === 'step'
+                    ? "실내기는 '실내기 배치' 단계에서 추가할 수 있습니다."
+                    : '추가할 실을 먼저 선택하세요 — 존(실) 모드로 전환했습니다. 배치할 실을 클릭한 뒤 ＋ 실내기를 누르세요.',
+                ),
+            }}
+            outdoor={{
+              symbols: floorOutdoorSymbols,
+              groups: floorOutdoorGroups,
+              canPlace: step === 'outdoor',
+              onMove: confirmed ? undefined : moveOutdoors,
+              onDelete: confirmed ? undefined : deleteOutdoors,
+              onAutoPlace: autoPlaceOutdoors,
+            }}
             roomColors={roomColors}
-            tiles={tiles}
-            tileBase="/tiles"
             layers={layers}
             onLayersChange={setLayers}
-            canAddUnit={step === 'place'}
-            onAddUnitUnavailable={(reason) =>
-              flash(
-                reason === 'step'
-                  ? "실내기는 '실내기 배치' 단계에서 추가할 수 있습니다."
-                  : '추가할 실을 먼저 선택하세요 — 존(실) 모드로 전환했습니다. 배치할 실을 클릭한 뒤 ＋ 실내기를 누르세요.',
-              )
-            }
-            canPlaceOutdoors={step === 'outdoor'}
-            outdoorGroups={floorOutdoorGroups}
-            // 실 자르기(V)는 실내기 배치 단계 도구다 — 검출된 실을 다듬는다.
-            canSliceRooms={step === 'place' && Object.keys(domainRooms).length > 0}
-            onRoomSlice={doSlice}
-            onSliceUnavailable={() =>
-              flash(
-                Object.keys(domainRooms).length === 0
-                  ? '자를 실이 없습니다'
-                  : '실 자르기는 실내기 배치 단계에서만 가능합니다',
-              )
-            }
             onZoneResize={confirmed ? undefined : resizeZone}
-            canMergeRooms={step === 'place' && Object.keys(domainRooms).length > 1}
-            onRoomsMerge={doMerge}
-            isAdjacent={roomsAdjacent}
-            onMergeUnavailable={() =>
-              flash(
-                Object.keys(domainRooms).length < 2
-                  ? '합칠 실이 두 곳 이상 있어야 합니다'
-                  : '실 병합은 실내기 배치 단계에서만 가능합니다',
-              )
-            }
+            // 실 자르기(V)는 실내기 배치 단계 도구다 — 검출된 실을 다듬는다.
+            slice={{
+              enabled: step === 'place' && Object.keys(domainRooms).length > 0,
+              onSlice: doSlice,
+              onUnavailable: () =>
+                flash(
+                  Object.keys(domainRooms).length === 0
+                    ? '자를 실이 없습니다'
+                    : '실 자르기는 실내기 배치 단계에서만 가능합니다',
+                ),
+            }}
+            merge={{
+              enabled: step === 'place' && Object.keys(domainRooms).length > 1,
+              onMerge: doMerge,
+              isAdjacent: roomsAdjacent,
+              onUnavailable: () =>
+                flash(
+                  Object.keys(domainRooms).length < 2
+                    ? '합칠 실이 두 곳 이상 있어야 합니다'
+                    : '실 병합은 실내기 배치 단계에서만 가능합니다',
+                ),
+            }}
           />
           {/* 조합 매핑은 도면 아래에 붙는다 — 실내기 심볼을 보면서 조합한다. */}
           {mapOpen && step === 'combine' && (

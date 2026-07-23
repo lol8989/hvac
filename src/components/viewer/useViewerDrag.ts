@@ -9,7 +9,7 @@ import { GRID, ROT_STEP, ROT_SENS, snap, norm, rectPoints, zoneHitsRect, unitsIn
 import type { Corner, Pt, UnitSym, ZoneBox } from './geometry'
 import type { ViewBox } from './usePanZoom'
 import type { Draft } from './useDraftCommit'
-import type { Mode, LayerVisibility } from '../Viewer'
+import type { Mode, LayerVisibility } from './props'
 
 // window 리스너가 stale closure 없이 읽는 현재 편집 상태 스냅샷(뷰어가 매 렌더 갱신).
 export interface DragStateSnapshot {

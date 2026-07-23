@@ -1,12 +1,10 @@
 import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react'
 import type { ReactElement } from 'react'
-import type { Room } from '../data'
 import ACUnit from './viewer/ACUnit'
 import ODUnit from './viewer/ODUnit'
 import ZoneRect from './viewer/ZoneRect'
 import { GRID, snap, zoneBounds, zoneAreaM2, zonesBounds } from './viewer/geometry'
-import type { UnitSym, ZoneBox, Corner, Pt } from './viewer/geometry'
-import type { GroupColor } from '../presentation/generation/groupColors'
+import type { ZoneBox, Corner, Pt } from './viewer/geometry'
 import { useDraftCommit } from './viewer/useDraftCommit'
 import { usePanZoom, type ViewBox } from './viewer/usePanZoom'
 import { useCassetteSelectionSync } from './viewer/useCassetteSelectionSync'
@@ -14,11 +12,16 @@ import { useSliceMode } from './viewer/useSliceMode'
 import { useMergeMode } from './viewer/useMergeMode'
 import { useViewerDrag } from './viewer/useViewerDrag'
 import { useViewerShortcuts } from './viewer/useViewerShortcuts'
+import { ALL_LAYERS_ON, LAYER_TOGGLES } from './viewer/props'
+import type { Mode, LayerName, ViewerProps, ViewerHandle } from './viewer/props'
 
-export type Mode = 'cassette' | 'zone' | 'pan' | 'outdoor' | 'slice' | 'merge' // 에어컨 / 존 / 손 / 실외기 / 자르기 / 병합
-
-// 자르기 라인(무한 직선): 지나는 점 + 각도(도). 도메인 CutLine과 같은 모양이다.
-export interface SliceLine { x: number; y: number; angleDeg: number }
+// 공개 인터페이스(모드·레이어·프롭 계약)는 viewer/props.ts가 정본이다. 기존 import 경로 유지용 재수출.
+export { ALL_LAYERS_ON, LAYER_TOGGLES } from './viewer/props'
+export type {
+  Mode, SliceLine, LayerName, LayerVisibility, OutdoorGroupInfo, TileLevel, TileManifest,
+  UnitMove, UnitRotate, HistoryControl, ViewerHandle, ViewerProps,
+  CanvasProps, IndoorProps, OutdoorProps, SliceProps, MergeProps,
+} from './viewer/props'
 
 // 도면 폭에 맞는 '딱 떨어지는' 격자 실치수(1·2·5·10 계열, ~100칸 목표). 대형 mm 좌표계용.
 const niceGrid = (w: number): number => {
@@ -46,106 +49,6 @@ const SHORTCUTS: readonly { key: string; desc: string }[] = [
   { key: 'Esc', desc: '선택 해제' },
 ]
 
-// 레이어 표시: 각 레이어를 독립적으로 켜고 끈다(도면 배경은 항상 표시).
-// 예전엔 하나만 고르는 단일 필터('all' | 하나)였는데, 여러 레이어를 동시에 보며
-// 작업하려면 레이어별 on/off가 맞다 — 그래서 레이어별 boolean 맵으로 바꿨다.
-export type LayerName = 'zone' | 'indoor' | 'outdoor'
-export type LayerVisibility = Record<LayerName, boolean>
-export const ALL_LAYERS_ON: LayerVisibility = { zone: true, indoor: true, outdoor: true }
-export const LAYER_TOGGLES: readonly { name: LayerName; label: string }[] = [
-  { name: 'indoor', label: '실내기' },
-  { name: 'outdoor', label: '실외기' },
-  { name: 'zone', label: '실 경계' },
-]
-
-// 실외기 배치용 그룹 요약(도면 심볼 라벨·모델·마력).
-// 실외기는 장비번호를 쓰지 않는다 — 도면 표기는 **마력(HP)** 이다(0708 회의록 「장비번호기입」,
-// 주인님 확인 2026-07-20). 마력은 카탈로그 스펙에서 오므로 표시 계층에서 조인한다.
-export interface OutdoorGroupInfo {
-  key: string
-  label: string
-  model: string
-  hp?: number
-}
-
-// 딥줌 타일 피라미드 매니페스트(tools/dxf_to_tiles.py 산출).
-export interface TileLevel { z: number; pxW: number; pxH: number; cols: number; rows: number }
-export interface TileManifest {
-  tile: number
-  levels: TileLevel[]
-  masterPx: [number, number]
-  worldMin: [number, number]
-  worldMax: [number, number]
-  units: string
-}
-
-// 실내기 심볼 이동/회전 커밋 페이로드(드래그 끝에 한 번만 올린다).
-export interface UnitMove { id: string; x: number; y: number }
-export interface UnitRotate { id: string; rot: number }
-
-interface ViewerProps {
-  rooms: Record<string, Room>
-  selectedIds: string[] // 선택된 실(존) id — ModelPanel 연동
-  onSelectionChange: (ids: string[]) => void
-  onEscape?: () => void
-  tiles?: TileManifest // 딥줌 타일 매니페스트(보이는 타일만 로드)
-  tileBase?: string // 타일 URL 베이스(예: /tiles)
-  // 실내기 심볼은 App(Placement)이 소유한다. 심볼 하나 = 실내기 한 대 = 선정표 대수 1.
-  indoorSymbols: UnitSym[]
-  onUnitsMove?: (moves: UnitMove[]) => void
-  onUnitsRotate?: (rots: UnitRotate[]) => void
-  onUnitsDelete?: (ids: string[]) => void
-  onUnitAdd?: (roomId: string) => void // 대표 실에 1대 추가
-  onAddUnitUnavailable?: (reason: 'step' | 'noRoom') => void // ＋실내기를 못 쓰는 상황 안내(버튼은 항상 활성)
-  indoorInfo?: Record<string, { model: string; kind: string }> // 실별 실내기 모델명·유형(심볼 오버레이)
-  roomColors?: Record<string, GroupColor> // 실 id → 실외기 그룹 색상(방·실내기 하이라이팅). 미배정 실은 없음 → 무채색
-  outdoorGroups?: OutdoorGroupInfo[] // 실외기 배치 대상 그룹(placeOutdoors)
-  // 실외기 심볼도 App이 소유한다 — 가드가 '몇 대 중 몇 대 배치됐는지' 알아야 하고,
-  // 그 좌표가 산출 도면에 실린다.
-  outdoorSymbols: UnitSym[]
-  onOutdoorsMove?: (moves: UnitMove[]) => void
-  onOutdoorsDelete?: (keys: string[]) => void
-  onOutdoorsAutoPlace?: (positions: Record<string, { x: number; y: number }>) => void
-  planW?: number // 도면 정규화 좌표 폭(기본 720 목업 / 실도면은 종횡비 유지 폭)
-  planH?: number // 도면 정규화 좌표 높이(기본 470)
-  mmPerUnit?: number // 정규화 1단위 = 실 mm (격자 실치수 표기 + DXF 왕복)
-  fitBounds?: ViewBox // 층 전환: 활성 층 실들을 감싸는 bbox. 있으면 여기에 맞춘다(없으면 전체 도면)
-  layers?: LayerVisibility // 레이어별 표시 여부(기본 전부 ON)
-  onLayersChange?: (v: LayerVisibility) => void // 레이어 토글은 뷰어 도구다(상단 툴바 밴드 제거)
-  canAddUnit?: boolean // ＋실내기 수동 추가 허용 — AI 실내기 배치 완료 전에는 비활성
-  canPlaceOutdoors?: boolean // ＋실외기 배치 허용 — '실외기 배치' 단계에서만 활성
-  // 실 자르기(V): 실내기 배치 단계에서만 허용한다(실_슬라이싱_설계_v1 §D2).
-  canSliceRooms?: boolean
-  onRoomSlice?: (roomId: string, line: SliceLine) => void
-  onSliceUnavailable?: () => void // 허용되지 않는 단계에서 V를 눌렀을 때(App이 안내한다)
-  onZoneResize?: (roomId: string, points: readonly Pt[]) => void // 모서리 리사이즈 커밋(형상 SSOT는 App)
-  // 실 병합(M): 붙어 있는 두 실을 하나로. 자르기와 같은 단계(검출)에서만 쓴다.
-  canMergeRooms?: boolean
-  onRoomsMerge?: (aId: string, bId: string) => void
-  isAdjacent?: (aId: string, bId: string) => boolean // 인접 판정은 도메인이 한다(뷰어는 물어본다)
-  onMergeUnavailable?: () => void
-  // 편집 히스토리 — 되돌리기 대상은 대부분 도면 편집이라 컨트롤도 캔버스에 둔다.
-  // 히스토리 자체(스택)는 App이 갖는다. 뷰어는 상태를 표시하고 클릭을 전달할 뿐이다.
-  history?: HistoryControl
-  // 조합 단계: 선택된 실들 위에 뜨는 '실외기 선정' 오버레이 버튼의 동작(없으면 버튼 미표시).
-  onSelectOutdoorForSelection?: () => void
-}
-
-export interface HistoryControl {
-  canUndo: boolean
-  canRedo: boolean
-  undoLabel?: string | null // 되돌릴 편집 이름(툴팁) — 없으면 되돌릴 것이 없다
-  redoLabel?: string | null
-  onUndo: () => void
-  onRedo: () => void
-}
-
-// App 버튼에서 호출하는 명령형 핸들.
-export interface ViewerHandle {
-  placeOutdoors: () => void // 그룹별 실외기 심볼을 도면 하단(건물 외부)에 배치
-  captureSvg: () => string | null // 현재 도면 SVG 직렬화(캡처 다운로드용)
-}
-
 /**
  * SVG 도면 뷰어(편집). 모드: 에어컨(C)=실내기 이동/회전/삭제, 존(Z)=실 선택/모서리 리사이즈, 손(H)=팬.
  * 휠=커서 기준 줌, Space/손=팬, 드래그=영역 다중선택(마퀴). 뷰어 로컬 상태(POC).
@@ -153,17 +56,26 @@ export interface ViewerHandle {
  */
 const Viewer = forwardRef<ViewerHandle, ViewerProps>(function Viewer(
   {
-    rooms, selectedIds, onSelectionChange, onEscape, tiles, tileBase,
-    indoorSymbols, onUnitsMove, onUnitsRotate, onUnitsDelete, onUnitAdd, onAddUnitUnavailable,
-    outdoorSymbols, onOutdoorsMove, onOutdoorsDelete, onOutdoorsAutoPlace,
-    indoorInfo, roomColors, outdoorGroups, planW, planH, mmPerUnit, fitBounds, layers = ALL_LAYERS_ON, onLayersChange,
-    canAddUnit = true, canPlaceOutdoors = false,
-    canSliceRooms = false, onRoomSlice, onSliceUnavailable, onZoneResize,
-    canMergeRooms = false, onRoomsMerge, isAdjacent, onMergeUnavailable,
-    history, onSelectOutdoorForSelection,
+    rooms, selectedIds, onSelectionChange, onEscape, onZoneResize, roomColors,
+    layers = ALL_LAYERS_ON, onLayersChange, history, onSelectOutdoorForSelection,
+    canvas = {}, indoor, outdoor, slice: sliceProps = {}, merge: mergeProps = {},
   }: ViewerProps,
   ref,
 ) {
+  // 클러스터를 본문 지역명으로 편다. 묶음은 호출자(App)가 읽기 쉬우라고 있는 것이고,
+  // 본문은 "무엇을 하는 콜백인가"로 읽히는 편이 낫다.
+  const { planW, planH, mmPerUnit, fitBounds, tiles, tileBase } = canvas
+  const {
+    symbols: indoorSymbols, info: indoorInfo, canAdd: canAddUnit = true,
+    onMove: onUnitsMove, onRotate: onUnitsRotate, onDelete: onUnitsDelete,
+    onAdd: onUnitAdd, onAddUnavailable: onAddUnitUnavailable,
+  } = indoor
+  const {
+    symbols: outdoorSymbols, groups: outdoorGroups, canPlace: canPlaceOutdoors = false,
+    onMove: onOutdoorsMove, onDelete: onOutdoorsDelete, onAutoPlace: onOutdoorsAutoPlace,
+  } = outdoor
+  const { enabled: canSliceRooms = false, onSlice: onRoomSlice, onUnavailable: onSliceUnavailable } = sliceProps
+  const { enabled: canMergeRooms = false, onMerge: onRoomsMerge, isAdjacent, onUnavailable: onMergeUnavailable } = mergeProps
   // 도면 좌표계 상수(프롭 기반). 실도면(대형 mm)이면 패딩·격자 간격을 비례 조정.
   const PLAN_W = planW ?? 720
   const PLAN_H = planH ?? 470

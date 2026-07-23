@@ -7,7 +7,7 @@ import { useCallback, useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { zoneOfPoint } from './geometry'
 import type { Pt, ZoneBox } from './geometry'
-import type { Mode } from '../Viewer'
+import type { Mode } from './props'
 
 export interface MergePreview {
   first: ZoneBox | null // 1차 선택 실(굵게)

@@ -8,7 +8,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { ROT_STEP, zoneOfPoint } from './geometry'
 import type { Pt, ZoneBox } from './geometry'
 import type { ViewBox } from './usePanZoom'
-import type { SliceLine, Mode } from '../Viewer'
+import type { SliceLine, Mode } from './props'
 
 export interface SlicePreview {
   x1: number; y1: number; x2: number; y2: number

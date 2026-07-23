@@ -29,12 +29,8 @@ function Harness({ symbols = TWO_UNITS, onUnitAdd, onUnitsMove, onAddUnitUnavail
         rooms={ROOMS_FX}
         selectedIds={sel}
         onSelectionChange={setSel}
-        indoorSymbols={symbols}
-        outdoorSymbols={[]}
-        onUnitAdd={onUnitAdd}
-        onUnitsMove={onUnitsMove}
-        onAddUnitUnavailable={onAddUnitUnavailable}
-        canAddUnit={canAddUnit}
+        indoor={{ symbols, canAdd: canAddUnit, onAdd: onUnitAdd, onMove: onUnitsMove, onAddUnavailable: onAddUnitUnavailable }}
+        outdoor={{ symbols: [] }}
       />
     </>
   )
@@ -78,7 +74,7 @@ describe('Viewer 선택 동기화', () => {
       return (
         <>
           <div data-testid="sel-rooms">{sel.join(',')}</div>
-          <Viewer rooms={rooms} selectedIds={sel} onSelectionChange={setSel} indoorSymbols={syms} outdoorSymbols={[]} onUnitsMove={move} />
+          <Viewer rooms={rooms} selectedIds={sel} onSelectionChange={setSel} indoor={{ symbols: syms, onMove: move }} outdoor={{ symbols: [] }} />
         </>
       )
     }
@@ -156,7 +152,7 @@ describe('Viewer 실(존) 동기화', () => {
     return (
       <>
         <button data-testid="detect" onClick={() => setRooms(ROOMS_FX)}>검출</button>
-        <Viewer rooms={rooms} selectedIds={[]} onSelectionChange={() => {}} indoorSymbols={[]} outdoorSymbols={[]} />
+        <Viewer rooms={rooms} selectedIds={[]} onSelectionChange={() => {}} indoor={{ symbols: [] }} outdoor={{ symbols: [] }} />
       </>
     )
   }
@@ -171,27 +167,28 @@ describe('Viewer 실(존) 동기화', () => {
 
   it('rooms가 비워지면(재검출 초기화) 실도 사라진다', () => {
     const { rerender } = render(
-      <Viewer rooms={ROOMS_FX} selectedIds={[]} onSelectionChange={() => {}} indoorSymbols={[]} outdoorSymbols={[]} />,
+      <Viewer rooms={ROOMS_FX} selectedIds={[]} onSelectionChange={() => {}} indoor={{ symbols: [] }} outdoor={{ symbols: [] }} />,
     )
     expect(screen.getByText('거실')).toBeInTheDocument()
 
-    rerender(<Viewer rooms={{}} selectedIds={[]} onSelectionChange={() => {}} indoorSymbols={[]} outdoorSymbols={[]} />)
+    rerender(<Viewer rooms={{}} selectedIds={[]} onSelectionChange={() => {}} indoor={{ symbols: [] }} outdoor={{ symbols: [] }} />)
     expect(screen.queryByText('거실')).toBeNull()
   })
 })
 
 // V(실 자르기): 포인터 대신 라인이 커서가 되고, 실을 클릭하면 그 위치·각도로 잘린다.
 describe('Viewer 실 자르기(V)', () => {
+  // 프롭이 클러스터(indoor/outdoor/slice)라 오버라이드도 클러스터 단위로 병합한다.
   const sliceHarness = (over: Partial<React.ComponentProps<typeof Viewer>> = {}) =>
     render(
       <Viewer
         rooms={ROOMS_FX}
         selectedIds={[]}
         onSelectionChange={() => {}}
-        indoorSymbols={[]}
-        outdoorSymbols={[]}
-        canSliceRooms
         {...over}
+        indoor={{ symbols: [], ...over.indoor }}
+        outdoor={{ symbols: [], ...over.outdoor }}
+        slice={{ enabled: true, ...over.slice }}
       />,
     )
 
@@ -231,7 +228,7 @@ describe('Viewer 실 자르기(V)', () => {
   // R은 모드마다 다른 일을 한다 — 에어컨 모드의 90° 회전이 죽으면 안 된다.
   it('[회귀] 에어컨 모드의 R은 여전히 선택 실내기를 90° 회전시킨다', () => {
     const onUnitsRotate = vi.fn()
-    const { container } = sliceHarness({ indoorSymbols: TWO_UNITS, onUnitsRotate })
+    const { container } = sliceHarness({ indoor: { symbols: TWO_UNITS, onRotate: onUnitsRotate } })
 
     fireEvent.mouseDown(container.querySelector('[data-unit-id="AC_001#1"] > g')!)
     fireEvent.keyDown(window, { key: 'r' })
@@ -241,7 +238,7 @@ describe('Viewer 실 자르기(V)', () => {
 
   it('실을 클릭하면 그 좌표와 각도로 onRoomSlice를 부른다', () => {
     const onRoomSlice = vi.fn()
-    const { container } = sliceHarness({ onRoomSlice })
+    const { container } = sliceHarness({ slice: { onSlice: onRoomSlice } })
     fireEvent.keyDown(window, { key: 'v' })
 
     fireEvent.mouseDown(container.querySelector('.plansvg')!, { clientX: 100, clientY: 100 })
@@ -269,7 +266,7 @@ describe('Viewer 실 자르기(V)', () => {
 
   it('자르기가 허용되지 않는 단계면 모드로 들어가지 않고 이유를 알린다', () => {
     const onSliceUnavailable = vi.fn()
-    sliceHarness({ canSliceRooms: false, onSliceUnavailable })
+    sliceHarness({ slice: { enabled: false, onUnavailable: onSliceUnavailable } })
 
     fireEvent.keyDown(window, { key: 'v' })
 
@@ -290,11 +287,10 @@ describe('Viewer 실 병합(M)', () => {
         rooms={TWO_ROOMS}
         selectedIds={[]}
         onSelectionChange={() => {}}
-        indoorSymbols={[]}
-        outdoorSymbols={[]}
-        canMergeRooms
-        isAdjacent={() => true}
         {...over}
+        indoor={{ symbols: [], ...over.indoor }}
+        outdoor={{ symbols: [], ...over.outdoor }}
+        merge={{ enabled: true, isAdjacent: () => true, ...over.merge }}
       />,
     )
   const svgOf = (c: HTMLElement) => c.querySelector('.plansvg')!
@@ -307,7 +303,7 @@ describe('Viewer 실 병합(M)', () => {
 
   it('첫 클릭으로 실을 잡고 두 번째(다른 실) 클릭에서 onRoomsMerge를 부른다', () => {
     const onRoomsMerge = vi.fn()
-    const { container } = mergeHarness({ onRoomsMerge })
+    const { container } = mergeHarness({ merge: { onMerge: onRoomsMerge } })
     fireEvent.keyDown(window, { key: 'm' })
 
     fireEvent.mouseDown(svgOf(container), { clientX: 100, clientY: 100 }) // AC_A
@@ -320,7 +316,7 @@ describe('Viewer 실 병합(M)', () => {
 
   it('같은 실을 다시 누르면 선택을 해제한다(onRoomsMerge 안 부름)', () => {
     const onRoomsMerge = vi.fn()
-    const { container } = mergeHarness({ onRoomsMerge })
+    const { container } = mergeHarness({ merge: { onMerge: onRoomsMerge } })
     fireEvent.keyDown(window, { key: 'm' })
 
     fireEvent.mouseDown(svgOf(container), { clientX: 100, clientY: 100 }) // AC_A 잡기
@@ -332,7 +328,7 @@ describe('Viewer 실 병합(M)', () => {
 
   it('병합이 허용되지 않는 단계면 모드로 들어가지 않고 이유를 알린다', () => {
     const onMergeUnavailable = vi.fn()
-    mergeHarness({ canMergeRooms: false, onMergeUnavailable })
+    mergeHarness({ merge: { enabled: false, onUnavailable: onMergeUnavailable } })
 
     fireEvent.keyDown(window, { key: 'm' })
 

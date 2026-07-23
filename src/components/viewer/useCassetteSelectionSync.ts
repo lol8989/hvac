@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { roomIdsForUnits } from './geometry'
 import type { UnitSym, ZoneBox } from './geometry'
-import type { Mode } from '../Viewer'
+import type { Mode } from './props'
 
 export interface CassetteSelectionSyncInput {
   mode: Mode
